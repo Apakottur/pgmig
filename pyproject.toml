@@ -1,0 +1,41 @@
+[build-system]
+requires = ["poetry==2.1.4"]
+build-backend = "poetry.masonry.api"
+
+[tool.poetry]
+name = "pgmig"
+packages = [{include = "pgmig"}]
+version = "0.0.1"
+description = "Generate migrations between Postgres databases"
+authors = ["Yossi Rozantsev"]
+license = "MIT"
+readme = "README.md"
+keywords = ["postgres", "schema", "diff", "migration"]
+homepage = "https://github.com/Apakottur/pgmig"
+repository = "https://github.com/Apakottur/pgmig"
+documentation = "https://github.com/Apakottur/pgmig"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+include = ["pgmig/py.typed"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.extras]
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.17.1"
+pre-commit = "4.3.0"
+pytest = "8.4.1"
+pytest-cov = "6.2.1"
+pytest-mock = "3.14.1"
+
+[tool.poetry.scripts]
+
+[tool.poetry.urls]

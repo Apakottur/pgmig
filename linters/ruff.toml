@@ -1,0 +1,116 @@
+########################
+# Global configuration #
+########################
+
+# Maximum line length.
+line-length = 120
+
+# Python version.
+target-version = "py313"
+
+# Enable autofixing.
+fix = true
+
+# Output format, can be used to print more detailed errors.
+output-format = "concise"
+
+[format]
+# Preview mode is unstable and should not be used.
+preview = false
+
+quote-style = "double"
+indent-style = "space"
+
+
+[lint]
+# Preview mode is unstable and should not be used.
+preview = false
+
+# Enable everything else.
+select = ["ALL"]
+fixable = ["ALL"]
+unfixable = []
+
+# Ignore rules.
+ignore = [
+  ###########################################
+  # Ignored - Conflicts with Ruff formatter #
+  ###########################################
+  "COM812", # Trailing comma missing
+  "E501", # Line too long
+  "ISC001", # Implicitly concatenated strings on a single line
+  ##############
+  # Pydocstyle #
+  ##############
+  # See: http://www.pydocstyle.org/en/stable/error_codes.html
+  "D100", # Missing docstring in public module
+  "D101", # Missing docstring in public class
+  "D102", # Missing docstring in public method
+  "D103", # Missing docstring in public function
+  "D104", # Missing docstring in public package
+  "D105", # Missing docstring in magic method
+  "D106", # Missing docstring in public nested class
+  "D107", # Missing docstring in __init__
+  "D200", # One-line docstring should fit on one line with quotes
+  "D205", # 1 blank line required between summary line and description
+  "D212", # Multi-line docstring summary should start at the first line
+  "D415", # First line should end with a period, question mark, or exclamation point
+  ###################################
+  # Other checks that we don't want #
+  ###################################
+  "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
+  "ASYNC109", # Async function definition with a `timeout` parameter
+  "BLE001", # Do not catch blind exception: `Exception`
+  "C901", # Method is too complex
+  "EM101", # Exception must not use a string literal, assign to variable first
+  "EM102", # Exception must not use an f-string literal, assign to variable first
+  "ERA001", # Found commented-out code
+  "FIX002", # Line contains TODO
+  "ISC003", # Explicitly concatenated string should be implicitly concatenate
+  "N818", # Exception name should be named with an Error suffix
+  "PD011", # Use `.to_numpy()` instead of `.values`
+  "PLR0911", # Too many return statements
+  "PLR0912", # Too many branches
+  "PLR0913", # Too many arguments to function call
+  "PLR0915", # Too many statements
+  "PLR1722", # Use `sys.exit()` instead of `exit`
+  "PLR2004", # Magic value used in comparison, consider replacing with a constant variable
+  "PLR5501", # Consider using `elif` instead of `else` then `if` to remove one indentation level
+  "PT003", # `scope='function'` is implied in `@pytest.fixture()`
+  "PTH123", # `open()` should be replaced by `Path.open()`
+  "RET505", # Unnecessary `else` after `return` statement
+  "RET506", # Unnecessary `else` after `raise` statement
+  "SIM102", # Use a single `if` statement instead of nested `if` statements
+  "SIM103", # Return the condition directly
+  "SIM105", # Use `contextlib.suppress()` instead of try-except-pass
+  "TC001", # Move application import into a type-checking block
+  "TC002", # Move third-party import into a type-checking block
+  "TC003", # Move standard library import into a type-checking block
+  "TD002", # Missing author in TODO
+  "TD003", # Missing issue link on the line following this TODO
+  "TRY003", # Avoid specifying long messages outside the exception class
+]
+
+[lint.isort]
+# Import sorting configuration.
+split-on-trailing-comma = false
+known-first-party = ["pgmig"]
+combine-as-imports = true
+
+[lint.pydocstyle]
+# Use Google-style docstrings.
+convention = "google"
+
+[lint.pep8-naming]
+# Allow Pydantic's `@field_validator` decorator to trigger class method treatment.
+classmethod-decorators = ["classmethod", "pydantic.field_validator"]
+
+[lint.flake8-builtins]
+# Ignore list of builtin names.
+builtins-ignorelist = ["id"]
+
+# Per file ignores.
+[lint.per-file-ignores]
+"tests/*" = [
+  "S101", # Use of `assert` detected
+]
