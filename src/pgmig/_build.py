@@ -82,7 +82,11 @@ def build_db_info(dsn: str) -> DbInfo:
                 n.nspname,
                 c.relname,
                 ic.relname,
-                pg_get_indexdef(i.indexrelid)
+                pg_get_indexdef(i.indexrelid),
+                replace(
+                    pg_get_indexdef(i.indexrelid),
+                    'INDEX ' || quote_ident(ic.relname) || ' ON ',
+                    'INDEX ON ')
             FROM
                 pg_index i
                 JOIN pg_class ic ON ic.oid = i.indexrelid
@@ -92,21 +96,31 @@ def build_db_info(dsn: str) -> DbInfo:
                 n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
-                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
-                )
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.objid = n.oid
+                        AND d.deptype = 'e')
                 AND NOT i.indisprimary
                 AND NOT EXISTS (
-                    SELECT 1 FROM pg_depend d
-                    WHERE d.classid = 'pg_class'::regclass
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.classid = 'pg_class'::regclass
                         AND d.objid = i.indexrelid
                         AND d.refclassid = 'pg_constraint'::regclass
-                        AND d.deptype = 'i'
-                )
+                        AND d.deptype = 'i')
             """
         ).fetchall()
-        for schema_name, table_name, index_name, index_def in rows:
+        for schema_name, table_name, index_name, index_def, index_canonical in rows:
             schema_by_name[schema_name].table_by_name[table_name].index_by_name[index_name] = Index(
-                name=index_name, definition=index_def
+                name=index_name,
+                definition=index_def,
+                canonical=index_canonical,
             )
 
         # Extensions (database-level).

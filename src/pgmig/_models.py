@@ -19,6 +19,9 @@ class Index:
 
     name: str
     definition: str
+    # `definition` with the index's own name stripped out, so two indexes that
+    # differ only by name compare equal (drives rename detection).
+    canonical: str
 
 
 @dataclass(frozen=True)

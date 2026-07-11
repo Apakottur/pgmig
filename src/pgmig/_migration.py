@@ -1,4 +1,4 @@
-from pgmig._models import DbInfo, Index
+from pgmig._models import DbInfo
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
@@ -96,17 +96,6 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
     return statements
 
 
-def _canonical_index(index: Index) -> str:
-    """
-    Reduce an index definition to a name-independent form so that two indexes
-    differing only by name collide. `pg_get_indexdef` emits
-    `CREATE [UNIQUE] INDEX <name> ON <table> ...`.
-    """
-    return index.definition.replace(f"INDEX {index.name} ON ", "INDEX ON ", 1).replace(
-        f'INDEX "{index.name}" ON ', "INDEX ON ", 1
-    )
-
-
 def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
@@ -136,10 +125,10 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
             # Renames: remaining indexes that share a canonical (name-independent) key.
             src_by_canonical: dict[str, list[str]] = {}
             for name, index in src_indexes.items():
-                src_by_canonical.setdefault(_canonical_index(index), []).append(name)
+                src_by_canonical.setdefault(index.canonical, []).append(name)
             dst_by_canonical: dict[str, list[str]] = {}
             for name, index in dst_indexes.items():
-                dst_by_canonical.setdefault(_canonical_index(index), []).append(name)
+                dst_by_canonical.setdefault(index.canonical, []).append(name)
 
             rename_pairs: list[tuple[str, str]] = []
             for canonical in sorted(src_by_canonical.keys() & dst_by_canonical.keys()):
