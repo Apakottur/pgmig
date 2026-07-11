@@ -84,6 +84,7 @@ def build_db_info(dsn: str) -> DbInfo:
                     comment=table_comment,
                     index_by_name={},
                     constraint_by_name={},
+                    foreign_key_by_name={},
                 )
             schema_by_name[schema_name].table_by_name[table_name].columns.append(
                 Column(
@@ -152,6 +153,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 con.conname,
                 pg_get_constraintdef(con.oid),
                 con.contype = 'p',
+                con.contype = 'f',
                 (
                     SELECT
                         array_agg(a.attname ORDER BY k.ord)
@@ -165,7 +167,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 JOIN pg_class c ON c.oid = con.conrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE
-                con.contype IN ('p', 'u', 'c')
+                con.contype IN ('p', 'u', 'c', 'f')
                 AND n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
@@ -178,13 +180,18 @@ def build_db_info(dsn: str) -> DbInfo:
                         AND d.deptype = 'e')
             """
         ).fetchall()
-        for schema_name, table_name, con_name, con_def, con_is_pk, con_columns in rows:
-            schema_by_name[schema_name].table_by_name[table_name].constraint_by_name[con_name] = Constraint(
+        for schema_name, table_name, con_name, con_def, con_is_pk, con_is_fk, con_columns in rows:
+            constraint = Constraint(
                 name=con_name,
                 definition=con_def,
                 is_primary_key=con_is_pk,
                 columns=con_columns or [],
             )
+            table = schema_by_name[schema_name].table_by_name[table_name]
+            if con_is_fk:
+                table.foreign_key_by_name[con_name] = constraint
+            else:
+                table.constraint_by_name[con_name] = constraint
 
         # Sequences (standalone only; sequences owned by a serial/identity column are excluded).
         rows = conn.execute(

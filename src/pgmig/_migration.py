@@ -1,4 +1,4 @@
-from pgmig._models import Column, DbInfo, Sequence
+from pgmig._models import Column, Constraint, DbInfo, Sequence
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
@@ -234,6 +234,54 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
     return statements
 
 
+def _diff_constraints(
+    *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Diff one table's constraints (of a single kind) by name and definition.
+
+    Returns:
+        A 3-tuple (drops, renames, adds) of ALTER TABLE statements.
+    """
+    src_constraints = dict(src)
+    dst_constraints = dict(dst)
+
+    # Exact matches (same name and definition) are no-ops.
+    for name in sorted(src_constraints.keys() & dst_constraints.keys()):
+        if src_constraints[name].definition == dst_constraints[name].definition:
+            del src_constraints[name]
+            del dst_constraints[name]
+
+    # Renames: remaining constraints that share a definition (name-independent).
+    src_by_def: dict[str, list[str]] = {}
+    for name, constraint in src_constraints.items():
+        src_by_def.setdefault(constraint.definition, []).append(name)
+    dst_by_def: dict[str, list[str]] = {}
+    for name, constraint in dst_constraints.items():
+        dst_by_def.setdefault(constraint.definition, []).append(name)
+
+    rename_pairs: list[tuple[str, str]] = []
+    for definition in sorted(src_by_def.keys() & dst_by_def.keys()):
+        src_names = sorted(src_by_def[definition])
+        dst_names = sorted(dst_by_def[definition])
+        # Same definition with an identical name was already removed as an exact
+        # match, so every pair here is a genuine rename. Counts may differ, so
+        # pair up to the shorter list.
+        for old_name, new_name in zip(src_names, dst_names, strict=False):
+            rename_pairs.append((old_name, new_name))
+            del src_constraints[old_name]
+            del dst_constraints[new_name]
+
+    prefix = f'ALTER TABLE "{schema_name}"."{table_name}"'
+    drops = [f'{prefix} DROP CONSTRAINT "{name}";' for name in sorted(src_constraints.keys())]
+    renames = [f'{prefix} RENAME CONSTRAINT "{old}" TO "{new}";' for old, new in rename_pairs]
+    adds = [
+        f'{prefix} ADD CONSTRAINT "{name}" {dst_constraints[name].definition};'
+        for name in sorted(dst_constraints.keys())
+    ]
+    return drops, renames, adds
+
+
 def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
@@ -251,50 +299,56 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
             if table_name not in dst_tables:
                 continue
 
-            src_constraints = dict(src_tables[table_name].constraint_by_name) if table_name in src_tables else {}
-            dst_constraints = dict(dst_tables[table_name].constraint_by_name)
-
-            # Exact matches (same name and definition) are no-ops.
-            for name in sorted(src_constraints.keys() & dst_constraints.keys()):
-                if src_constraints[name].definition == dst_constraints[name].definition:
-                    del src_constraints[name]
-                    del dst_constraints[name]
-
-            # Renames: remaining constraints that share a definition (name-independent).
-            src_by_def: dict[str, list[str]] = {}
-            for name, constraint in src_constraints.items():
-                src_by_def.setdefault(constraint.definition, []).append(name)
-            dst_by_def: dict[str, list[str]] = {}
-            for name, constraint in dst_constraints.items():
-                dst_by_def.setdefault(constraint.definition, []).append(name)
-
-            rename_pairs: list[tuple[str, str]] = []
-            for definition in sorted(src_by_def.keys() & dst_by_def.keys()):
-                src_names = sorted(src_by_def[definition])
-                dst_names = sorted(dst_by_def[definition])
-                # Same definition with an identical name was already removed as an exact
-                # match, so every pair here is a genuine rename. Counts may differ, so
-                # pair up to the shorter list.
-                for old_name, new_name in zip(src_names, dst_names, strict=False):
-                    rename_pairs.append((old_name, new_name))
-                    del src_constraints[old_name]
-                    del dst_constraints[new_name]
-
-            # Emit drops first (frees names), then renames, then adds.
-            statements.extend(
-                f'ALTER TABLE "{schema_name}"."{table_name}" DROP CONSTRAINT "{name}";'
-                for name in sorted(src_constraints.keys())
+            src_constraints = src_tables[table_name].constraint_by_name if table_name in src_tables else {}
+            drops, renames, adds = _diff_constraints(
+                schema_name=schema_name,
+                table_name=table_name,
+                src=src_constraints,
+                dst=dst_tables[table_name].constraint_by_name,
             )
-            statements.extend(
-                f'ALTER TABLE "{schema_name}"."{table_name}" RENAME CONSTRAINT "{old_name}" TO "{new_name}";'
-                for old_name, new_name in rename_pairs
-            )
-            statements.extend(
-                f'ALTER TABLE "{schema_name}"."{table_name}" ADD CONSTRAINT "{name}" {dst_constraints[name].definition};'
-                for name in sorted(dst_constraints.keys())
-            )
+            # Drops first (frees names), then renames, then adds.
+            statements.extend(drops)
+            statements.extend(renames)
+            statements.extend(adds)
 
     return statements
+
+
+def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+    """
+    Generate the migration SQL of foreign key constraints.
+
+    Returns:
+        A 2-tuple (drops, adds). Drops run before referenced objects are dropped;
+        adds (including renames) run after referenced tables and their keys exist.
+    """
+    fk_drops: list[str] = []
+    fk_adds: list[str] = []
+
+    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
+        src_schema = source.schema_by_name.get(schema_name)
+        dst_schema = target.schema_by_name.get(schema_name)
+        src_tables = src_schema.table_by_name if src_schema else {}
+        dst_tables = dst_schema.table_by_name if dst_schema else {}
+
+        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
+            # Table dropped: its foreign keys are dropped with it.
+            if table_name not in dst_tables:
+                continue
+
+            src_fks = src_tables[table_name].foreign_key_by_name if table_name in src_tables else {}
+            drops, renames, adds = _diff_constraints(
+                schema_name=schema_name,
+                table_name=table_name,
+                src=src_fks,
+                dst=dst_tables[table_name].foreign_key_by_name,
+            )
+            fk_drops.extend(drops)
+            # Renames carry no referenced-object dependency, so they ride with the adds.
+            fk_adds.extend(renames)
+            fk_adds.extend(adds)
+
+    return fk_drops, fk_adds
 
 
 def _sequence_tail(sequence: Sequence) -> str:
@@ -376,14 +430,17 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     table_statements = _generate_tables(source=source, target=target)
     index_statements = _generate_indexes(source=source, target=target)
     constraint_statements = _generate_constraints(source=source, target=target)
+    foreign_key_drops, foreign_key_adds = _generate_foreign_keys(source=source, target=target)
 
     # Add statements in the correct order.
+    statements.extend(foreign_key_drops)  # Before referenced tables / keys are dropped.
     statements.extend(schema_creates)
     statements.extend(extension_statements)
     statements.extend(sequence_creates)
     statements.extend(table_statements)
     statements.extend(index_statements)
     statements.extend(constraint_statements)
+    statements.extend(foreign_key_adds)  # After referenced tables and their keys exist.
     statements.extend(sequence_drops)
     statements.extend(schema_drops)
 

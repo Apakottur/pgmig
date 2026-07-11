@@ -51,6 +51,7 @@ class Table:
     comment: str | None
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
+    foreign_key_by_name: dict[str, Constraint]
 
     def get_primary_key_columns(self) -> set[str]:
         """
