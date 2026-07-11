@@ -19,7 +19,7 @@ class Table:
 
     name: str
     columns: list[Column]
-    comment: str | None = None
+    comment: str | None
 
 
 @dataclass
