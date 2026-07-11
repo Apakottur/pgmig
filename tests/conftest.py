@@ -14,6 +14,9 @@ _DST_DB = "pgmig_dst"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
+    """
+    Custom pytest options
+    """
     parser.addoption(
         "--stop-docker",
         action="store_true",
@@ -37,6 +40,7 @@ def _postgres_server(request: pytest.FixtureRequest) -> Iterator[str]:
         yield admin_db_conn.dsn
     finally:
         # Stop the database server, unless asked to leave it running.
+        # Keeping it running is useful when developing locally and running tests frequently.
         if request.config.getoption("--stop-docker"):
             shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
