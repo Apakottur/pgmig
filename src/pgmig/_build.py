@@ -114,7 +114,8 @@ def build_db_info(dsn: str) -> DbInfo:
                 JOIN pg_class c ON c.oid = i.indrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE
-                n.nspname NOT LIKE 'pg_%'
+                c.relkind = 'r'
+                AND n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
                     SELECT
@@ -166,7 +167,8 @@ def build_db_info(dsn: str) -> DbInfo:
                 JOIN pg_class c ON c.oid = con.conrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE
-                con.contype IN ('p', 'u', 'c', 'f')
+                c.relkind = 'r'
+                AND con.contype IN ('p', 'u', 'c', 'f')
                 AND n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
