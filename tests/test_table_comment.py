@@ -9,7 +9,10 @@ def test_table_create_with_comment(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute("COMMENT ON TABLE person IS 'people'")
 
     gen_setup.assert_migration_sql(
-        'CREATE TABLE "public"."person" ("name" text);\nCOMMENT ON TABLE "public"."person" IS \'people\';'
+        [
+            'CREATE TABLE "public"."person" ("name" text);',
+            'COMMENT ON TABLE "public"."person" IS \'people\';',
+        ]
     )
 
 
