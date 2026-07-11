@@ -34,9 +34,10 @@ class Constraint:
     """
 
     name: str
-    definition: str  # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
+    # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
+    definition: str
     is_primary_key: bool
-    columns: tuple[str, ...]  # key columns in order (for NOT NULL coordination)
+    columns: list[str]  # key columns in order (for NOT NULL coordination)
 
 
 @dataclass(frozen=True)

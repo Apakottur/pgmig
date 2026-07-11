@@ -175,7 +175,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 name=con_name,
                 definition=con_def,
                 is_primary_key=con_is_pk,
-                columns=tuple(con_columns),
+                columns=con_columns,
             )
 
         # Extensions (database-level).
