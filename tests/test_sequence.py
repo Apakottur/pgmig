@@ -134,6 +134,11 @@ def test_sequence_serial_owned_excluded(gen_setup: GenerateSetup) -> None:
     """
     gen_setup.dst.execute("CREATE TABLE person (id serial)")
 
+    # apply=False: the owned sequence is intentionally excluded, so the emitted
+    # CREATE TABLE keeps the raw nextval() default and cannot be applied on its
+    # own (the implicit sequence is not part of the diff). See the roadmap on
+    # serial handling.
     gen_setup.assert_migration_sql(
-        'CREATE TABLE "public"."person" ("id" integer DEFAULT nextval(\'person_id_seq\'::regclass) NOT NULL);'
+        'CREATE TABLE "public"."person" ("id" integer DEFAULT nextval(\'person_id_seq\'::regclass) NOT NULL);',
+        apply=False,
     )

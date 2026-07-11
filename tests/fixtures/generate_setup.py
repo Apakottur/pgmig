@@ -11,7 +11,7 @@ class GenerateSetup:
         self.src = src_conn
         self.dst = dst_conn
 
-    def assert_migration_sql(self, expected: str | list[str]) -> None:
+    def assert_migration_sql(self, expected: str | list[str], *, apply: bool = True) -> None:
         # Multi-statement expectations must be passed as a list, not a "\n"-joined string.
         if isinstance(expected, str) and "\n" in expected:
             raise ValueError("Pass multi-statement expectations as a list of strings, not a '\\n'-joined string.")
@@ -24,3 +24,10 @@ class GenerateSetup:
 
         # Verify the result.
         assert result == expected_sql, f"\nExpected SQL:\n{expected_sql}\nGenerated SQL:\n{result}"
+
+        # Apply the migration to the source and confirm it converges: after applying,
+        # source should match target, so a second generate must produce nothing.
+        if apply and result:
+            self.src.apply(result)
+            residual = generate(source=self.src.dsn, target=self.dst.dsn)
+            assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
