@@ -26,19 +26,22 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _postgres_server(request: pytest.FixtureRequest) -> Iterator[str]:
+def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     """
-    Session level database server.
+    Session level database server plus a shared connection to the admin
+    database, reused to (re)create the per-test databases.
     """
     # Start the database server.
     shpyx.run("docker compose up -d postgres", exec_dir=_COMPOSE_FILE_DIR)
 
-    # Create a connection to the admin database.
-    admin_db_conn = DbConnection("postgres")
+    # Open a single connection to the admin database for the whole session.
+    admin_conn = DbConnection("postgres")
 
     try:
-        yield admin_db_conn.dsn
+        yield admin_conn
     finally:
+        admin_conn.close()
+
         # Stop the database server, unless asked to leave it running.
         # Keeping it running is useful when developing locally and running tests frequently.
         if request.config.getoption("--stop-docker"):
@@ -46,13 +49,17 @@ def _postgres_server(request: pytest.FixtureRequest) -> Iterator[str]:
 
 
 @pytest.fixture(scope="function")
-def gen_setup(_postgres_server: str) -> GenerateSetup:
+def gen_setup(_admin_conn: DbConnection) -> Iterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
-    # Create the source and target databases.
-    src_conn = DbConnection(_SRC_DB)
-    dst_conn = DbConnection(_DST_DB)
+    # Create the source and target databases via the shared admin connection.
+    src_conn = DbConnection(_SRC_DB, admin_conn=_admin_conn)
+    dst_conn = DbConnection(_DST_DB, admin_conn=_admin_conn)
 
-    # Provide the utility class for the test
-    return GenerateSetup(src_conn, dst_conn)
+    # Provide the utility class for the test.
+    try:
+        yield GenerateSetup(src_conn, dst_conn)
+    finally:
+        src_conn.close()
+        dst_conn.close()
