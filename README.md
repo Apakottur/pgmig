@@ -16,9 +16,9 @@ pip install pgmig
 
 ## Usage
 
-### Schema migration
+### Structure migration
 
-Get the SQL that, when applied to `source`, makes its schema match `target`:
+Get the SQL that, when applied to `source`, makes its structure (tables, extensions, and other object definitions) match `target`:
 
 ```python
 import pgmig
@@ -31,13 +31,13 @@ sql = pgmig.generate(
 print(sql)  # the migration SQL — run it yourself against `source`
 ```
 
-When the two schemas already match,
+When the two structures already match,
 `generate` returns an empty string. `pgmig` opens read-only connections to both
 databases and never runs the generated SQL for you.
 
 ## Contributing
 
-To contribute simply open a PR with your changes.
+To contribute simply open a PR with your changes, or an issue with your bug/request.
 
 All checks (Linters, type checks and tests) automatically run in CI through GitHub Actions.
 
