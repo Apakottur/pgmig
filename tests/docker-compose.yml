@@ -2,18 +2,10 @@ name: pgmig
 
 services:
   postgres:
-    image: postgres:18.4-alpine3.24
+    build: .
     environment:
       POSTGRES_USER: pgmig
       POSTGRES_PASSWORD: pgmig
       POSTGRES_DB: pgmig
     ports:
       - "55432:5432"
-    command:
-      - postgres
-      - "-c"
-      - "fsync=off"
-      - "-c"
-      - "synchronous_commit=off"
-      - "-c"
-      - "full_page_writes=off"
