@@ -375,16 +375,20 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> tuple[list[str], l
             # Present in target only: create it.
             if src_func is None:
                 # pg_get_functiondef has no trailing semicolon; add one to terminate the statement.
-                creates.append(f"{dst_functions[signature].definition.rstrip()};")
+                creates.append(f"{dst_functions[signature].definition};")
             # Present in source only: drop it.
             elif dst_func is None:
-                drops.append(f'DROP ROUTINE "{schema_name}"."{src_func.name}"({src_func.identity_arguments});')
+                drops.append(
+                    f'DROP {src_func.drop_keyword} "{schema_name}"."{src_func.name}"({src_func.identity_arguments});'
+                )
             # Present in both: re-create if the definition changed.
             elif src_func.definition != dst_func.definition:
                 # CREATE OR REPLACE cannot change the return type, so drop first when it differs.
                 if src_func.return_type != dst_func.return_type:
-                    drops.append(f'DROP ROUTINE "{schema_name}"."{src_func.name}"({src_func.identity_arguments});')
-                creates.append(f"{dst_func.definition.rstrip()};")
+                    drops.append(
+                        f'DROP {src_func.drop_keyword} "{schema_name}"."{src_func.name}"({src_func.identity_arguments});'
+                    )
+                creates.append(f"{dst_func.definition};")
 
     return creates, drops
 

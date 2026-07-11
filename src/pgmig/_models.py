@@ -99,6 +99,14 @@ class Function:
     identity_arguments: str  # pg_get_function_identity_arguments, e.g. "a integer" (the DROP signature)
     definition: str  # pg_get_functiondef output: a full CREATE OR REPLACE ...
     return_type: str | None  # format_type(prorettype); None for procedures
+    kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
+
+    @property
+    def drop_keyword(self) -> str:
+        """
+        The DROP object keyword for this routine's kind.
+        """
+        return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
 @dataclass

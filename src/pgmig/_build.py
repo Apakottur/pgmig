@@ -256,7 +256,8 @@ def build_db_info(dsn: str) -> DbInfo:
                 p.proname,
                 pg_get_function_identity_arguments(p.oid),
                 pg_get_functiondef(p.oid),
-                format_type(p.prorettype, NULL)
+                format_type(p.prorettype, NULL),
+                p.prokind
             FROM
                 pg_proc p
                 JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -265,17 +266,23 @@ def build_db_info(dsn: str) -> DbInfo:
                 AND n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
-                    SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e'
-                )
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.objid = p.oid
+                        AND d.deptype = 'e')
             """
         ).fetchall()
-        for schema_name, func_name, func_args, func_def, func_rettype in rows:
+        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in rows:
             signature = f"{func_name}({func_args})"
             schema_by_name[schema_name].function_by_signature[signature] = Function(
                 name=func_name,
                 identity_arguments=func_args,
-                definition=func_def,
+                definition=func_def.rstrip(),
                 return_type=func_rettype,
+                kind=func_kind,
             )
 
         # Extensions (database-level).

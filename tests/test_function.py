@@ -23,7 +23,7 @@ def test_function_drop(gen_setup: GenerateSetup) -> None:
     """
     gen_setup.src.execute("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$")
 
-    gen_setup.assert_migration_sql('DROP ROUTINE "public"."add"(a integer, b integer);')
+    gen_setup.assert_migration_sql('DROP FUNCTION "public"."add"(a integer, b integer);')
 
 
 def test_function_body_change(gen_setup: GenerateSetup) -> None:
@@ -52,7 +52,7 @@ def test_function_return_type_change(gen_setup: GenerateSetup) -> None:
 
     gen_setup.assert_migration_sql(
         [
-            'DROP ROUTINE "public"."calc"(a integer);',
+            'DROP FUNCTION "public"."calc"(a integer);',
             "CREATE OR REPLACE FUNCTION public.calc(a integer)\n"
             " RETURNS bigint\n"
             " LANGUAGE sql\n"
@@ -74,9 +74,9 @@ def test_function_overload_added(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_procedure_create_and_drop(gen_setup: GenerateSetup) -> None:
+def test_procedure_create(gen_setup: GenerateSetup) -> None:
     """
-    A procedure is created from its definition and dropped via DROP ROUTINE.
+    A procedure is created from its definition.
     """
     gen_setup.dst.execute("CREATE PROCEDURE noop() LANGUAGE sql AS $$SELECT 1$$")
 
@@ -85,6 +85,15 @@ def test_procedure_create_and_drop(gen_setup: GenerateSetup) -> None:
             "CREATE OR REPLACE PROCEDURE public.noop()\n LANGUAGE sql\nAS $procedure$SELECT 1$procedure$;",
         ]
     )
+
+
+def test_procedure_drop(gen_setup: GenerateSetup) -> None:
+    """
+    A procedure present only in source is dropped via DROP PROCEDURE.
+    """
+    gen_setup.src.execute("CREATE PROCEDURE noop() LANGUAGE sql AS $$SELECT 1$$")
+
+    gen_setup.assert_migration_sql('DROP PROCEDURE "public"."noop"();')
 
 
 def test_function_unchanged(gen_setup: GenerateSetup) -> None:
