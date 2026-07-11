@@ -69,10 +69,21 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                 columns = ", ".join(f'"{column.name}" {column.type}' for column in dst_tables[table_name].columns)
                 create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
                 statements.append(create_table_sql)
-            # Present in source only: drop it.
+            # Present in source only: drop it (its comment is dropped with it).
             elif table_name not in dst_tables:
                 drop_table_sql = f'DROP TABLE "{schema_name}"."{table_name}";'
                 statements.append(drop_table_sql)
+                continue
+
+            # Present in target (created or unchanged): sync the comment if it differs.
+            src_comment = src_tables[table_name].comment if table_name in src_tables else None
+            dst_comment = dst_tables[table_name].comment
+            if src_comment != dst_comment:
+                if dst_comment is None:
+                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
+                else:
+                    escaped = dst_comment.replace("'", "''")
+                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
 
     return statements
 

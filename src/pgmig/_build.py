@@ -42,7 +42,8 @@ def build_db_info(dsn: str) -> DbInfo:
                 n.nspname,
                 c.relname,
                 a.attname,
-                format_type(a.atttypid, a.atttypmod)
+                format_type(a.atttypid, a.atttypmod),
+                obj_description(c.oid, 'pg_class')
             FROM
                 pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -62,9 +63,11 @@ def build_db_info(dsn: str) -> DbInfo:
                 a.attname
             """
         ).fetchall()
-        for schema_name, table_name, column_name, column_type in rows:
+        for schema_name, table_name, column_name, column_type, table_comment in rows:
             if table_name not in schema_by_name[schema_name].table_by_name:
-                schema_by_name[schema_name].table_by_name[table_name] = Table(name=table_name, columns=[])
+                schema_by_name[schema_name].table_by_name[table_name] = Table(
+                    name=table_name, columns=[], comment=table_comment
+                )
             schema_by_name[schema_name].table_by_name[table_name].columns.append(
                 Column(name=column_name, type=column_type)
             )
