@@ -10,26 +10,26 @@ from typing_extensions import LiteralString
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:55432"
 _ADMIN_DB_NAME = "postgres"
 
+
 # Postgres truncates identifiers past this length, which would silently collapse
 # distinct long branch names to the same database name.
 _MAX_IDENTIFIER_LEN = 63
 
 
-def make_db_name(base: str, key: str) -> str:
+def get_unique_db_name(base: str, key: str) -> str:
     """
-    Build a valid, unique Postgres database name from a base and a free-form key
-    (e.g. a git branch name), so parallel worktrees do not collide.
-
-    The key is lowercased and every run of non-alphanumeric characters becomes a
-    single underscore. If the result would exceed the identifier length limit,
-    the slug is truncated and a hash of the full slug is appended to preserve
-    uniqueness.
+    Build a valid, unique Postgres database name from a base and a free-form key(e.g. a git branch name).
+    Useful for developing on multiple branches in parallel.
     """
+    # Simple name - cleaned key and base.
     slug = re.sub(r"[^a-z0-9]+", "_", key.lower()).strip("_")
     name = f"{base}_{slug}"
+
+    # Name is short - use as is.
     if len(name) <= _MAX_IDENTIFIER_LEN:
         return name
 
+    # Name is long - hash the slug.
     digest = hashlib.sha256(slug.encode()).hexdigest()[:8]
     # Reserve room for: base + "_" + truncated_slug + "_" + digest.
     slug_len = _MAX_IDENTIFIER_LEN - len(base) - len(digest) - 2

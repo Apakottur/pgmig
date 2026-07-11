@@ -5,10 +5,10 @@ import pytest
 import shpyx
 
 from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import DbConnection, make_db_name
+from tests.utils.db_utils import DbConnection, get_unique_db_name
 
-_COMPOSE_FILE_DIR = Path(__file__).parent
-_REPO_ROOT = _COMPOSE_FILE_DIR.parent
+_REPO_ROOT = Path(__file__).parent.parent
+_COMPOSE_FILE_DIR = _REPO_ROOT / "tests"
 
 
 def _worktree_key() -> str:
@@ -27,8 +27,8 @@ def _worktree_key() -> str:
 
 
 _KEY = _worktree_key()
-_SRC_DB = make_db_name("pgmig_src", _KEY)
-_DST_DB = make_db_name("pgmig_dst", _KEY)
+_SRC_DB = get_unique_db_name("pgmig_src", _KEY)
+_DST_DB = get_unique_db_name("pgmig_dst", _KEY)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
