@@ -13,8 +13,17 @@ _SRC_DB = "pgmig_src"
 _DST_DB = "pgmig_dst"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--stop-docker",
+        action="store_true",
+        default=False,
+        help="Tear down the docker compose stack after the test session (default: leave it running).",
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
-def _postgres_server() -> Iterator[str]:
+def _postgres_server(request: pytest.FixtureRequest) -> Iterator[str]:
     """
     Session level database server.
     """
@@ -27,8 +36,9 @@ def _postgres_server() -> Iterator[str]:
     try:
         yield admin_db_conn.dsn
     finally:
-        # Stop the database server.
-        shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
+        # Stop the database server, unless asked to leave it running.
+        if request.config.getoption("--stop-docker"):
+            shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
 @pytest.fixture(scope="function")

@@ -58,6 +58,8 @@ repos:
       - id: vulture
         args: ["--ignore-decorators",
                "@pytest.fixture",
+               "--ignore-names",
+               "pytest_*",
                "src",
                "tests"
         ]
