@@ -30,14 +30,22 @@ class Index:
 @dataclass(frozen=True)
 class Constraint:
     """
-    A Postgres primary key or unique constraint, owned by a table.
+    A Postgres primary key, unique, check, or foreign key constraint, owned by a table.
     """
 
     name: str
     # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
     definition: str
-    is_primary_key: bool
+    contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
+
+    @property
+    def is_primary_key(self) -> bool:
+        return self.contype == "p"
+
+    @property
+    def is_foreign_key(self) -> bool:
+        return self.contype == "f"
 
 
 @dataclass(frozen=True)
@@ -51,6 +59,7 @@ class Table:
     comment: str | None
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
+    foreign_key_by_name: dict[str, Constraint]
 
     def get_primary_key_columns(self) -> set[str]:
         """
