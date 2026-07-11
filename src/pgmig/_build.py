@@ -143,7 +143,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 canonical=index_canonical,
             )
 
-        # Constraints (primary key and unique only).
+        # Constraints (primary key, unique, and check).
         rows = conn.execute(
             """
             SELECT
@@ -165,7 +165,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 JOIN pg_class c ON c.oid = con.conrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE
-                con.contype IN ('p', 'u')
+                con.contype IN ('p', 'u', 'c')
                 AND n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
@@ -183,7 +183,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 name=con_name,
                 definition=con_def,
                 is_primary_key=con_is_pk,
-                columns=con_columns,
+                columns=con_columns or [],
             )
 
         # Extensions (database-level).
