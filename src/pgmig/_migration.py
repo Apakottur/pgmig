@@ -107,6 +107,15 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                 statements.append(drop_table_sql)
                 continue
 
+            # Columns covered by a target primary key are made NOT NULL by the
+            # ADD PRIMARY KEY, so their standalone SET NOT NULL is redundant.
+            dst_pk_columns = {
+                column
+                for constraint in dst_tables[table_name].constraint_by_name.values()
+                if constraint.is_primary_key
+                for column in constraint.columns
+            }
+
             if table_name in src_tables:
                 # Table exists in source: get details.
                 src_comment = src_tables[table_name].comment
@@ -134,7 +143,9 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                                 statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
                         if src_column.not_null != dst_column.not_null:
                             if dst_column.not_null:
-                                statements.append(f"{prefix} SET NOT NULL;")
+                                # Skip if a target primary key already covers this column.
+                                if column_name not in dst_pk_columns:
+                                    statements.append(f"{prefix} SET NOT NULL;")
                             else:
                                 statements.append(f"{prefix} DROP NOT NULL;")
             else:
@@ -228,6 +239,69 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
     return statements
 
 
+def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
+    """
+    Generate the migration SQL of primary key and unique constraints (add, drop, rename).
+    """
+    statements: list[str] = []
+
+    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
+        src_schema = source.schema_by_name.get(schema_name)
+        dst_schema = target.schema_by_name.get(schema_name)
+        src_tables = src_schema.table_by_name if src_schema else {}
+        dst_tables = dst_schema.table_by_name if dst_schema else {}
+
+        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
+            # Table dropped: its constraints are dropped with it.
+            if table_name not in dst_tables:
+                continue
+
+            src_constraints = dict(src_tables[table_name].constraint_by_name) if table_name in src_tables else {}
+            dst_constraints = dict(dst_tables[table_name].constraint_by_name)
+
+            # Exact matches (same name and definition) are no-ops.
+            for name in sorted(src_constraints.keys() & dst_constraints.keys()):
+                if src_constraints[name].definition == dst_constraints[name].definition:
+                    del src_constraints[name]
+                    del dst_constraints[name]
+
+            # Renames: remaining constraints that share a definition (name-independent).
+            src_by_def: dict[str, list[str]] = {}
+            for name, constraint in src_constraints.items():
+                src_by_def.setdefault(constraint.definition, []).append(name)
+            dst_by_def: dict[str, list[str]] = {}
+            for name, constraint in dst_constraints.items():
+                dst_by_def.setdefault(constraint.definition, []).append(name)
+
+            rename_pairs: list[tuple[str, str]] = []
+            for definition in sorted(src_by_def.keys() & dst_by_def.keys()):
+                src_names = sorted(src_by_def[definition])
+                dst_names = sorted(dst_by_def[definition])
+                # Same definition with an identical name was already removed as an exact
+                # match, so every pair here is a genuine rename. Counts may differ, so
+                # pair up to the shorter list.
+                for old_name, new_name in zip(src_names, dst_names, strict=False):
+                    rename_pairs.append((old_name, new_name))
+                    del src_constraints[old_name]
+                    del dst_constraints[new_name]
+
+            # Emit drops first (frees names), then renames, then adds.
+            statements.extend(
+                f'ALTER TABLE "{schema_name}"."{table_name}" DROP CONSTRAINT "{name}";'
+                for name in sorted(src_constraints.keys())
+            )
+            statements.extend(
+                f'ALTER TABLE "{schema_name}"."{table_name}" RENAME CONSTRAINT "{old_name}" TO "{new_name}";'
+                for old_name, new_name in rename_pairs
+            )
+            statements.extend(
+                f'ALTER TABLE "{schema_name}"."{table_name}" ADD CONSTRAINT "{name}" {dst_constraints[name].definition};'
+                for name in sorted(dst_constraints.keys())
+            )
+
+    return statements
+
+
 def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     """
     Get the migration SQL between the given source and target databases.
@@ -239,12 +313,14 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     extension_statements = _generate_extensions(source=source, target=target)
     table_statements = _generate_tables(source=source, target=target)
     index_statements = _generate_indexes(source=source, target=target)
+    constraint_statements = _generate_constraints(source=source, target=target)
 
     # Add statements in the correct order.
     statements.extend(schema_creates)
     statements.extend(extension_statements)
     statements.extend(table_statements)
     statements.extend(index_statements)
+    statements.extend(constraint_statements)
     statements.extend(schema_drops)
 
     # Join all statements into a single string.

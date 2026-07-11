@@ -113,9 +113,10 @@ def test_index_dropped_with_table(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql('DROP TABLE "public"."person";')
 
 
-def test_index_constraint_backed_ignored(gen_setup: GenerateSetup) -> None:
+def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) -> None:
     """
-    Indexes backing a PRIMARY KEY / UNIQUE constraint are not diffed.
+    The indexes backing a PRIMARY KEY / UNIQUE constraint are handled via the
+    constraint (ADD CONSTRAINT), never emitted as standalone CREATE INDEX.
     """
     # `id` is NOT NULL on both sides so only the constraint differs, isolating the
     # index behavior from the NOT NULL that a PRIMARY KEY would otherwise imply.
@@ -124,4 +125,9 @@ def test_index_constraint_backed_ignored(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute("ALTER TABLE person ADD PRIMARY KEY (id)")
     gen_setup.dst.execute("ALTER TABLE person ADD UNIQUE (email)")
 
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_migration_sql(
+        [
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" UNIQUE (email);',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id);',
+        ]
+    )

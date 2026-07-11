@@ -70,3 +70,10 @@ indrelid
 indexrelid
 refclassid
 regclass
+conkey
+conname
+conrelid
+constraintdef
+contype
+ordinality
+pkey
