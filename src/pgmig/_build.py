@@ -7,27 +7,11 @@ def build_db_info(dsn: str) -> DbInfo:
     """
     Build the full structure of the given database.
     """
-    extension_by_name = {}
     schema_by_name: dict[str, Schema] = {}
-    columns_by_table: dict[tuple[str, str], list[Column]] = {}
+    extension_by_name = {}
 
     # Construct database attributes.
     with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
-        # Extensions (database-level).
-        rows = conn.execute(
-            """
-            SELECT
-                e.extname,
-                e.extversion,
-                n.nspname
-            FROM
-                pg_extension e
-                JOIN pg_namespace n ON n.oid = e.extnamespace
-            """
-        ).fetchall()
-        for name, version, schema in rows:
-            extension_by_name[name] = Extension(name=name, version=version, schema=schema)
-
         # Schemas (user namespaces, excluding system and extension-owned ones).
         rows = conn.execute(
             """
@@ -39,14 +23,19 @@ def build_db_info(dsn: str) -> DbInfo:
                 n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
-                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
-                )
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.objid = n.oid
+                        AND d.deptype = 'e')
             """
         ).fetchall()
         for (schema_name,) in rows:
             schema_by_name[schema_name] = Schema(name=schema_name, table_by_name={})
 
-        # Tables (and their columns, ordered by position).
+        # Tables (and their columns, ordered by name).
         rows = conn.execute(
             """
             SELECT
@@ -70,18 +59,30 @@ def build_db_info(dsn: str) -> DbInfo:
             ORDER BY
                 n.nspname,
                 c.relname,
-                a.attnum
+                a.attname
             """
         ).fetchall()
         for schema_name, table_name, column_name, column_type in rows:
-            columns_by_table.setdefault((schema_name, table_name), []).append(
+            if table_name not in schema_by_name[schema_name].table_by_name:
+                schema_by_name[schema_name].table_by_name[table_name] = Table(name=table_name, columns=[])
+            schema_by_name[schema_name].table_by_name[table_name].columns.append(
                 Column(name=column_name, type=column_type)
             )
 
-    # Attach tables to their schemas. Tables and schemas share the same namespace
-    # filter, so every table's schema is present.
-    for (schema_name, table_name), columns in columns_by_table.items():
-        schema_by_name[schema_name].table_by_name[table_name] = Table(name=table_name, columns=columns)
+        # Extensions (database-level).
+        rows = conn.execute(
+            """
+            SELECT
+                e.extname,
+                e.extversion,
+                n.nspname
+            FROM
+                pg_extension e
+                JOIN pg_namespace n ON n.oid = e.extnamespace
+            """
+        ).fetchall()
+        for name, version, schema in rows:
+            extension_by_name[name] = Extension(name=name, version=version, schema=schema)
 
     # Build and return the database info.
     return DbInfo(

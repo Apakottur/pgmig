@@ -2,18 +2,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class Extension:
-    """
-    A Postgres extension. Registered per-database (unique by name), installed into
-    a schema.
-    """
-
-    name: str
-    version: str
-    schema: str
-
-
-@dataclass(frozen=True)
 class Column:
     """
     A table column.
@@ -43,11 +31,23 @@ class Schema:
     table_by_name: dict[str, Table]
 
 
+@dataclass(frozen=True)
+class Extension:
+    """
+    A Postgres extension. Registered per-database (unique by name), installed into
+    a schema.
+    """
+
+    name: str
+    version: str
+    schema: str
+
+
 @dataclass
 class DbInfo:
     """
     Full structure of a database: its database-level objects and its schemas.
     """
 
-    extension_by_name: dict[str, Extension]
     schema_by_name: dict[str, Schema]
+    extension_by_name: dict[str, Extension]

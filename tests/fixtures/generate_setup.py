@@ -16,4 +16,4 @@ class GenerateSetup:
         result = generate(source=self.src.dsn, target=self.dst.dsn)
 
         # Verify the result.
-        assert result == expected
+        assert result == expected, f"\nExpected SQL:\n{expected}\nGenerated SQL:\n{result}"

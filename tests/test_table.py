@@ -33,3 +33,14 @@ def test_table_unchanged(gen_setup: GenerateSetup) -> None:
 
     # Verify no migration SQL is generated.
     gen_setup.assert_migration_sql("")
+
+
+def test_table_column_ordered_by_name(gen_setup: GenerateSetup) -> None:
+    """
+    Table columns should be ordered by name.
+    """
+    # Create the table on both sides.
+    gen_setup.dst.execute("CREATE TABLE person (name text, age integer)")
+
+    # Verify the migration SQL orders the columns by name.
+    gen_setup.assert_migration_sql('CREATE TABLE "public"."person" ("age" integer, "name" text);')
