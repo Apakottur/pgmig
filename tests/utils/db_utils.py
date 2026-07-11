@@ -70,11 +70,9 @@ class DbConnection:
         else:
             return result.fetchall()
 
-    def apply(self, script: str) -> None:
+    def execute_all(self, queries: list[LiteralString | sql.Composed]) -> None:
         """
-        Apply a full SQL script (one or more statements) on the reused connection.
-
-        Used to run generated migrations, which are dynamic SQL and therefore
-        not LiteralString - the script is trusted (produced by pgmig itself).
+        Execute a list of SQL statements against this database on the reused connection.
         """
-        self._conn.execute(script)  # ty: ignore[no-matching-overload]
+        for query in queries:
+            self.execute(query)
