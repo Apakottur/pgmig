@@ -121,8 +121,7 @@ def test_sequence_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical sequence on both sides -> no migration SQL.
     """
-    gen_setup.src.execute("CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5")
-    gen_setup.dst.execute("CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5")
+    gen_setup.execute_both("CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5")
 
     gen_setup.assert_migration_sql("")
 

@@ -1,3 +1,6 @@
+from psycopg import sql
+from typing_extensions import LiteralString
+
 from pgmig import generate
 from tests.utils.db_utils import DbConnection
 
@@ -10,6 +13,13 @@ class GenerateSetup:
     def __init__(self, src_conn: DbConnection, dst_conn: DbConnection) -> None:
         self.src = src_conn
         self.dst = dst_conn
+
+    def execute_both(self, query: LiteralString | sql.Composed) -> None:
+        """
+        Run the same query on both the source and target databases.
+        """
+        self.src.execute(query)
+        self.dst.execute(query)
 
     def assert_migration_sql(self, expected: str | list[str]) -> None:
         # Multi-statement expectations must be passed as a list, not a "\n"-joined string.

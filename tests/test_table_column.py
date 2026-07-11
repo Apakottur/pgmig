@@ -130,7 +130,6 @@ def test_table_column_attributes_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same type, nullability, and default on both sides -> no migration SQL.
     """
-    gen_setup.src.execute("CREATE TABLE person (age integer NOT NULL DEFAULT 0)")
-    gen_setup.dst.execute("CREATE TABLE person (age integer NOT NULL DEFAULT 0)")
+    gen_setup.execute_both("CREATE TABLE person (age integer NOT NULL DEFAULT 0)")
 
     gen_setup.assert_migration_sql("")
