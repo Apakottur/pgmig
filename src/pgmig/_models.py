@@ -12,6 +12,19 @@ class Column:
 
 
 @dataclass(frozen=True)
+class Index:
+    """
+    A standalone Postgres index (CREATE INDEX), owned by a table.
+    """
+
+    name: str
+    definition: str
+    # `definition` with the index's own name stripped out, so two indexes that
+    # differ only by name compare equal (drives rename detection).
+    canonical: str
+
+
+@dataclass(frozen=True)
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
@@ -20,6 +33,7 @@ class Table:
     name: str
     columns: list[Column]
     comment: str | None
+    index_by_name: dict[str, Index]
 
 
 @dataclass

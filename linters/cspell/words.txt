@@ -57,3 +57,10 @@ relname
 relnamespace
 deptype
 objid
+classid
+indexdef
+indisprimary
+indrelid
+indexrelid
+refclassid
+regclass
