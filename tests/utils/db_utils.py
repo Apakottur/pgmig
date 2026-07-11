@@ -24,15 +24,12 @@ class DbConnection:
 
     def _recreate_database(self) -> None:
         with psycopg.connect(_ADMIN_DSN, autocommit=True) as conn:
-            # Disconnect all DB connections.
+            # Drop the database, if exists. WITH (FORCE) atomically terminates any
+            # lingering backends and drops the database, avoiding the race between a
+            # separate pg_terminate_backend call and the drop.
             conn.execute(
-                sql.SQL("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = {db_name}").format(
-                    db_name=sql.Literal(self.db_name)
-                )
+                sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self.db_name))
             )
-
-            # Drop the database, if exists.
-            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {db_name}").format(db_name=sql.Identifier(self.db_name)))
 
             # Create the database.
             conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
