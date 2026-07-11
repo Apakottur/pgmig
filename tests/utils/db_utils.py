@@ -10,6 +10,13 @@ _ADMIN_DB_NAME = "postgres"
 _ADMIN_DSN = f"{_DSN_PREFIX}/{_ADMIN_DB_NAME}"
 
 
+def _version_key(version: str) -> tuple[int, ...]:
+    """
+    Sort key for Postgres extension versions (e.g. '1.10' sorts after '1.4').
+    """
+    return tuple(int(part) for part in version.split("."))
+
+
 class DbConnection:
     def __init__(self, db_name: str) -> None:
         self.db_name = db_name
@@ -49,13 +56,61 @@ class DbConnection:
         result = self.execute("SELECT 1")
         assert result == [(1,)]
 
-    def execute(self, query: LiteralString) -> list[tuple[Any, ...]]:
+    def execute(self, query: LiteralString, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         """
         Execute a SQL statement against this database.
         """
         with psycopg.connect(self.dsn, autocommit=True) as conn:
             # Execute the query.
-            result = conn.execute(query)
+            result = conn.execute(query, params)
 
-            # Fetch the results.
+            # Fetch the results (statements like DDL produce none).
+            if result.description is None:
+                return []
             return result.fetchall()
+
+    def install_extension(self, name: str, *, version: str | None = None, schema: str | None = None) -> None:
+        """
+        Install an extension, optionally pinning its version and/or schema.
+        """
+        stmt = sql.SQL("CREATE EXTENSION {name}").format(name=sql.Identifier(name))
+        if version is not None:
+            stmt += sql.SQL(" VERSION {version}").format(version=sql.Literal(version))
+        if schema is not None:
+            stmt += sql.SQL(" SCHEMA {schema}").format(schema=sql.Identifier(schema))
+
+        with psycopg.connect(self.dsn, autocommit=True) as conn:
+            conn.execute(stmt)
+
+    def pick_multi_version_extension(self) -> tuple[str, str, str]:
+        """
+        Find an extension exposing more than one installable version.
+
+        Returns (name, min_version, max_version), choosing the first extension by
+        name so the selection is deterministic across runs.
+        """
+        rows = self.execute("SELECT name, version FROM pg_available_extension_versions ORDER BY name")
+        versions_by_name: dict[str, list[str]] = {}
+        for name, version in rows:
+            versions_by_name.setdefault(name, []).append(version)
+
+        for name in sorted(versions_by_name):
+            versions = sorted(versions_by_name[name], key=_version_key)
+            if len(versions) > 1:
+                return name, versions[0], versions[-1]
+
+        raise AssertionError("no extension with multiple versions available")
+
+    def extension_info(self, name: str) -> tuple[str, str]:
+        """
+        Return the installed (version, schema) of the given extension.
+        """
+        result = self.execute(
+            "SELECT e.extversion, n.nspname "
+            "FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace "
+            "WHERE e.extname = %s",
+            (name,),
+        )
+        assert len(result) == 1, f"extension {name!r} not installed"
+        version, schema = result[0]
+        return version, schema
