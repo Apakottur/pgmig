@@ -2,9 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "pyproject.toml"
+    tags: ["v*"]
 
   workflow_dispatch:
 
@@ -12,23 +10,28 @@ jobs:
   release:
     runs-on: ubuntu-latest
 
+    permissions:
+      # Required for PyPI Trusted Publishing (OIDC), so no API token is stored.
+      id-token: write
+      # Required to create the GitHub Release.
+      contents: write
+
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
         with:
-          python-version: "3.13"
+          # hatch-vcs derives the version from the git tag, so it needs the
+          # full history and tags, not a shallow clone.
+          fetch-depth: 0
 
-      - name: Install dependencies
-        run: |
-          pip install poetry
+      - uses: ./.github/workflows/util/setup_python
 
       - name: Build
-        run: |
-          poetry build
+        run: uv build
 
-      - name: Publish
-        env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          poetry publish --username __token__
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true

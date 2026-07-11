@@ -1,5 +1,5 @@
-import pgmig
+from pgmig.main import mock_func
 
 
-def test_hello_world() -> None:
-    print("Hello World!", pgmig.__all__())  # noqa: T201
+def test_mock_func() -> None:
+    assert mock_func(1) == 2
