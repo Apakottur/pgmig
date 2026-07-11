@@ -1,12 +1,59 @@
+import hashlib
+import re
 from typing import Any
 
 import psycopg
+import shpyx
 import tenacity
 from psycopg import sql
 from typing_extensions import LiteralString
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:55432"
 _ADMIN_DB_NAME = "postgres"
+
+
+def _get_unique_db_key_from_git_branch() -> str:
+    """
+    Get a unique identifier for DB naming, based on the current git branch.
+    """
+    result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
+    branch = result.stdout.strip()
+    if result.return_code == 0 and branch and branch != "HEAD":
+        return branch
+
+    # Default if git branch is not available.
+    return "unknown"
+
+
+# Postgres truncates identifiers past this length, which would silently collapse
+# distinct long branch names to the same database name.
+_MAX_IDENTIFIER_LEN = 63
+
+
+def get_unique_db_name(base: str, key: str) -> str:
+    """
+    Build a valid, unique Postgres database name from a base and a free-form key(e.g. a git branch name).
+    Useful for developing on multiple branches in parallel.
+    """
+    # Simple name - cleaned key and base.
+    slug = re.sub(r"[^a-z0-9]+", "_", key.lower()).strip("_")
+    name = f"{base}_{slug}"
+
+    # Name is short - use as is.
+    if len(name) <= _MAX_IDENTIFIER_LEN:
+        return name
+
+    # Name is long - hash the slug.
+    digest = hashlib.sha256(slug.encode()).hexdigest()[:8]
+    # Reserve room for: base + "_" + truncated_slug + "_" + digest.
+    slug_len = _MAX_IDENTIFIER_LEN - len(base) - len(digest) - 2
+    slug_trunc = slug[:slug_len].rstrip("_")
+    return f"{base}_{slug_trunc}_{digest}"
+
+
+_KEY = _get_unique_db_key_from_git_branch()
+SRC_DB = get_unique_db_name("pgmig_src", _KEY)
+DST_DB = get_unique_db_name("pgmig_dst", _KEY)
 
 
 class DbConnection:
