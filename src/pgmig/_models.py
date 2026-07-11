@@ -28,6 +28,19 @@ class Index:
 
 
 @dataclass(frozen=True)
+class Constraint:
+    """
+    A Postgres primary key or unique constraint, owned by a table.
+    """
+
+    name: str
+    # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
+    definition: str
+    is_primary_key: bool
+    columns: list[str]  # key columns in order (for NOT NULL coordination)
+
+
+@dataclass(frozen=True)
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
@@ -37,6 +50,18 @@ class Table:
     columns: list[Column]
     comment: str | None
     index_by_name: dict[str, Index]
+    constraint_by_name: dict[str, Constraint]
+
+    def get_primary_key_columns(self) -> set[str]:
+        """
+        Columns covered by a primary key constraint.
+        """
+        return {
+            column
+            for constraint in self.constraint_by_name.values()
+            if constraint.is_primary_key
+            for column in constraint.columns
+        }
 
 
 @dataclass
