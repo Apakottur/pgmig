@@ -8,13 +8,6 @@ from tests.fixtures.generate_setup import GenerateSetup
 from tests.utils.db_utils import DbConnection
 
 
-def _version_key(version: str) -> list[int]:
-    """
-    Sort key for Postgres extension versions (e.g. '1.10' sorts after '1.4').
-    """
-    return [int(part) for part in version.split(".")]
-
-
 def _create_extension(
     conn: DbConnection,
     name: str,
@@ -72,6 +65,13 @@ def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
     """
     Find an extension exposing more than one installable version.
     """
+
+    def _version_key(version: str) -> list[int]:
+        """
+        Sort key for Postgres extension versions (e.g. '1.10' sorts after '1.4').
+        """
+        return [int(part) for part in version.split(".")]
+
     # Get all available extension versions.
     rows = conn.execute("SELECT name, version FROM pg_available_extension_versions ORDER BY name")
 
@@ -81,12 +81,13 @@ def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
         versions_by_name[name].append(version)
 
     # Find the first extension with multiple versions.
-    for name, versions in sorted(versions_by_name.items(), key=_version_key):
+    for name, versions in versions_by_name.items():
         if len(versions) > 1:
+            sorted_versions = sorted(versions, key=_version_key)
             return _MultiVersionExtension(
                 name=name,
-                min_version=versions[0],
-                max_version=versions[-1],
+                min_version=sorted_versions[0],
+                max_version=sorted_versions[-1],
             )
 
     # No extension with multiple versions available.
