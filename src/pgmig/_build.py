@@ -152,8 +152,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 c.relname,
                 con.conname,
                 pg_get_constraintdef(con.oid),
-                con.contype = 'p',
-                con.contype = 'f',
+                con.contype,
                 (
                     SELECT
                         array_agg(a.attname ORDER BY k.ord)
@@ -180,15 +179,15 @@ def build_db_info(dsn: str) -> DbInfo:
                         AND d.deptype = 'e')
             """
         ).fetchall()
-        for schema_name, table_name, con_name, con_def, con_is_pk, con_is_fk, con_columns in rows:
+        for schema_name, table_name, con_name, con_def, con_type, con_columns in rows:
             constraint = Constraint(
                 name=con_name,
                 definition=con_def,
-                is_primary_key=con_is_pk,
+                contype=con_type,
                 columns=con_columns or [],
             )
             table = schema_by_name[schema_name].table_by_name[table_name]
-            if con_is_fk:
+            if constraint.is_foreign_key:
                 table.foreign_key_by_name[con_name] = constraint
             else:
                 table.constraint_by_name[con_name] = constraint
