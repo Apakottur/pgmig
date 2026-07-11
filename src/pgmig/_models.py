@@ -9,6 +9,8 @@ class Column:
 
     name: str
     type: str
+    not_null: bool
+    default: str | None
 
 
 @dataclass(frozen=True)

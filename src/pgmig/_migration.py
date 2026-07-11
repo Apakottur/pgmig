@@ -1,4 +1,4 @@
-from pgmig._models import DbInfo
+from pgmig._models import Column, DbInfo
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
@@ -51,6 +51,18 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[str]:
     return statements
 
 
+def _column_def(column: Column) -> str:
+    """
+    Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
+    """
+    parts = [f'"{column.name}" {column.type}']
+    if column.default is not None:
+        parts.append(f"DEFAULT {column.default}")
+    if column.not_null:
+        parts.append("NOT NULL")
+    return " ".join(parts)
+
+
 def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
     """
     Generate the migration SQL of tables.
@@ -81,13 +93,28 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                     if column_name not in src_columns:
                         column = dst_columns[column_name]
                         statements.append(
-                            f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN "{column.name}" {column.type};'
+                            f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN {_column_def(column)};'
                         )
                     elif column_name not in dst_columns:
                         statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
+                    else:
+                        # Column on both sides: sync DEFAULT then NOT NULL (type changes are out of scope).
+                        src_column = src_columns[column_name]
+                        dst_column = dst_columns[column_name]
+                        prefix = f'ALTER TABLE "{schema_name}"."{table_name}" ALTER COLUMN "{column_name}"'
+                        if src_column.default != dst_column.default:
+                            if dst_column.default is None:
+                                statements.append(f"{prefix} DROP DEFAULT;")
+                            else:
+                                statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
+                        if src_column.not_null != dst_column.not_null:
+                            if dst_column.not_null:
+                                statements.append(f"{prefix} SET NOT NULL;")
+                            else:
+                                statements.append(f"{prefix} DROP NOT NULL;")
             else:
                 # Present in target only: create it.
-                columns = ", ".join(f'"{column.name}" {column.type}' for column in dst_tables[table_name].columns)
+                columns = ", ".join(_column_def(column) for column in dst_tables[table_name].columns)
                 create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
                 statements.append(create_table_sql)
 
