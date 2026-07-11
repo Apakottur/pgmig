@@ -1,10 +1,10 @@
-import subprocess
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
 import psycopg
 import pytest
+import shpyx
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
@@ -14,17 +14,11 @@ _ADMIN_DSN = "postgresql://pgmig:pgmig@localhost:55432/pgmig"
 
 @pytest.fixture(scope="session")
 def postgres_server() -> Iterator[str]:
-    subprocess.run(
-        ["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d", "--wait"],
-        check=True,
-    )
+    shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d", "--wait"])
     try:
         yield _ADMIN_DSN
     finally:
-        subprocess.run(
-            ["docker", "compose", "-f", str(_COMPOSE_FILE), "down", "-v"],
-            check=True,
-        )
+        shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "down", "-v"])
 
 
 @pytest.fixture
