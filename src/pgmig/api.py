@@ -18,7 +18,7 @@ def _get_db_schema(dsn: str) -> Schema:
     s = Schema()
 
     # Construct schema attributes.
-    with psycopg.connect(dsn) as conn:
+    with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
         conn.execute("SELECT 1")
 
     # Return the schema.
