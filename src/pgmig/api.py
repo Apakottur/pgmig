@@ -1,16 +1,16 @@
-from pgmig._build import build_schema
-from pgmig._migration import generate_schema_migration_sql
+from pgmig._build import build_db_info
+from pgmig._migration import generate_migration_sql
 
 
 def generate(*, source: str, target: str) -> str:
     """
     Generate the migration SQL between the given source and target databases.
     """
-    # Build source schema.
-    source_schema = build_schema(source)
+    # Build source database info.
+    source_db_info = build_db_info(source)
 
-    # Build target schema.
-    target_schema = build_schema(target)
+    # Build target database info.
+    target_db_info = build_db_info(target)
 
     # Generate migration SQL.
-    return generate_schema_migration_sql(source=source_schema, target=target_schema)
+    return generate_migration_sql(source=source_db_info, target=target_db_info)

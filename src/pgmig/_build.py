@@ -1,18 +1,19 @@
 import psycopg
 
-from pgmig._models import Column, Extension, Schema, Table
+from pgmig._models import Column, DbInfo, Extension, Schema, Table
 
 
-def build_schema(dsn: str) -> Schema:
+def build_db_info(dsn: str) -> DbInfo:
     """
-    Build the database schema of the given database.
+    Build the full structure of the given database.
     """
     extension_by_name = {}
+    schema_by_name: dict[str, Schema] = {}
     columns_by_table: dict[tuple[str, str], list[Column]] = {}
 
-    # Construct schema attributes.
+    # Construct database attributes.
     with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
-        # Extensions.
+        # Extensions (database-level).
         rows = conn.execute(
             """
             SELECT
@@ -26,6 +27,24 @@ def build_schema(dsn: str) -> Schema:
         ).fetchall()
         for name, version, schema in rows:
             extension_by_name[name] = Extension(name=name, version=version, schema=schema)
+
+        # Schemas (user namespaces, excluding system and extension-owned ones).
+        rows = conn.execute(
+            """
+            SELECT
+                n.nspname
+            FROM
+                pg_namespace n
+            WHERE
+                n.nspname NOT LIKE 'pg_%'
+                AND n.nspname <> 'information_schema'
+                AND NOT EXISTS (
+                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
+                )
+            """
+        ).fetchall()
+        for (schema_name,) in rows:
+            schema_by_name[schema_name] = Schema(name=schema_name, table_by_name={})
 
         # Tables (and their columns, ordered by position).
         rows = conn.execute(
@@ -41,7 +60,11 @@ def build_schema(dsn: str) -> Schema:
                 JOIN pg_attribute a ON a.attrelid = c.oid
             WHERE
                 c.relkind = 'r'
-                AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                AND n.nspname NOT LIKE 'pg_%'
+                AND n.nspname <> 'information_schema'
+                AND NOT EXISTS (
+                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
+                )
                 AND a.attnum > 0
                 AND NOT a.attisdropped
             ORDER BY
@@ -50,15 +73,18 @@ def build_schema(dsn: str) -> Schema:
                 a.attnum
             """
         ).fetchall()
-        for schema, table_name, column_name, column_type in rows:
-            columns_by_table.setdefault((schema, table_name), []).append(Column(name=column_name, type=column_type))
+        for schema_name, table_name, column_name, column_type in rows:
+            columns_by_table.setdefault((schema_name, table_name), []).append(
+                Column(name=column_name, type=column_type)
+            )
 
-    table_by_key = {
-        key: Table(schema=key[0], name=key[1], columns=tuple(columns)) for key, columns in columns_by_table.items()
-    }
+    # Attach tables to their schemas. Tables and schemas share the same namespace
+    # filter, so every table's schema is present.
+    for (schema_name, table_name), columns in columns_by_table.items():
+        schema_by_name[schema_name].table_by_name[table_name] = Table(name=table_name, columns=columns)
 
-    # Build and return the schema.
-    return Schema(
+    # Build and return the database info.
+    return DbInfo(
         extension_by_name=extension_by_name,
-        table_by_key=table_by_key,
+        schema_by_name=schema_by_name,
     )

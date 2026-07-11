@@ -4,7 +4,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Extension:
     """
-    A Postgres extension.
+    A Postgres extension. Registered per-database (unique by name), installed into
+    a schema.
     """
 
     name: str
@@ -25,19 +26,28 @@ class Column:
 @dataclass(frozen=True)
 class Table:
     """
-    A Postgres table.
+    A Postgres table. Owned by the schema that holds it.
     """
 
-    schema: str
     name: str
-    columns: tuple[Column, ...]
+    columns: list[Column]
 
 
 @dataclass
 class Schema:
     """
-    Full database schema.
+    A Postgres schema (namespace) and the objects it contains.
+    """
+
+    name: str
+    table_by_name: dict[str, Table]
+
+
+@dataclass
+class DbInfo:
+    """
+    Full structure of a database: its database-level objects and its schemas.
     """
 
     extension_by_name: dict[str, Extension]
-    table_by_key: dict[tuple[str, str], Table]
+    schema_by_name: dict[str, Schema]

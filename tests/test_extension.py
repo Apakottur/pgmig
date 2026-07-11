@@ -145,12 +145,14 @@ def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    # src - install in default schema
-    _create_extension(gen_setup.src, ext_info.name)
-
-    # dst - install in a new schema
+    # Create the target schema on both sides so only the extension move is diffed.
     other_schema_name = "other"
-    gen_setup.dst.execute(sql.SQL("CREATE SCHEMA {name}").format(name=sql.Identifier(other_schema_name)))
+    create_schema = sql.SQL("CREATE SCHEMA {name}").format(name=sql.Identifier(other_schema_name))
+    gen_setup.src.execute(create_schema)
+    gen_setup.dst.execute(create_schema)
+
+    # src - install in default schema, dst - install in the new schema.
+    _create_extension(gen_setup.src, ext_info.name)
     _create_extension(gen_setup.dst, ext_info.name, schema=other_schema_name)
 
     # Verify migration.
