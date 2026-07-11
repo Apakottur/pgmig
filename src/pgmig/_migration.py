@@ -1,4 +1,4 @@
-from pgmig._models import Column, DbInfo
+from pgmig._models import Column, DbInfo, Sequence
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
@@ -297,6 +297,72 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
     return statements
 
 
+def _sequence_tail(sequence: Sequence) -> str:
+    """
+    Render the parameter tail shared by CREATE SEQUENCE.
+    """
+    tail = (
+        f"AS {sequence.data_type}"
+        f" INCREMENT BY {sequence.increment}"
+        f" MINVALUE {sequence.min_value}"
+        f" MAXVALUE {sequence.max_value}"
+        f" START WITH {sequence.start}"
+        f" CACHE {sequence.cache}"
+    )
+    if sequence.cycle:
+        tail += " CYCLE"
+    return tail
+
+
+def _generate_sequences(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+    """
+    Generate the migration SQL of standalone sequences.
+
+    Returns:
+        A 2-tuple: (creates and alters, drops). Creates run before tables (a column
+        default may reference a sequence); drops run after.
+    """
+    creates: list[str] = []
+    drops: list[str] = []
+
+    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
+        src_schema = source.schema_by_name.get(schema_name)
+        dst_schema = target.schema_by_name.get(schema_name)
+        src_sequences = src_schema.sequence_by_name if src_schema else {}
+        dst_sequences = dst_schema.sequence_by_name if dst_schema else {}
+
+        for name in sorted(src_sequences.keys() | dst_sequences.keys()):
+            # Present in target only: create it.
+            if name not in src_sequences:
+                creates.append(f'CREATE SEQUENCE "{schema_name}"."{name}" {_sequence_tail(dst_sequences[name])};')
+            # Present in source only: drop it.
+            elif name not in dst_sequences:
+                drops.append(f'DROP SEQUENCE "{schema_name}"."{name}";')
+            # Present in both: alter the parameters that differ.
+            else:
+                src_seq = src_sequences[name]
+                dst_seq = dst_sequences[name]
+                clauses: list[str] = []
+                if src_seq.data_type != dst_seq.data_type:
+                    clauses.append(f"AS {dst_seq.data_type}")
+                if src_seq.increment != dst_seq.increment:
+                    clauses.append(f"INCREMENT BY {dst_seq.increment}")
+                if src_seq.min_value != dst_seq.min_value:
+                    clauses.append(f"MINVALUE {dst_seq.min_value}")
+                if src_seq.max_value != dst_seq.max_value:
+                    clauses.append(f"MAXVALUE {dst_seq.max_value}")
+                if src_seq.start != dst_seq.start:
+                    clauses.append(f"START WITH {dst_seq.start}")
+                if src_seq.cache != dst_seq.cache:
+                    clauses.append(f"CACHE {dst_seq.cache}")
+                if src_seq.cycle != dst_seq.cycle:
+                    clauses.append("CYCLE" if dst_seq.cycle else "NO CYCLE")
+                if clauses:
+                    creates.append(f'ALTER SEQUENCE "{schema_name}"."{name}" {" ".join(clauses)};')
+
+    return creates, drops
+
+
 def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     """
     Get the migration SQL between the given source and target databases.
@@ -306,6 +372,7 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     # Generate all statements.
     schema_creates, schema_drops = _generate_schemas(source=source, target=target)
     extension_statements = _generate_extensions(source=source, target=target)
+    sequence_creates, sequence_drops = _generate_sequences(source=source, target=target)
     table_statements = _generate_tables(source=source, target=target)
     index_statements = _generate_indexes(source=source, target=target)
     constraint_statements = _generate_constraints(source=source, target=target)
@@ -313,9 +380,11 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     # Add statements in the correct order.
     statements.extend(schema_creates)
     statements.extend(extension_statements)
+    statements.extend(sequence_creates)
     statements.extend(table_statements)
     statements.extend(index_statements)
     statements.extend(constraint_statements)
+    statements.extend(sequence_drops)
     statements.extend(schema_drops)
 
     # Join all statements into a single string.
