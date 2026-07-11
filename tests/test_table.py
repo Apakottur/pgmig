@@ -39,7 +39,7 @@ def test_table_column_ordered_by_name(gen_setup: GenerateSetup) -> None:
     """
     Table columns should be ordered by name.
     """
-    # Create the table on both sides.
+    # Create the table with columns not ordered by name.
     gen_setup.dst.execute("CREATE TABLE person (name text, age integer)")
 
     # Verify the migration SQL orders the columns by name.

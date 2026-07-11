@@ -1,14 +1,12 @@
-from psycopg import sql
-
-from pgmig._models import DbInfo, Table
+from pgmig._models import DbInfo
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
     """
     Generate the migration SQL of schemas.
 
-    Returns (creates, drops) separately so the caller can order creates before,
-    and drops after, the objects that live inside the schemas.
+    Returns:
+        A 2-tuple of schema lists: (creates, drops).
     """
     creates: list[str] = []
     drops: list[str] = []
@@ -16,10 +14,10 @@ def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], lis
     for name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
         # Present in target only: create it.
         if name not in source.schema_by_name:
-            creates.append(sql.SQL("CREATE SCHEMA {name};").format(name=sql.Identifier(name)).as_string())
+            creates.append(f'CREATE SCHEMA "{name}";')
         # Present in source only: drop it.
         elif name not in target.schema_by_name:
-            drops.append(sql.SQL("DROP SCHEMA {name};").format(name=sql.Identifier(name)).as_string())
+            drops.append(f'DROP SCHEMA "{name}";')
 
     return creates, drops
 
@@ -35,64 +33,22 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[str]:
         if name not in source.extension_by_name:
             dst_ext = target.extension_by_name[name]
             statements.append(
-                sql.SQL("CREATE EXTENSION {name} VERSION {version} SCHEMA {schema};")
-                .format(
-                    name=sql.Identifier(dst_ext.name),
-                    version=sql.Literal(dst_ext.version),
-                    schema=sql.Identifier(dst_ext.schema),
-                )
-                .as_string()
+                f'CREATE EXTENSION "{dst_ext.name}" VERSION \'{dst_ext.version}\' SCHEMA "{dst_ext.schema}";'
             )
         # Present in source only: drop it.
         elif name not in target.extension_by_name:
             src_ext = source.extension_by_name[name]
-            statements.append(sql.SQL("DROP EXTENSION {name};").format(name=sql.Identifier(src_ext.name)).as_string())
+            statements.append(f'DROP EXTENSION "{src_ext.name}";')
 
         # Present in both: alter version and/or schema if they differ.
         else:
             src_ext = source.extension_by_name[name]
             dst_ext = target.extension_by_name[name]
             if src_ext.version != dst_ext.version:
-                statements.append(
-                    sql.SQL("ALTER EXTENSION {name} UPDATE TO {version};")
-                    .format(
-                        name=sql.Identifier(dst_ext.name),
-                        version=sql.Literal(dst_ext.version),
-                    )
-                    .as_string()
-                )
+                statements.append(f"ALTER EXTENSION \"{dst_ext.name}\" UPDATE TO '{dst_ext.version}';")
             if src_ext.schema != dst_ext.schema:
-                statements.append(
-                    sql.SQL("ALTER EXTENSION {name} SET SCHEMA {schema};")
-                    .format(
-                        name=sql.Identifier(dst_ext.name),
-                        schema=sql.Identifier(dst_ext.schema),
-                    )
-                    .as_string()
-                )
+                statements.append(f'ALTER EXTENSION "{dst_ext.name}" SET SCHEMA "{dst_ext.schema}";')
     return statements
-
-
-def _create_table_sql(*, schema_name: str, table: Table) -> str:
-    """
-    Generate the CREATE TABLE SQL for a single table.
-    """
-    columns = sql.SQL(", ").join(
-        sql.SQL("{name} {type}").format(
-            name=sql.Identifier(column.name),
-            # The type is canonical SQL produced by format_type, safe to inline.
-            type=sql.SQL(column.type),  # ty: ignore[invalid-argument-type]
-        )
-        for column in table.columns
-    )
-    return (
-        sql.SQL("CREATE TABLE {name} ({columns});")
-        .format(
-            name=sql.Identifier(schema_name, table.name),
-            columns=columns,
-        )
-        .as_string()
-    )
 
 
 def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
@@ -110,12 +66,13 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             # Present in target only: create it.
             if table_name not in src_tables:
-                statements.append(_create_table_sql(schema_name=schema_name, table=dst_tables[table_name]))
+                columns = ", ".join(f'"{column.name}" {column.type}' for column in dst_tables[table_name].columns)
+                create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
+                statements.append(create_table_sql)
             # Present in source only: drop it.
             elif table_name not in dst_tables:
-                statements.append(
-                    sql.SQL("DROP TABLE {name};").format(name=sql.Identifier(schema_name, table_name)).as_string()
-                )
+                drop_table_sql = f'DROP TABLE "{schema_name}"."{table_name}";'
+                statements.append(drop_table_sql)
 
     return statements
 
@@ -126,13 +83,16 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     """
     statements: list[str] = []
 
-    # Schemas must be created before the objects inside them, and dropped after.
+    # Generate all statements.
     schema_creates, schema_drops = _generate_schemas(source=source, target=target)
+    extension_statements = _generate_extensions(source=source, target=target)
+    table_statements = _generate_tables(source=source, target=target)
 
+    # Add statements in the correct order.
     statements.extend(schema_creates)
-    statements.extend(_generate_extensions(source=source, target=target))
-    statements.extend(_generate_tables(source=source, target=target))
+    statements.extend(extension_statements)
+    statements.extend(table_statements)
     statements.extend(schema_drops)
 
-    # All statements.
+    # Join all statements into a single string.
     return "\n".join(statements)

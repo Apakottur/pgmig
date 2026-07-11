@@ -34,8 +34,7 @@ class Schema:
 @dataclass(frozen=True)
 class Extension:
     """
-    A Postgres extension. Registered per-database (unique by name), installed into
-    a schema.
+    A Postgres extension. Registered per-database (unique by name), installed into a schema.
     """
 
     name: str
@@ -46,7 +45,7 @@ class Extension:
 @dataclass
 class DbInfo:
     """
-    Full structure of a database: its database-level objects and its schemas.
+    Full structure of a database.
     """
 
     schema_by_name: dict[str, Schema]
