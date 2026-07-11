@@ -25,16 +25,16 @@ class DbConnection:
         with psycopg.connect(_ADMIN_DSN, autocommit=True) as conn:
             # Disconnect all DB connections.
             conn.execute(
-                sql.SQL("SELECT pg_terminate_backend(pid) FROM pg_stat_activity where datname='{0}'").format(
-                    self.db_name
+                sql.SQL("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = {0}").format(
+                    sql.Literal(self.db_name)
                 )
             )
 
             # Drop the database, if exists.
-            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {0}").format(self.db_name))
+            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {0}").format(sql.Identifier(self.db_name)))
 
             # Create the database.
-            conn.execute(sql.SQL("CREATE DATABASE {0}").format(self.db_name))
+            conn.execute(sql.SQL("CREATE DATABASE {0}").format(sql.Identifier(self.db_name)))
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
@@ -47,23 +47,6 @@ class DbConnection:
         """
         result = self.execute("SELECT 1")
         assert result == [(1,)]
-
-    def reset(self) -> None:
-        """
-        Reset the database to initial state.
-        """
-        with psycopg.connect(self.dsn, autocommit=True) as conn:
-            # Get all schemas.
-            schemas = conn.execute(
-                "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'"
-            ).fetchall()
-
-            # Drop all schemas.
-            for (schema_name,) in schemas:
-                conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {0}").format(schema_name))
-
-            # Create the public schema.
-            conn.execute("CREATE SCHEMA public")
 
     def execute(self, query: LiteralString) -> list[tuple[Any, ...]]:
         """

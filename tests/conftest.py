@@ -31,28 +31,14 @@ def _postgres_server() -> Iterator[str]:
         shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _databases(_postgres_server: str) -> tuple[DbConnection, DbConnection]:
-    """
-    Session level database configuration.
-    """
-    # Create the source and target databases (once per session).
-    src_conn = DbConnection(_SRC_DB)
-    dst_conn = DbConnection(_DST_DB)
-    return src_conn, dst_conn
-
-
 @pytest.fixture(scope="function")
-def gen_setup(_databases: tuple[DbConnection, DbConnection]) -> GenerateSetup:
+def gen_setup(_postgres_server: str) -> GenerateSetup:
     """
     Main fixture for testing `generate`.
     """
-    # Get the source and target database DSNs.
-    src_conn, dst_conn = _databases
-
-    # Clear between tests: wipe both databases' schemas before each test.
-    src_conn.reset()
-    dst_conn.reset()
+    # Create the source and target databases.
+    src_conn = DbConnection(_SRC_DB)
+    dst_conn = DbConnection(_DST_DB)
 
     # Provide the utility class for the test
     return GenerateSetup(src_conn, dst_conn)
