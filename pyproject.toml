@@ -38,6 +38,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
+dependencies = ["psycopg[binary]>=3.3.4"]
 
 [project.urls]
 homepage = "https://github.com/Apakottur/pgmig"
@@ -49,3 +50,7 @@ source = "vcs"
 
 [tool.uv]
 package = true
+
+[tool.vulture]
+ignore_decorators = ["@pytest.fixture"]
+ignore_names = ["test_*"]

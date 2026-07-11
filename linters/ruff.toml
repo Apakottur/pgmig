@@ -129,3 +129,7 @@ ban-relative-imports = "all"
 "scripts/*" = [
   "T201", # `print` found
 ]
+"tests/conftest.py" = [
+  "S603", # subprocess call: check for execution of untrusted input
+  "S607", # starting a process with a partial executable path
+]
