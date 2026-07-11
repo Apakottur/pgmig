@@ -18,12 +18,12 @@ dev = [
 [project]
 name = "pgmig"
 dynamic = ["version"]
-description = "Run shell commands in Python"
+description = "Generate migrations between Postgres databases"
 authors = [{name = "Yossi Rozantsev"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
-keywords = ["shell", "bash", "terminal", "script"]
+keywords = ["postgres", "postgresql", "migrations", "database", "schema"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
