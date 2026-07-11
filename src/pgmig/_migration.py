@@ -136,10 +136,8 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                 create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
                 statements.append(create_table_sql)
 
-                # A newly created table has no source columns.
+                # Default table attributes.
                 src_columns = {}
-
-                # Default table attributes are
                 src_comment = None
 
             # Sync column comments (a separate statement; cannot be inline).
