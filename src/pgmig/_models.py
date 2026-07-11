@@ -12,6 +12,27 @@ class Extension:
     schema: str
 
 
+@dataclass(frozen=True)
+class Column:
+    """
+    A table column.
+    """
+
+    name: str
+    type: str
+
+
+@dataclass(frozen=True)
+class Table:
+    """
+    A Postgres table.
+    """
+
+    schema: str
+    name: str
+    columns: tuple[Column, ...]
+
+
 @dataclass
 class Schema:
     """
@@ -19,3 +40,4 @@ class Schema:
     """
 
     extension_by_name: dict[str, Extension]
+    table_by_key: dict[tuple[str, str], Table]

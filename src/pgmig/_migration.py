@@ -52,6 +52,42 @@ def _generate_extensions(*, source: Schema, target: Schema) -> list[str]:
     return statements
 
 
+def _generate_tables(*, source: Schema, target: Schema) -> list[str]:
+    """
+    Generate the migration SQL of tables.
+    """
+    statements: list[str] = []
+
+    for key in sorted(source.table_by_key.keys() | target.table_by_key.keys()):
+        # Present in target only: create it.
+        if key not in source.table_by_key:
+            dst_table = target.table_by_key[key]
+            columns = sql.SQL(", ").join(
+                sql.SQL("{name} {type}").format(
+                    name=sql.Identifier(column.name),
+                    # The type is canonical SQL produced by format_type, safe to inline.
+                    type=sql.SQL(column.type),  # ty: ignore[invalid-argument-type]
+                )
+                for column in dst_table.columns
+            )
+            statements.append(
+                sql.SQL("CREATE TABLE {name} ({columns});")
+                .format(
+                    name=sql.Identifier(dst_table.schema, dst_table.name),
+                    columns=columns,
+                )
+                .as_string()
+            )
+        # Present in source only: drop it.
+        elif key not in target.table_by_key:
+            src_table = source.table_by_key[key]
+            statements.append(
+                sql.SQL("DROP TABLE {name};").format(name=sql.Identifier(src_table.schema, src_table.name)).as_string()
+            )
+
+    return statements
+
+
 def generate_schema_migration_sql(*, source: Schema, target: Schema) -> str:
     """
     Get the migration SQL between the given source and target schemas.
@@ -61,6 +97,10 @@ def generate_schema_migration_sql(*, source: Schema, target: Schema) -> str:
     # Extensions.
     extensions_statements = _generate_extensions(source=source, target=target)
     statements.extend(extensions_statements)
+
+    # Tables.
+    tables_statements = _generate_tables(source=source, target=target)
+    statements.extend(tables_statements)
 
     # All statements.
     return "\n".join(statements)
