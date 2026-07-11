@@ -1,44 +1,40 @@
 from dataclasses import dataclass
 
 import psycopg
-from psycopg import Connection
-from psycopg.rows import TupleRow
 
 
-@dataclass(frozen=True)
+@dataclass
 class Schema:
-    """A Postgres database schema. Object collections are added in later specs."""
+    """
+    Database schema.
+    """
 
 
-class Change:
-    """A single schema change. Concrete variants are added in later specs."""
+def _get_db_schema(dsn: str) -> Schema:
+    # Start with an empty schema.
+    s = Schema()
+
+    # Get the schema from the database.
+    with psycopg.connect(dsn) as conn:
+        conn.execute("SELECT 1")
+
+    # Return the schema.
+    return s
 
 
-def _introspect(conn: Connection[TupleRow]) -> Schema:
-    # Placeholder: real pg_catalog queries are added in later specs.
-    # Run a trivial query so the connection is genuinely exercised.
-    conn.execute("SELECT 1")
-    return Schema()
-
-
-def _diff(source: Schema, target: Schema) -> list[Change]:
-    # No object types are compared yet; later specs populate this.
-    _ = (source, target)
-    return []
-
-
-def _render(changes: list[Change]) -> str:
-    # No Change variants are rendered yet; later specs emit real SQL.
-    _ = changes
-    return ""
+def _get_migration_sql(*, source: Schema, target: Schema) -> str:
+    if source == target:
+        return ""
+    else:
+        raise NotImplementedError
 
 
 def generate(*, source: str, target: str) -> str:
-    with (
-        psycopg.connect(source) as source_conn,
-        psycopg.connect(target) as target_conn,
-    ):
-        source_schema = _introspect(source_conn)
-        target_schema = _introspect(target_conn)
-    changes = _diff(source_schema, target_schema)
-    return _render(changes)
+    # Get source schema.
+    source_schema = _get_db_schema(source)
+
+    # Get target schema.
+    target_schema = _get_db_schema(target)
+
+    # Get the migration SQL.
+    return _get_migration_sql(source=source_schema, target=target_schema)
