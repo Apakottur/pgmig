@@ -5,6 +5,7 @@ from pathlib import Path
 import psycopg
 import pytest
 import shpyx
+import tenacity
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
@@ -12,10 +13,24 @@ _COMPOSE_FILE = Path(__file__).parent / "docker-compose.yml"
 _ADMIN_DSN = "postgresql://pgmig:pgmig@localhost:55432/pgmig"
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_exception_type(psycopg.OperationalError),
+    wait=tenacity.wait_fixed(0.5),
+    stop=tenacity.stop_after_delay(60),
+    reraise=True,
+)
+def _wait_until_ready(dsn: str) -> None:
+    # Poll until the server accepts connections and answers a query. We do not
+    # rely on `docker compose --wait` or a container healthcheck for readiness.
+    with psycopg.connect(dsn) as conn:
+        conn.execute("SELECT 1")
+
+
 @pytest.fixture(scope="session")
 def postgres_server() -> Iterator[str]:
-    shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d", "--wait"])
+    shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d"])
     try:
+        _wait_until_ready(_ADMIN_DSN)
         yield _ADMIN_DSN
     finally:
         shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "down", "-v"])

@@ -32,8 +32,8 @@ conftest
 healthcheck
 conninfo
 autocommit
-isready
 dsn
 dsns
 uuid
 fetchone
+tenacity
