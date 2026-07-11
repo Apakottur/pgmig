@@ -16,8 +16,9 @@ pip install pgmig
 
 ## Usage
 
-`generate` takes two connection strings and returns a string of SQL that, when
-applied to `source`, makes its schema match `target`:
+### Schema migration
+
+Get the SQL that, when applied to `source`, makes its schema match `target`:
 
 ```python
 import pgmig
@@ -30,7 +31,7 @@ sql = pgmig.generate(
 print(sql)  # the migration SQL — run it yourself against `source`
 ```
 
-`source` and `target` are keyword-only. When the two schemas already match,
+When the two schemas already match,
 `generate` returns an empty string. `pgmig` opens read-only connections to both
 databases and never runs the generated SQL for you.
 
