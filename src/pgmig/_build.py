@@ -75,7 +75,12 @@ def build_db_info(dsn: str) -> DbInfo:
                     index_by_name={},
                 )
             schema_by_name[schema_name].table_by_name[table_name].columns.append(
-                Column(name=column_name, type=column_type, not_null=column_not_null, default=column_default)
+                Column(
+                    name=column_name,
+                    type=column_type,
+                    not_null=column_not_null,
+                    default=column_default,
+                )
             )
 
         # Indexes (standalone only; constraint-backed indexes are excluded).
