@@ -89,6 +89,18 @@ class Sequence:
     cycle: bool
 
 
+@dataclass(frozen=True)
+class Function:
+    """
+    A Postgres function or procedure. Identified by name and argument types (overloadable).
+    """
+
+    name: str
+    identity_arguments: str  # pg_get_function_identity_arguments, e.g. "a integer" (the DROP signature)
+    definition: str  # pg_get_functiondef output: a full CREATE OR REPLACE ...
+    return_type: str | None  # format_type(prorettype); None for procedures
+
+
 @dataclass
 class Schema:
     """
@@ -98,6 +110,7 @@ class Schema:
     name: str
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
+    function_by_signature: dict[str, Function]
 
 
 @dataclass(frozen=True)

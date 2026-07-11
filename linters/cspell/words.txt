@@ -89,3 +89,10 @@ minvalue
 maxvalue
 worktree
 worktrees
+functiondef
+prokind
+proname
+pronamespace
+prorettype
+rettype
+overloadable
