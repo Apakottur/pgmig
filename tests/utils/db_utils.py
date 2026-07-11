@@ -3,12 +3,24 @@ import re
 from typing import Any
 
 import psycopg
+import shpyx
 import tenacity
 from psycopg import sql
 from typing_extensions import LiteralString
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:55432"
 _ADMIN_DB_NAME = "postgres"
+
+
+def _get_unique_db_key_from_git_branch() -> str:
+    """
+    Get a unique identifier for DB naming, based on the current git branch.
+    """
+    result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
+    branch = result.stdout.strip()
+    if result.return_code == 0 and branch and branch != "HEAD":
+        return branch
+    raise ValueError("Could not determine worktree key")
 
 
 # Postgres truncates identifiers past this length, which would silently collapse
@@ -35,6 +47,11 @@ def get_unique_db_name(base: str, key: str) -> str:
     slug_len = _MAX_IDENTIFIER_LEN - len(base) - len(digest) - 2
     slug_trunc = slug[:slug_len].rstrip("_")
     return f"{base}_{slug_trunc}_{digest}"
+
+
+_KEY = _get_unique_db_key_from_git_branch()
+SRC_DB = get_unique_db_name("pgmig_src", _KEY)
+DST_DB = get_unique_db_name("pgmig_dst", _KEY)
 
 
 class DbConnection:

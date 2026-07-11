@@ -5,30 +5,9 @@ import pytest
 import shpyx
 
 from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import DbConnection, get_unique_db_name
+from tests.utils.db_utils import DST_DB, SRC_DB, DbConnection
 
-_REPO_ROOT = Path(__file__).parent.parent
-_COMPOSE_FILE_DIR = _REPO_ROOT / "tests"
-
-
-def _worktree_key() -> str:
-    """
-    A stable key identifying the current worktree, used to derive per-branch
-    database names so that parallel worktrees do not collide on a shared server.
-
-    Uses the current git branch name, falling back to the worktree directory
-    name when on a detached HEAD or when git is unavailable.
-    """
-    result = shpyx.run("git rev-parse --abbrev-ref HEAD", exec_dir=_REPO_ROOT, verify_return_code=False)
-    branch = result.stdout.strip()
-    if result.return_code == 0 and branch and branch != "HEAD":
-        return branch
-    return _REPO_ROOT.name
-
-
-_KEY = _worktree_key()
-_SRC_DB = get_unique_db_name("pgmig_src", _KEY)
-_DST_DB = get_unique_db_name("pgmig_dst", _KEY)
+_COMPOSE_FILE_DIR = Path(__file__).parent
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -72,8 +51,8 @@ def gen_setup(_admin_conn: DbConnection) -> Iterator[GenerateSetup]:
     Main fixture for testing `generate`.
     """
     # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(_SRC_DB, admin_conn=_admin_conn)
-    dst_conn = DbConnection(_DST_DB, admin_conn=_admin_conn)
+    src_conn = DbConnection(SRC_DB, admin_conn=_admin_conn)
+    dst_conn = DbConnection(DST_DB, admin_conn=_admin_conn)
 
     # Provide the utility class for the test.
     try:
