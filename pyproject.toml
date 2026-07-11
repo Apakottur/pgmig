@@ -12,7 +12,7 @@ dev = [
   "pytest==9.1.1",
   "ruff==0.15.21",
   "shpyx==0.0.37",
-  "tenacity>=9.1.4",
+  "tenacity==9.1.4",
   "ty==0.0.58",
 ]
 
@@ -39,7 +39,10 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
-dependencies = ["psycopg[binary]>=3.3.4"]
+dependencies = [
+  #
+  "psycopg[binary]==3.3.4",
+]
 
 [project.urls]
 homepage = "https://github.com/Apakottur/pgmig"
@@ -54,4 +57,6 @@ package = true
 
 [tool.vulture]
 ignore_decorators = ["@pytest.fixture"]
-ignore_names = ["test_*"]
+# `run` is the test-database helper used by upcoming end-to-end tests; keep it
+# even though no test exercises it yet.
+ignore_names = ["test_*", "run"]

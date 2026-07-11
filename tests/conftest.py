@@ -1,4 +1,3 @@
-import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -9,8 +8,12 @@ import tenacity
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
+from tests.harness import Db, GenerateSetup
+
 _COMPOSE_FILE = Path(__file__).parent / "docker-compose.yml"
 _ADMIN_DSN = "postgresql://pgmig:pgmig@localhost:55432/pgmig"
+_SRC_DB = "pgmig_src"
+_DST_DB = "pgmig_dst"
 
 
 @tenacity.retry(
@@ -26,8 +29,26 @@ def _wait_until_ready(dsn: str) -> None:
         conn.execute("SELECT 1")
 
 
+def _recreate_database(admin_dsn: str, name: str) -> None:
+    with psycopg.connect(admin_dsn, autocommit=True) as conn:
+        conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+
+
+def _clear(dsn: str) -> None:
+    # Drop every non-system schema (and whatever it contains) and recreate an
+    # empty `public`, so each test starts from a blank schema.
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        schemas = conn.execute(
+            "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'"
+        ).fetchall()
+        for (name,) in schemas:
+            conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(name)))
+        conn.execute("CREATE SCHEMA public")
+
+
 @pytest.fixture(scope="session")
-def postgres_server() -> Iterator[str]:
+def _postgres_server() -> Iterator[str]:
     shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d"])
     try:
         _wait_until_ready(_ADMIN_DSN)
@@ -36,20 +57,21 @@ def postgres_server() -> Iterator[str]:
         shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "down", "-v"])
 
 
+@pytest.fixture(scope="session")
+def _databases(_postgres_server: str) -> tuple[str, str]:
+    # Reset all: create the source and target databases fresh at session start.
+    _recreate_database(_postgres_server, _SRC_DB)
+    _recreate_database(_postgres_server, _DST_DB)
+    return (
+        make_conninfo(_postgres_server, dbname=_SRC_DB),
+        make_conninfo(_postgres_server, dbname=_DST_DB),
+    )
+
+
 @pytest.fixture
-def db_pair(postgres_server: str) -> Iterator[tuple[str, str]]:
-    admin_dsn = postgres_server
-    suffix = uuid.uuid4().hex
-    src_name = f"pgmig_src_{suffix}"
-    tgt_name = f"pgmig_tgt_{suffix}"
-    with psycopg.connect(admin_dsn, autocommit=True) as conn:
-        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(src_name)))
-        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(tgt_name)))
-    src_dsn = make_conninfo(admin_dsn, dbname=src_name)
-    tgt_dsn = make_conninfo(admin_dsn, dbname=tgt_name)
-    try:
-        yield src_dsn, tgt_dsn
-    finally:
-        with psycopg.connect(admin_dsn, autocommit=True) as conn:
-            conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(src_name)))
-            conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(tgt_name)))
+def gen_setup(_databases: tuple[str, str]) -> GenerateSetup:
+    # Clear between tests: wipe both databases' schemas before each test.
+    src_dsn, dst_dsn = _databases
+    _clear(src_dsn)
+    _clear(dst_dsn)
+    return GenerateSetup(db_src=Db(src_dsn), db_dst=Db(dst_dsn))

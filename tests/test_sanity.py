@@ -1,6 +1,7 @@
 from pgmig import generate
+from tests.harness import GenerateSetup
 
 
-def test_identical_empty_schemas_generate_no_sql(db_pair: tuple[str, str]) -> None:
-    src_dsn, tgt_dsn = db_pair
-    assert generate(source=src_dsn, target=tgt_dsn) == ""
+def test_identical_empty_schemas_generate_no_sql(gen_setup: GenerateSetup) -> None:
+    result = generate(source=gen_setup.db_src.dsn, target=gen_setup.db_dst.dsn)
+    assert result == ""
