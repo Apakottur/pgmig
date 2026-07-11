@@ -36,7 +36,7 @@ class Constraint:
     name: str
     # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
     definition: str
-    contype: str  # pg_constraint.contype: 'p', 'u', 'c', or 'f'
+    contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
 
     @property
