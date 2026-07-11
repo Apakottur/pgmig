@@ -42,12 +42,14 @@ def _get_installable_extension(conn: DbConnection) -> _ExtensionInfo:
     fresh database) and can be moved with ALTER EXTENSION ... SET SCHEMA.
     """
     rows = conn.execute(
-        "SELECT ae.name, ae.default_version "
-        "FROM pg_available_extensions ae "
-        "JOIN pg_available_extension_versions av "
-        "ON av.name = ae.name AND av.version = ae.default_version "
-        "WHERE av.relocatable "
-        "ORDER BY ae.name"
+        """
+        SELECT ae.name, ae.default_version
+        FROM pg_available_extensions ae
+        JOIN pg_available_extension_versions av
+        ON av.name = ae.name AND av.version = ae.default_version
+        WHERE av.relocatable
+        ORDER BY ae.name
+        """
     )
     assert rows, "no relocatable extension available"
     name, default_version = rows[0]
