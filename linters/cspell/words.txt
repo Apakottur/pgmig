@@ -77,3 +77,13 @@ constraintdef
 contype
 ordinality
 pkey
+seqcache
+seqcycle
+seqincrement
+seqmax
+seqmin
+seqrelid
+seqstart
+seqtypid
+minvalue
+maxvalue

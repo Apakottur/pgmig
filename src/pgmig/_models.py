@@ -64,6 +64,22 @@ class Table:
         }
 
 
+@dataclass(frozen=True)
+class Sequence:
+    """
+    A standalone Postgres sequence (not owned by a serial/identity column).
+    """
+
+    name: str
+    data_type: str
+    start: int
+    increment: int
+    min_value: int
+    max_value: int
+    cache: int
+    cycle: bool
+
+
 @dataclass
 class Schema:
     """
@@ -72,6 +88,7 @@ class Schema:
 
     name: str
     table_by_name: dict[str, Table]
+    sequence_by_name: dict[str, Sequence]
 
 
 @dataclass(frozen=True)

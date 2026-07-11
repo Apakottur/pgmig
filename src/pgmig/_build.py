@@ -1,6 +1,6 @@
 import psycopg
 
-from pgmig._models import Column, Constraint, DbInfo, Extension, Index, Schema, Table
+from pgmig._models import Column, Constraint, DbInfo, Extension, Index, Schema, Sequence, Table
 
 
 def build_db_info(dsn: str) -> DbInfo:
@@ -33,7 +33,7 @@ def build_db_info(dsn: str) -> DbInfo:
             """
         ).fetchall()
         for (schema_name,) in rows:
-            schema_by_name[schema_name] = Schema(name=schema_name, table_by_name={})
+            schema_by_name[schema_name] = Schema(name=schema_name, table_by_name={}, sequence_by_name={})
 
         # Tables (and their columns, ordered by name).
         rows = conn.execute(
@@ -184,6 +184,58 @@ def build_db_info(dsn: str) -> DbInfo:
                 definition=con_def,
                 is_primary_key=con_is_pk,
                 columns=con_columns or [],
+            )
+
+        # Sequences (standalone only; sequences owned by a serial/identity column are excluded).
+        rows = conn.execute(
+            """
+            SELECT
+                n.nspname,
+                c.relname,
+                format_type(s.seqtypid, NULL),
+                s.seqstart,
+                s.seqincrement,
+                s.seqmin,
+                s.seqmax,
+                s.seqcache,
+                s.seqcycle
+            FROM
+                pg_sequence s
+                JOIN pg_class c ON c.oid = s.seqrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE
+                n.nspname NOT LIKE 'pg_%'
+                AND n.nspname <> 'information_schema'
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.objid = n.oid
+                        AND d.deptype = 'e')
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.classid = 'pg_class'::regclass
+                        AND d.objid = c.oid
+                        AND d.refclassid = 'pg_class'::regclass
+                        AND d.deptype IN ('a', 'i'))
+            """
+        ).fetchall()
+        for schema_name, seq_name, seq_type, seq_start, seq_inc, seq_min, seq_max, seq_cache, seq_cycle in rows:
+            schema_by_name[schema_name].sequence_by_name[seq_name] = Sequence(
+                name=seq_name,
+                data_type=seq_type,
+                start=seq_start,
+                increment=seq_inc,
+                min_value=seq_min,
+                max_value=seq_max,
+                cache=seq_cache,
+                cycle=seq_cycle,
             )
 
         # Extensions (database-level).
