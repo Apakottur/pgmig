@@ -40,3 +40,4 @@ tenacity
 nspname
 autouse
 datname
+pyupgrade

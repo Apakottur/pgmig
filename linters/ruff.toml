@@ -5,8 +5,11 @@
 # Maximum line length.
 line-length = 120
 
-# Python version.
-target-version = "py314"
+# Python version. Use the minimum supported version (see requires-python) so
+# pyupgrade-style rules keep the code runnable on all supported versions
+# (e.g. they must not rewrite `typing_extensions` imports to `typing` for
+# symbols that only exist there on newer Pythons).
+target-version = "py310"
 
 # Enable autofixing.
 fix = true

@@ -487,6 +487,7 @@ dev = [
     { name = "shpyx" },
     { name = "tenacity" },
     { name = "ty" },
+    { name = "typing-extensions" },
 ]
 
 [package.metadata]
@@ -504,6 +505,7 @@ dev = [
     { name = "shpyx", specifier = "==0.0.37" },
     { name = "tenacity", specifier = "==9.1.4" },
     { name = "ty", specifier = "==0.0.58" },
+    { name = "typing-extensions", specifier = ">=4.16.0" },
 ]
 
 [[package]]

@@ -1,8 +1,9 @@
-from typing import Any, LiteralString
+from typing import Any
 
 import psycopg
 import tenacity
 from psycopg import sql
+from typing_extensions import LiteralString
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:55432"
 _ADMIN_DB_NAME = "postgres"
