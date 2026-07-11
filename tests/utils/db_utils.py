@@ -11,8 +11,11 @@ _ADMIN_DB_NAME = "postgres"
 
 class DbConnection:
     def __init__(self, db_name: str, admin_conn: "DbConnection | None" = None) -> None:
-        self.db_name = db_name
+        # Database name and DSN.
+        self._db_name = db_name
         self.dsn = f"{_DSN_PREFIX}/{db_name}"
+
+        # Admin connection.
         self._admin_conn = admin_conn
 
         # Recreate the database (if not admin DB).
@@ -20,21 +23,23 @@ class DbConnection:
             self._recreate_database()
 
         # Open a single connection, reused for every query on this database.
-        # The retry doubles as the readiness gate after (re)creating the database.
         self._conn = self._connect()
 
     def _recreate_database(self) -> None:
-        assert self._admin_conn is not None, "a non-admin DbConnection requires an admin_conn to (re)create itself"
+        """
+        Recreate the database.
+        """
+        assert self._admin_conn is not None
 
         # Drop the database, if exists. WITH (FORCE) atomically terminates any
         # lingering backends and drops the database, avoiding the race between a
         # separate pg_terminate_backend call and the drop.
         self._admin_conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self.db_name))
+            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self._db_name))
         )
 
         # Create the database.
-        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
+        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self._db_name)))
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
@@ -47,6 +52,12 @@ class DbConnection:
         """
         return psycopg.connect(self.dsn, autocommit=True)
 
+    def close(self) -> None:
+        """
+        Close the connection.
+        """
+        self._conn.close()
+
     def execute(self, query: LiteralString | sql.Composed) -> list[tuple[Any, ...]]:
         """
         Execute a SQL statement against this database on the reused connection.
@@ -58,6 +69,3 @@ class DbConnection:
             return []
         else:
             return result.fetchall()
-
-    def close(self) -> None:
-        self._conn.close()

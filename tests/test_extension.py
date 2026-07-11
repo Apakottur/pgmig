@@ -1,7 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-import psycopg
 from psycopg import sql
 
 from tests.fixtures.generate_setup import GenerateSetup
@@ -24,8 +23,7 @@ def _create_extension(
     if schema is not None:
         stmt += sql.SQL(" SCHEMA {schema}").format(schema=sql.Identifier(schema))
 
-    with psycopg.connect(conn.dsn, autocommit=True) as pg_conn:
-        pg_conn.execute(stmt)
+    conn.execute(stmt)
 
 
 @dataclass(frozen=True)
