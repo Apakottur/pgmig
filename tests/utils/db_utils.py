@@ -26,16 +26,16 @@ class DbConnection:
         with psycopg.connect(_ADMIN_DSN, autocommit=True) as conn:
             # Disconnect all DB connections.
             conn.execute(
-                sql.SQL("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = {0}").format(
-                    sql.Literal(self.db_name)
+                sql.SQL("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = {db_name}").format(
+                    db_name=sql.Literal(self.db_name)
                 )
             )
 
             # Drop the database, if exists.
-            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {0}").format(sql.Identifier(self.db_name)))
+            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {db_name}").format(db_name=sql.Identifier(self.db_name)))
 
             # Create the database.
-            conn.execute(sql.SQL("CREATE DATABASE {0}").format(sql.Identifier(self.db_name)))
+            conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
@@ -49,7 +49,7 @@ class DbConnection:
         result = self.execute("SELECT 1")
         assert result == [(1,)]
 
-    def execute(self, query: LiteralString) -> list[tuple[Any, ...]]:
+    def execute(self, query: LiteralString | sql.Composed) -> list[tuple[Any, ...]]:
         """
         Execute a SQL statement against this database.
         """
@@ -57,5 +57,8 @@ class DbConnection:
             # Execute the query.
             result = conn.execute(query)
 
-            # Fetch the results.
-            return result.fetchall()
+            # Fetch query results.
+            if result.description is None:
+                return []
+            else:
+                return result.fetchall()

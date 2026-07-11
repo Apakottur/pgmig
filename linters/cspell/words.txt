@@ -41,3 +41,9 @@ nspname
 autouse
 datname
 pyupgrade
+extname
+extversion
+extnamespace
+plpgsql
+trgm
+hstore
