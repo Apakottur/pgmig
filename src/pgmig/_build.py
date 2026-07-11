@@ -207,8 +207,13 @@ def build_db_info(dsn: str) -> DbInfo:
                 n.nspname NOT LIKE 'pg_%'
                 AND n.nspname <> 'information_schema'
                 AND NOT EXISTS (
-                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
-                )
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.objid = n.oid
+                        AND d.deptype = 'e')
                 AND NOT EXISTS (
                     SELECT
                         1
