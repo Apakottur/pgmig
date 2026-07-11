@@ -5,12 +5,30 @@ import pytest
 import shpyx
 
 from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import DbConnection
+from tests.utils.db_utils import DbConnection, make_db_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
+_REPO_ROOT = _COMPOSE_FILE_DIR.parent
 
-_SRC_DB = "pgmig_src"
-_DST_DB = "pgmig_dst"
+
+def _worktree_key() -> str:
+    """
+    A stable key identifying the current worktree, used to derive per-branch
+    database names so that parallel worktrees do not collide on a shared server.
+
+    Uses the current git branch name, falling back to the worktree directory
+    name when on a detached HEAD or when git is unavailable.
+    """
+    result = shpyx.run("git rev-parse --abbrev-ref HEAD", exec_dir=_REPO_ROOT, verify_return_code=False)
+    branch = result.stdout.strip()
+    if result.return_code == 0 and branch and branch != "HEAD":
+        return branch
+    return _REPO_ROOT.name
+
+
+_KEY = _worktree_key()
+_SRC_DB = make_db_name("pgmig_src", _KEY)
+_DST_DB = make_db_name("pgmig_dst", _KEY)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

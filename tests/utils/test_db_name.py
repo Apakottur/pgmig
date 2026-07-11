@@ -1,0 +1,41 @@
+from tests.utils.db_utils import make_db_name
+
+_MAX_IDENTIFIER_LEN = 63
+
+
+def test_simple_branch() -> None:
+    assert make_db_name("pgmig_src", "main") == "pgmig_src_main"
+
+
+def test_slashes_and_dashes_become_underscores() -> None:
+    assert make_db_name("pgmig_src", "test/verify-migration") == "pgmig_src_test_verify_migration"
+
+
+def test_uppercase_lowercased() -> None:
+    assert make_db_name("pgmig_dst", "Feature/ABC") == "pgmig_dst_feature_abc"
+
+
+def test_leading_trailing_separators_stripped() -> None:
+    assert make_db_name("pgmig_src", "/foo/") == "pgmig_src_foo"
+
+
+def test_collapses_runs_of_separators() -> None:
+    assert make_db_name("pgmig_src", "a---b__c") == "pgmig_src_a_b_c"
+
+
+def test_long_name_truncated_within_limit() -> None:
+    key = "x" * 100
+    name = make_db_name("pgmig_src", key)
+    assert len(name) <= _MAX_IDENTIFIER_LEN
+
+
+def test_long_names_stay_unique_by_hash() -> None:
+    a = make_db_name("pgmig_src", "feature/" + "a" * 100)
+    b = make_db_name("pgmig_src", "feature/" + "b" * 100)
+    assert a != b
+    assert len(a) <= _MAX_IDENTIFIER_LEN
+    assert len(b) <= _MAX_IDENTIFIER_LEN
+
+
+def test_deterministic() -> None:
+    assert make_db_name("pgmig_src", "some/branch") == make_db_name("pgmig_src", "some/branch")
