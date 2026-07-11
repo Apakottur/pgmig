@@ -47,3 +47,13 @@ extnamespace
 plpgsql
 trgm
 hstore
+atttypid
+atttypmod
+attrelid
+attnum
+attisdropped
+relkind
+relname
+relnamespace
+deptype
+objid
