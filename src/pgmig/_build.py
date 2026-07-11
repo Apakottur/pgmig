@@ -45,6 +45,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 format_type(a.atttypid, a.atttypmod),
                 a.attnotnull,
                 pg_get_expr(ad.adbin, ad.adrelid),
+                col_description(a.attrelid, a.attnum),
                 obj_description(c.oid, 'pg_class')
             FROM
                 pg_class c
@@ -66,7 +67,16 @@ def build_db_info(dsn: str) -> DbInfo:
                 a.attname
             """
         ).fetchall()
-        for schema_name, table_name, column_name, column_type, column_not_null, column_default, table_comment in rows:
+        for (
+            schema_name,
+            table_name,
+            column_name,
+            column_type,
+            column_not_null,
+            column_default,
+            column_comment,
+            table_comment,
+        ) in rows:
             if table_name not in schema_by_name[schema_name].table_by_name:
                 schema_by_name[schema_name].table_by_name[table_name] = Table(
                     name=table_name,
@@ -80,6 +90,7 @@ def build_db_info(dsn: str) -> DbInfo:
                     type=column_type,
                     not_null=column_not_null,
                     default=column_default,
+                    comment=column_comment,
                 )
             )
 

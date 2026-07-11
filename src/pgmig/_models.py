@@ -11,6 +11,7 @@ class Column:
     type: str
     not_null: bool
     default: str | None
+    comment: str | None
 
 
 @dataclass(frozen=True)
