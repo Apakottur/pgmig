@@ -20,7 +20,9 @@ def _get_unique_db_key_from_git_branch() -> str:
     branch = result.stdout.strip()
     if result.return_code == 0 and branch and branch != "HEAD":
         return branch
-    raise ValueError("Could not determine worktree key")
+
+    # Default if git branch is not available.
+    return "unknown"
 
 
 # Postgres truncates identifiers past this length, which would silently collapse
