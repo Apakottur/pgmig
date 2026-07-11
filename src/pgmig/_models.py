@@ -52,11 +52,9 @@ class Table:
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
 
-    @property
-    def primary_key_columns(self) -> set[str]:
+    def get_primary_key_columns(self) -> set[str]:
         """
-        Columns covered by a primary key constraint. A primary key makes these
-        columns NOT NULL, so a standalone SET NOT NULL for them is redundant.
+        Columns covered by a primary key constraint.
         """
         return {
             column
