@@ -11,9 +11,16 @@ class GenerateSetup:
         self.src = src_conn
         self.dst = dst_conn
 
-    def assert_migration_sql(self, expected: str) -> None:
+    def assert_migration_sql(self, expected: str | list[str]) -> None:
+        # Multi-statement expectations must be passed as a list, not a "\n"-joined string.
+        if isinstance(expected, str) and "\n" in expected:
+            raise ValueError("Pass multi-statement expectations as a list of strings, not a '\\n'-joined string.")
+
+        # Normalize to the "\n"-joined form that `generate` returns.
+        expected_sql = "\n".join(expected) if isinstance(expected, list) else expected
+
         # Generate the migration SQL.
         result = generate(source=self.src.dsn, target=self.dst.dsn)
 
         # Verify the result.
-        assert result == expected, f"\nExpected SQL:\n{expected}\nGenerated SQL:\n{result}"
+        assert result == expected_sql, f"\nExpected SQL:\n{expected_sql}\nGenerated SQL:\n{result}"

@@ -64,15 +64,34 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
         dst_tables = dst_schema.table_by_name if dst_schema else {}
 
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            # Present in target only: create it.
-            if table_name not in src_tables:
+            # Present in source only: drop it (attached objects are dropped with it).
+            if table_name not in dst_tables:
+                drop_table_sql = f'DROP TABLE "{schema_name}"."{table_name}";'
+                statements.append(drop_table_sql)
+                continue
+
+            if table_name in src_tables:
+                # Table exists in source: get details.
+                src_comment = src_tables[table_name].comment
+            else:
+                # Present in target only: create it.
                 columns = ", ".join(f'"{column.name}" {column.type}' for column in dst_tables[table_name].columns)
                 create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
                 statements.append(create_table_sql)
-            # Present in source only: drop it.
-            elif table_name not in dst_tables:
-                drop_table_sql = f'DROP TABLE "{schema_name}"."{table_name}";'
-                statements.append(drop_table_sql)
+
+                # Default table attributes are
+                src_comment = None
+
+            # Apply changes to an existing (or newly created) table.
+
+            # Sync comment.
+            dst_comment = dst_tables[table_name].comment
+            if src_comment != dst_comment:
+                if dst_comment is None:
+                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
+                else:
+                    escaped = dst_comment.replace("'", "''")
+                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
 
     return statements
 
