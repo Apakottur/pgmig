@@ -29,7 +29,6 @@ psycopg
 dataclass
 dataclasses
 conftest
-tablespaces
 healthcheck
 conninfo
 autocommit

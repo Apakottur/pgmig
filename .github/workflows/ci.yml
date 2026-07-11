@@ -43,7 +43,11 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Linux only: the test harness spins up a Postgres container via
+        # docker compose. Hosted macOS runners have no Docker daemon and
+        # Windows runners cannot run the Linux postgres image. Keep this
+        # scoped to ubuntu unless that changes.
+        os: [ubuntu-latest]
 
     name: Unit Tests - ${{ matrix.os }} - Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
