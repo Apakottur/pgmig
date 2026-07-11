@@ -3,6 +3,7 @@
 venv
 .venv
 .vscode
+.claude
 
 # Python
 __pycache__
@@ -15,6 +16,3 @@ dist
 # Temporary files
 tmp
 .cspellcache
-
-# Local design specs (not tracked)
-docs/superpowers/

@@ -54,9 +54,3 @@ source = "vcs"
 
 [tool.uv]
 package = true
-
-[tool.vulture]
-ignore_decorators = ["@pytest.fixture"]
-# `run` is the test-database helper used by upcoming end-to-end tests; keep it
-# even though no test exercises it yet.
-ignore_names = ["test_*", "run"]

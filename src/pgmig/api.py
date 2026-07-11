@@ -11,10 +11,13 @@ class Schema:
 
 
 def _get_db_schema(dsn: str) -> Schema:
+    """
+    Get the database schema from the given DSN.
+    """
     # Start with an empty schema.
     s = Schema()
 
-    # Get the schema from the database.
+    # Construct schema attributes.
     with psycopg.connect(dsn) as conn:
         conn.execute("SELECT 1")
 
@@ -23,6 +26,9 @@ def _get_db_schema(dsn: str) -> Schema:
 
 
 def _get_migration_sql(*, source: Schema, target: Schema) -> str:
+    """
+    Get the migration SQL between the given source and target schemas.
+    """
     if source == target:
         return ""
     else:
@@ -30,6 +36,9 @@ def _get_migration_sql(*, source: Schema, target: Schema) -> str:
 
 
 def generate(*, source: str, target: str) -> str:
+    """
+    Generate the migration SQL between the given source and target databases.
+    """
     # Get source schema.
     source_schema = _get_db_schema(source)
 
