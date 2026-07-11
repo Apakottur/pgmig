@@ -109,12 +109,7 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
 
             # Columns covered by a target primary key are made NOT NULL by the
             # ADD PRIMARY KEY, so their standalone SET NOT NULL is redundant.
-            dst_pk_columns = {
-                column
-                for constraint in dst_tables[table_name].constraint_by_name.values()
-                if constraint.is_primary_key
-                for column in constraint.columns
-            }
+            dst_pk_columns = dst_tables[table_name].primary_key_columns
 
             if table_name in src_tables:
                 # Table exists in source: get details.
