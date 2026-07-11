@@ -5,8 +5,8 @@
 # Maximum line length.
 line-length = 120
 
-# Python version.
-target-version = "py314"
+# Minimum supported Python version.
+target-version = "py310"
 
 # Enable autofixing.
 fix = true

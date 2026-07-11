@@ -56,4 +56,8 @@ repos:
     rev: v2.16
     hooks:
       - id: vulture
-        args: ["src", "tests"]
+        args: ["--ignore-decorators",
+               "@pytest.fixture",
+               "src",
+               "tests"
+        ]

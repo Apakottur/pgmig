@@ -1,0 +1,8 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: pgmig
+      POSTGRES_PASSWORD: pgmig
+    ports:
+      - "55432:5432"

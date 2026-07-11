@@ -12,7 +12,9 @@ dev = [
   "pytest==9.1.1",
   "ruff==0.15.21",
   "shpyx==0.0.37",
+  "tenacity==9.1.4",
   "ty==0.0.58",
+  "typing-extensions==4.16.0",
 ]
 
 [project]
@@ -37,6 +39,10 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  #
+  "psycopg[binary]>=3.3.4",
 ]
 
 [project.urls]
