@@ -1,6 +1,6 @@
 import psycopg
 
-from pgmig._models import Column, DbInfo, Extension, Schema, Table
+from pgmig._models import Column, DbInfo, Extension, Index, Schema, Table
 
 
 def build_db_info(dsn: str) -> DbInfo:
@@ -69,9 +69,44 @@ def build_db_info(dsn: str) -> DbInfo:
                     name=table_name,
                     columns=[],
                     comment=table_comment,
+                    index_by_name={},
                 )
             schema_by_name[schema_name].table_by_name[table_name].columns.append(
                 Column(name=column_name, type=column_type)
+            )
+
+        # Indexes (standalone only; constraint-backed indexes are excluded).
+        rows = conn.execute(
+            """
+            SELECT
+                n.nspname,
+                c.relname,
+                ic.relname,
+                pg_get_indexdef(i.indexrelid)
+            FROM
+                pg_index i
+                JOIN pg_class ic ON ic.oid = i.indexrelid
+                JOIN pg_class c ON c.oid = i.indrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE
+                n.nspname NOT LIKE 'pg_%'
+                AND n.nspname <> 'information_schema'
+                AND NOT EXISTS (
+                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
+                )
+                AND NOT i.indisprimary
+                AND NOT EXISTS (
+                    SELECT 1 FROM pg_depend d
+                    WHERE d.classid = 'pg_class'::regclass
+                        AND d.objid = i.indexrelid
+                        AND d.refclassid = 'pg_constraint'::regclass
+                        AND d.deptype = 'i'
+                )
+            """
+        ).fetchall()
+        for schema_name, table_name, index_name, index_def in rows:
+            schema_by_name[schema_name].table_by_name[table_name].index_by_name[index_name] = Index(
+                name=index_name, definition=index_def
             )
 
         # Extensions (database-level).
