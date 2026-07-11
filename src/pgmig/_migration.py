@@ -73,6 +73,18 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
             if table_name in src_tables:
                 # Table exists in source: get details.
                 src_comment = src_tables[table_name].comment
+
+                # Sync columns (add/drop by name; type changes are out of scope).
+                src_columns = {column.name: column for column in src_tables[table_name].columns}
+                dst_columns = {column.name: column for column in dst_tables[table_name].columns}
+                for column_name in sorted(src_columns.keys() | dst_columns.keys()):
+                    if column_name not in src_columns:
+                        column = dst_columns[column_name]
+                        statements.append(
+                            f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN "{column.name}" {column.type};'
+                        )
+                    elif column_name not in dst_columns:
+                        statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
             else:
                 # Present in target only: create it.
                 columns = ", ".join(f'"{column.name}" {column.type}' for column in dst_tables[table_name].columns)
