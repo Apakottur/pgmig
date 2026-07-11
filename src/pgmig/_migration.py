@@ -236,7 +236,7 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
 
 def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
     """
-    Generate the migration SQL of primary key and unique constraints (add, drop, rename).
+    Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
     """
     statements: list[str] = []
 

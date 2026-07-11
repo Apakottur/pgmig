@@ -108,3 +108,68 @@ def test_constraint_dropped_with_table(gen_setup: GenerateSetup) -> None:
     gen_setup.src.execute("ALTER TABLE person ADD CONSTRAINT person_pkey PRIMARY KEY (id)")
 
     gen_setup.assert_migration_sql('DROP TABLE "public"."person";')
+
+
+def test_constraint_add_check(gen_setup: GenerateSetup) -> None:
+    """
+    Check constraint present in target but missing in source -> ADD CONSTRAINT.
+    """
+    gen_setup.src.execute("CREATE TABLE person (age integer)")
+    gen_setup.dst.execute("CREATE TABLE person (age integer)")
+    gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)")
+
+    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0));')
+
+
+def test_constraint_drop_check(gen_setup: GenerateSetup) -> None:
+    """
+    Check constraint present in source but missing in target -> DROP CONSTRAINT.
+    """
+    gen_setup.src.execute("CREATE TABLE person (age integer)")
+    gen_setup.src.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)")
+    gen_setup.dst.execute("CREATE TABLE person (age integer)")
+
+    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check";')
+
+
+def test_constraint_rename_check(gen_setup: GenerateSetup) -> None:
+    """
+    Same check definition on both sides, only the name differs -> RENAME CONSTRAINT.
+    """
+    gen_setup.src.execute("CREATE TABLE person (age integer)")
+    gen_setup.src.execute("ALTER TABLE person ADD CONSTRAINT person_age_old CHECK (age > 0)")
+    gen_setup.dst.execute("CREATE TABLE person (age integer)")
+    gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_age_new CHECK (age > 0)")
+
+    gen_setup.assert_migration_sql(
+        'ALTER TABLE "public"."person" RENAME CONSTRAINT "person_age_old" TO "person_age_new";'
+    )
+
+
+def test_constraint_check_definition_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Same name, different check expression -> DROP CONSTRAINT then ADD CONSTRAINT.
+    """
+    gen_setup.src.execute("CREATE TABLE person (age integer)")
+    gen_setup.src.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)")
+    gen_setup.dst.execute("CREATE TABLE person (age integer)")
+    gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 18)")
+
+    gen_setup.assert_migration_sql(
+        [
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check";',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 18));',
+        ]
+    )
+
+
+def test_constraint_check_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Same check name and definition on both sides -> no migration SQL.
+    """
+    gen_setup.src.execute("CREATE TABLE person (age integer)")
+    gen_setup.src.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)")
+    gen_setup.dst.execute("CREATE TABLE person (age integer)")
+    gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)")
+
+    gen_setup.assert_migration_sql("")
