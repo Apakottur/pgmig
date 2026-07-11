@@ -117,8 +117,10 @@ def test_index_constraint_backed_ignored(gen_setup: GenerateSetup) -> None:
     """
     Indexes backing a PRIMARY KEY / UNIQUE constraint are not diffed.
     """
-    gen_setup.src.execute("CREATE TABLE person (id integer, email text)")
-    gen_setup.dst.execute("CREATE TABLE person (id integer, email text)")
+    # `id` is NOT NULL on both sides so only the constraint differs, isolating the
+    # index behavior from the NOT NULL that a PRIMARY KEY would otherwise imply.
+    gen_setup.src.execute("CREATE TABLE person (id integer NOT NULL, email text)")
+    gen_setup.dst.execute("CREATE TABLE person (id integer NOT NULL, email text)")
     gen_setup.dst.execute("ALTER TABLE person ADD PRIMARY KEY (id)")
     gen_setup.dst.execute("ALTER TABLE person ADD UNIQUE (email)")
 

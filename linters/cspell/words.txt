@@ -52,6 +52,11 @@ atttypmod
 attrelid
 attnum
 attisdropped
+attnotnull
+attrdef
+adbin
+adrelid
+adnum
 relkind
 relname
 relnamespace

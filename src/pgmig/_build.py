@@ -43,11 +43,14 @@ def build_db_info(dsn: str) -> DbInfo:
                 c.relname,
                 a.attname,
                 format_type(a.atttypid, a.atttypmod),
+                a.attnotnull,
+                pg_get_expr(ad.adbin, ad.adrelid),
                 obj_description(c.oid, 'pg_class')
             FROM
                 pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 JOIN pg_attribute a ON a.attrelid = c.oid
+                LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
             WHERE
                 c.relkind = 'r'
                 AND n.nspname NOT LIKE 'pg_%'
@@ -63,7 +66,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 a.attname
             """
         ).fetchall()
-        for schema_name, table_name, column_name, column_type, table_comment in rows:
+        for schema_name, table_name, column_name, column_type, column_not_null, column_default, table_comment in rows:
             if table_name not in schema_by_name[schema_name].table_by_name:
                 schema_by_name[schema_name].table_by_name[table_name] = Table(
                     name=table_name,
@@ -72,7 +75,12 @@ def build_db_info(dsn: str) -> DbInfo:
                     index_by_name={},
                 )
             schema_by_name[schema_name].table_by_name[table_name].columns.append(
-                Column(name=column_name, type=column_type)
+                Column(
+                    name=column_name,
+                    type=column_type,
+                    not_null=column_not_null,
+                    default=column_default,
+                )
             )
 
         # Indexes (standalone only; constraint-backed indexes are excluded).
