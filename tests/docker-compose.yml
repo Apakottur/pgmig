@@ -4,6 +4,5 @@ services:
     environment:
       POSTGRES_USER: pgmig
       POSTGRES_PASSWORD: pgmig
-      POSTGRES_DB: pgmig
     ports:
       - "55432:5432"

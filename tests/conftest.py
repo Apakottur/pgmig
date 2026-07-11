@@ -1,77 +1,58 @@
 from collections.abc import Iterator
 from pathlib import Path
 
-import psycopg
 import pytest
 import shpyx
-import tenacity
-from psycopg import sql
-from psycopg.conninfo import make_conninfo
 
-from tests.harness import Db, GenerateSetup
+from tests.fixtures.generate_setup import GenerateSetup
+from tests.utils.db_utils import DbConnection
 
-_COMPOSE_FILE = Path(__file__).parent / "docker-compose.yml"
-_ADMIN_DSN = "postgresql://pgmig:pgmig@localhost:55432/pgmig"
+_COMPOSE_FILE_DIR = Path(__file__).parent
+
 _SRC_DB = "pgmig_src"
 _DST_DB = "pgmig_dst"
 
 
-@tenacity.retry(
-    retry=tenacity.retry_if_exception_type(psycopg.OperationalError),
-    wait=tenacity.wait_fixed(0.5),
-    stop=tenacity.stop_after_delay(60),
-    reraise=True,
-)
-def _wait_until_ready(dsn: str) -> None:
-    # Poll until the server accepts connections and answers a query. We do not
-    # rely on `docker compose --wait` or a container healthcheck for readiness.
-    with psycopg.connect(dsn) as conn:
-        conn.execute("SELECT 1")
-
-
-def _recreate_database(admin_dsn: str, name: str) -> None:
-    with psycopg.connect(admin_dsn, autocommit=True) as conn:
-        conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
-        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
-
-
-def _clear(dsn: str) -> None:
-    # Drop every non-system schema (and whatever it contains) and recreate an
-    # empty `public`, so each test starts from a blank schema.
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        schemas = conn.execute(
-            "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'"
-        ).fetchall()
-        for (name,) in schemas:
-            conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(name)))
-        conn.execute("CREATE SCHEMA public")
-
-
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def _postgres_server() -> Iterator[str]:
-    shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d"])
+    """
+    Session level database server.
+    """
+    # Start the database server.
+    shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
+
+    # Create a connection to the admin database.
+    admin_db_conn = DbConnection("postgres")
+
     try:
-        _wait_until_ready(_ADMIN_DSN)
-        yield _ADMIN_DSN
+        yield admin_db_conn.dsn
     finally:
-        shpyx.run(["docker", "compose", "-f", str(_COMPOSE_FILE), "down", "-v"])
+        # Stop the database server.
+        shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
-@pytest.fixture(scope="session")
-def _databases(_postgres_server: str) -> tuple[str, str]:
-    # Reset all: create the source and target databases fresh at session start.
-    _recreate_database(_postgres_server, _SRC_DB)
-    _recreate_database(_postgres_server, _DST_DB)
-    return (
-        make_conninfo(_postgres_server, dbname=_SRC_DB),
-        make_conninfo(_postgres_server, dbname=_DST_DB),
-    )
+@pytest.fixture(scope="session", autouse=True)
+def _databases(_postgres_server: str) -> tuple[DbConnection, DbConnection]:
+    """
+    Session level database configuration.
+    """
+    # Create the source and target databases (once per session).
+    src_conn = DbConnection(_SRC_DB)
+    dst_conn = DbConnection(_DST_DB)
+    return src_conn, dst_conn
 
 
-@pytest.fixture
-def gen_setup(_databases: tuple[str, str]) -> GenerateSetup:
+@pytest.fixture(scope="function")
+def gen_setup(_databases: tuple[DbConnection, DbConnection]) -> GenerateSetup:
+    """
+    Main fixture for testing `generate`.
+    """
+    # Get the source and target database DSNs.
+    src_conn, dst_conn = _databases
+
     # Clear between tests: wipe both databases' schemas before each test.
-    src_dsn, dst_dsn = _databases
-    _clear(src_dsn)
-    _clear(dst_dsn)
-    return GenerateSetup(db_src=Db(src_dsn), db_dst=Db(dst_dsn))
+    src_conn.reset()
+    dst_conn.reset()
+
+    # Provide the utility class for the test
+    return GenerateSetup(src_conn, dst_conn)

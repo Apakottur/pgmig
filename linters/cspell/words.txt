@@ -38,3 +38,5 @@ uuid
 fetchone
 tenacity
 nspname
+autouse
+datname
