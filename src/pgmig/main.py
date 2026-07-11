@@ -1,2 +1,2 @@
-def mock_func(val: int) -> None:
+def mock_func(val: int) -> int:
     return val + 1

@@ -481,6 +481,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-mock" },
     { name = "ruff" },
+    { name = "shpyx" },
     { name = "ty" },
 ]
 
@@ -495,6 +496,7 @@ dev = [
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-mock", specifier = "==3.15.1" },
     { name = "ruff", specifier = "==0.15.21" },
+    { name = "shpyx", specifier = "==0.0.37" },
     { name = "ty", specifier = "==0.0.58" },
 ]
 
@@ -685,6 +687,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/3c/37d0ecb729a7cc2d393ea7dce316fc585680f35d93b8d62139d7d0a3700c/ruff-0.15.21-py3-none-win32.whl", hash = "sha256:01f8d5be84823c172b389e123174f781f9daf86d6c58719d603f941932195cdd", size = 10896555, upload-time = "2026-07-09T20:01:26.941Z" },
     { url = "https://files.pythonhosted.org/packages/c0/b8/e43466b2a6067ce91e669068f6e28d6c719a920f014b070d5c8731725de3/ruff-0.15.21-py3-none-win_amd64.whl", hash = "sha256:d4b8d9a2f0f12b816b50447f6eccb9f4bb01a6b82c86b50fb3b5354b458dc6d3", size = 12038772, upload-time = "2026-07-09T20:01:29.497Z" },
     { url = "https://files.pythonhosted.org/packages/dd/75/e90ab9aeece218a9fc5a5bc3ec97d0ee6bb3c4ff95869463c1de58e29a1c/ruff-0.15.21-py3-none-win_arm64.whl", hash = "sha256:6e83115d4b9377c1cbc13abf0e051f069fab0ef815ea0504a8a008cee24dd0a8", size = 11375265, upload-time = "2026-07-09T20:01:31.772Z" },
+]
+
+[[package]]
+name = "shpyx"
+version = "0.0.37"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/36/bcc3b5ee27cd11f350796002e0f1c9dfa41569d656b8b7029ac7eaff7cbc/shpyx-0.0.37.tar.gz", hash = "sha256:74ab5fb3a8aeda5922e30e49413bf9023f04225c2dc3b1c3b9be17711731e616", size = 78506, upload-time = "2026-07-10T16:43:58.202Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/85/9446343ab70bf7a6552d27fcd7dcd477dbcb01f5fd6e49d8d4b6a07a8130/shpyx-0.0.37-py3-none-any.whl", hash = "sha256:96efc74a4ffdb95ea591cb143812e631d25ffc270174dc7b86d2e463b46a6d96", size = 9956, upload-time = "2026-07-10T16:43:57.27Z" },
 ]
 
 [[package]]
