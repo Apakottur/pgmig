@@ -64,7 +64,11 @@ def _column_def(column: Column) -> str:
 
 
 def _column_comment_statements(
-    *, schema_name: str, table_name: str, src_columns: dict[str, Column], dst_columns: dict[str, Column]
+    *,
+    schema_name: str,
+    table_name: str,
+    src_columns: dict[str, Column],
+    dst_columns: dict[str, Column],
 ) -> list[str]:
     """
     Generate COMMENT ON COLUMN statements for every target column whose comment
@@ -75,7 +79,11 @@ def _column_comment_statements(
         src_comment = src_columns[column_name].comment if column_name in src_columns else None
         dst_comment = dst_columns[column_name].comment
         if src_comment != dst_comment:
-            target = "NULL" if dst_comment is None else "'" + dst_comment.replace("'", "''") + "'"
+            if dst_comment is None:
+                target = "NULL"
+            else:
+                escaped = dst_comment.replace("'", "''")
+                target = f"'{escaped}'"
             statements.append(f'COMMENT ON COLUMN "{schema_name}"."{table_name}"."{column_name}" IS {target};')
     return statements
 
@@ -102,9 +110,9 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
             if table_name in src_tables:
                 # Table exists in source: get details.
                 src_comment = src_tables[table_name].comment
+                src_columns = {column.name: column for column in src_tables[table_name].columns}
 
                 # Sync columns (add/drop by name; type changes are out of scope).
-                src_columns = {column.name: column for column in src_tables[table_name].columns}
                 dst_columns = {column.name: column for column in dst_tables[table_name].columns}
                 for column_name in sorted(src_columns.keys() | dst_columns.keys()):
                     if column_name not in src_columns:
@@ -130,15 +138,24 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                             else:
                                 statements.append(f"{prefix} DROP NOT NULL;")
             else:
-                # Present in target only: create it.
+                # Present in target only: default details.
+                src_comment = None
+                src_columns = {}
+
+                # Create the table.
                 dst_columns = {column.name: column for column in dst_tables[table_name].columns}
                 columns = ", ".join(_column_def(column) for column in dst_tables[table_name].columns)
                 create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
                 statements.append(create_table_sql)
 
-                # Default table attributes.
-                src_columns = {}
-                src_comment = None
+            # Sync table comment.
+            dst_comment = dst_tables[table_name].comment
+            if src_comment != dst_comment:
+                if dst_comment is None:
+                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
+                else:
+                    escaped = dst_comment.replace("'", "''")
+                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
 
             # Sync column comments (a separate statement; cannot be inline).
             statements.extend(
@@ -149,17 +166,6 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                     dst_columns=dst_columns,
                 )
             )
-
-            # Apply changes to an existing (or newly created) table.
-
-            # Sync comment.
-            dst_comment = dst_tables[table_name].comment
-            if src_comment != dst_comment:
-                if dst_comment is None:
-                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
-                else:
-                    escaped = dst_comment.replace("'", "''")
-                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
 
     return statements
 
