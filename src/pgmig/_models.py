@@ -12,6 +12,10 @@ class Column:
     not_null: bool
     default: str | None
     comment: str | None
+    # For a serial column, the pseudo-type to emit ("serial"/"bigserial"/"smallserial");
+    # None for a regular column. A serial column's expanded integer type, nextval()
+    # default and NOT NULL are all implied by the pseudo-type, so they are not emitted.
+    serial_type: str | None = None
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,13 @@ import psycopg
 
 from pgmig._models import Column, Constraint, DbInfo, Extension, Index, Schema, Sequence, Table
 
+# Maps a serial column's underlying integer type to its serial pseudo-type.
+_SERIAL_TYPE_BY_INT_TYPE = {
+    "smallint": "smallserial",
+    "integer": "serial",
+    "bigint": "bigserial",
+}
+
 
 def build_db_info(dsn: str) -> DbInfo:
     """
@@ -46,7 +53,9 @@ def build_db_info(dsn: str) -> DbInfo:
                 a.attnotnull,
                 pg_get_expr(ad.adbin, ad.adrelid),
                 col_description(a.attrelid, a.attnum),
-                obj_description(c.oid, 'pg_class')
+                obj_description(c.oid, 'pg_class'),
+                a.attidentity,
+                pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname)
             FROM
                 pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -76,7 +85,17 @@ def build_db_info(dsn: str) -> DbInfo:
             column_default,
             column_comment,
             table_comment,
+            column_identity,
+            column_serial_sequence,
         ) in rows:
+            # A serial column owns a sequence via its nextval() default (so
+            # pg_get_serial_sequence resolves it) and is not an identity column.
+            # Its integer type maps to the matching serial pseudo-type.
+            serial_type = (
+                _SERIAL_TYPE_BY_INT_TYPE.get(column_type)
+                if column_serial_sequence is not None and column_identity == ""
+                else None
+            )
             if table_name not in schema_by_name[schema_name].table_by_name:
                 schema_by_name[schema_name].table_by_name[table_name] = Table(
                     name=table_name,
@@ -93,6 +112,7 @@ def build_db_info(dsn: str) -> DbInfo:
                     not_null=column_not_null,
                     default=column_default,
                     comment=column_comment,
+                    serial_type=serial_type,
                 )
             )
 

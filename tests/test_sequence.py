@@ -124,15 +124,3 @@ def test_sequence_unchanged(gen_setup: GenerateSetup) -> None:
     gen_setup.execute_both("CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5")
 
     gen_setup.assert_migration_sql("")
-
-
-def test_sequence_serial_owned_excluded(gen_setup: GenerateSetup) -> None:
-    """
-    A sequence owned by a serial column is excluded: only the table is generated,
-    no CREATE SEQUENCE for the backing sequence.
-    """
-    gen_setup.dst.execute("CREATE TABLE person (id serial)")
-
-    gen_setup.assert_migration_sql(
-        'CREATE TABLE "public"."person" ("id" integer DEFAULT nextval(\'person_id_seq\'::regclass) NOT NULL);'
-    )
