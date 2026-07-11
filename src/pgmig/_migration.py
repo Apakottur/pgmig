@@ -59,7 +59,8 @@ def generate_schema_migration_sql(*, source: Schema, target: Schema) -> str:
     statements: list[str] = []
 
     # Extensions.
-    statements.extend(_generate_extensions(source=source, target=target))
+    extensions_statements = _generate_extensions(source=source, target=target)
+    statements.extend(extensions_statements)
 
     # All statements.
     return "\n".join(statements)
