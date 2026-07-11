@@ -6,12 +6,7 @@
 [![image](https://img.shields.io/pypi/l/pgmig.svg)](https://github.com/Apakottur/pgmig/blob/main/LICENSE)
 [![image](https://img.shields.io/pypi/pyversions/pgmig.svg)](https://pypi.python.org/pypi/pgmig)
 
-`pgmig` generates schema migrations between Postgres databases.
-
-Point it at two databases and it returns the SQL that migrates the schema of one
-to match the other — tables, indexes, extensions, functions, and so on. The
-comparison is read-only; `pgmig` never modifies your databases, it only hands
-you the SQL to run.
+Generate migrations between Postgres databases.
 
 ## Installation
 
@@ -39,47 +34,45 @@ print(sql)  # the migration SQL — run it yourself against `source`
 `generate` returns an empty string. `pgmig` opens read-only connections to both
 databases and never runs the generated SQL for you.
 
-## Local development
+## Contributing
 
-Dependencies are managed with [uv](https://docs.astral.sh/uv/):
+To contribute simply open a PR with your changes.
+
+All checks (Linters, type checks and tests) automatically run in CI through GitHub Actions.
+
+### Running checks locally
+
+Local development is done with [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+Start by installing all the development dependencies:
 
 ```shell
 uv sync
 ```
 
-### Tests
-
-Tests run against a real Postgres instance, started automatically in a container
-via `docker compose`, so a running **Docker daemon is required**:
+To run the linters use `pre-commit`:
 
 ```shell
-uv run pytest -c tests/pytest.ini tests
+pre-commit run -a
 ```
 
-This enforces 100% branch coverage. Note that a bare `uv run pytest` (without
-`-c tests/pytest.ini tests`) does not pick up the config and silently skips the
-coverage gate.
-
-### Linters
-
-Linters and formatters run through pre-commit:
+To run the unit tests use `pytest`:
 
 ```shell
-uv run pre-commit run -a
+pytest -c tests/pytest.ini tests
 ```
 
-### Type checks
+To run type checks use `mypy` or `ty` (both are run in CI):
 
 ```shell
-uv run mypy --config-file linters/mypy.toml src tests
-uv run ty check --config-file linters/ty.toml src tests
+mypy --config-file linters/mypy.toml src tests
+ty check --config-file linters/ty.toml src tests
 ```
 
 ### Releasing
 
-An interactive script tags a new version, which triggers the release workflow
-(build + publish to PyPI + GitHub Release):
+To release a new version, run the interactive script:
 
 ```shell
-uv run ./scripts/release.py
+./scripts/release.py
 ```
