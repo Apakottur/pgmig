@@ -6,6 +6,7 @@ from psycopg.rows import class_row
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
+from pgmig._errors import PgmigError
 from pgmig._models import (
     Column,
     Constraint,
@@ -268,7 +269,13 @@ def build_db_info(dsn: str) -> DbInfo:
     """
     Build the full structure of the given database.
     """
-    with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
+    # Open the connection, surfacing connection failures as a clean PgmigError.
+    try:
+        conn = psycopg.connect(dsn, options="-c default_transaction_read_only=on")
+    except psycopg.Error as error:
+        raise PgmigError(f"Could not connect to database: {error}") from error
+
+    with conn:
         schema_by_name = _load_schemas(conn)
         # Tables first: every other schema-object loader below attaches to a table that
         # _load_tables must already have created.

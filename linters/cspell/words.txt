@@ -102,6 +102,8 @@ rettype
 overloadable
 inplace
 renamable
+typer
+Apakottur
 triggerdef
 tgname
 tgrelid

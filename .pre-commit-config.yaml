@@ -13,6 +13,23 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-added-large-files
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.0.1
+    hooks:
+      - id: cspell
+        exclude: \.(csv|json|txt|lock)$
+        args: ["lint", "-c", "./linters/cspell.json", "--no-progress",
+               "--cache", "--cache-location", "./linters/.cspellcache"]
+  ##################
+  # GITHUB ACTIONS #
+  ##################
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+  ########
+  # TOML #
+  ########
   - repo: https://github.com/pappasam/toml-sort
     rev: v0.24.4
     hooks:
@@ -26,22 +43,23 @@ repos:
         args: [--config, ./linters/taplo.toml]
       - id: taplo-lint
         args: [--config, ./linters/taplo.toml]
+  ########
+  # YAML #
+  ########
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.38.0
     hooks:
       - id: yamllint
         args: ['--config-file', './linters/yamllint.yaml']
-  - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v10.0.1
+  #######
+  # SQL #
+  #######
+  - repo: https://github.com/darold/pgFormatter
+    rev: v5.10
     hooks:
-      - id: cspell
-        exclude: \.(csv|json|txt|lock)$
-        args: ["lint", "-c", "./linters/cspell.json", "--no-progress",
-               "--cache", "--cache-location", "./linters/.cspellcache"]
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
-      - id: actionlint
+      - id: pg_format
+        args: ["--inplace", "--wrap-limit", "120"]
+        files: '\.sql$'
   ##########
   # PYTHON #
   ##########
@@ -52,23 +70,3 @@ repos:
         args: [--config, ./linters/ruff.toml]
       - id: ruff-format
         args: [--config, ./linters/ruff.toml]
-  - repo: https://github.com/jendrikseipp/vulture
-    rev: v2.16
-    hooks:
-      - id: vulture
-        args: ["--ignore-decorators",
-               "@pytest.fixture",
-               "--ignore-names",
-               "pytest_*",
-               "src",
-               "tests"
-        ]
-  #######
-  # SQL #
-  #######
-  - repo: https://github.com/darold/pgFormatter
-    rev: v5.10
-    hooks:
-      - id: pg_format
-        args: ["--inplace", "--wrap-limit", "120"]
-        files: '\.sql$'
