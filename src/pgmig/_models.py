@@ -188,6 +188,7 @@ class Extension:
     name: str
     version: str
     schema: str
+    comment: str | None
 
 
 @dataclass
