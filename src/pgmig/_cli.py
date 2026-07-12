@@ -34,6 +34,8 @@ def generate(
     """
     Generate the migration SQL that turns the source database into the target database.
     """
+    # Diffing: a PgmigError is an expected failure (clean message); anything else is a
+    # bug in pgmig (full traceback plus an issue prompt).
     try:
         sql = generate_migration(source=source, target=target)
     except PgmigError as error:
@@ -51,10 +53,16 @@ def generate(
     if not sql:
         return
 
-    if output is not None:
-        output.write_text(f"{sql}\n", encoding="utf-8")
-    else:
+    if output is None:
         typer.echo(sql)
+        return
+
+    # Writing: an unwritable --output path is a clean error, not a traceback.
+    try:
+        output.write_text(f"{sql}\n", encoding="utf-8")
+    except OSError as error:
+        typer.echo(f"Could not write migration output: {error}", err=True)
+        raise typer.Exit(code=1) from error
 
 
 @app.callback()

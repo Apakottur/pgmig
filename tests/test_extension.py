@@ -105,7 +105,7 @@ def test_extension_create(gen_setup: GenerateSetup) -> None:
 
     # Verify migration.
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
@@ -131,7 +131,7 @@ def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD TABLE spatial_ref_sys").format(ext=ext))
 
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
@@ -159,7 +159,7 @@ def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None
     gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD FUNCTION spatial_audit()").format(ext=ext))
 
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
@@ -178,7 +178,7 @@ def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> No
     gen_setup.dst.execute("CREATE FUNCTION ext_schema.helper() RETURNS integer LANGUAGE sql AS 'SELECT 1'")
 
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
@@ -197,7 +197,7 @@ def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute("CREATE TYPE ext_schema.mood AS ENUM ('happy', 'sad')")
 
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
@@ -215,7 +215,7 @@ def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> Non
     gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SEQUENCE ext_seq").format(ext=ext))
 
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 

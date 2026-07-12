@@ -94,6 +94,7 @@ smallserial
 bigserial
 worktree
 worktrees
+unwritable
 functiondef
 prokind
 proname

@@ -13,10 +13,14 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
         # Present in target only: create it.
         if name not in source.extension_by_name:
             dst_ext = target.extension_by_name[name]
+            # CASCADE auto-creates any prerequisite extensions (so alphabetical emit order
+            # can't break inter-extension dependencies), and IF NOT EXISTS tolerates one
+            # already installed that way. The VERSION is deliberately omitted: pinning the
+            # source's exact version breaks portability across servers, so the target
+            # installs whatever version the applying server offers.
             yield Statement(
                 Phase.EXTENSION,
-                f"CREATE EXTENSION {ident(dst_ext.name)} VERSION {literal(dst_ext.version)}"
-                f" SCHEMA {ident(dst_ext.schema)};",
+                f"CREATE EXTENSION IF NOT EXISTS {ident(dst_ext.name)} SCHEMA {ident(dst_ext.schema)} CASCADE;",
             )
         # Present in source only: drop it.
         elif name not in target.extension_by_name:
