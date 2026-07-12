@@ -1,4 +1,4 @@
--- Tables (and their columns, ordered by name).
+-- Tables (and their columns, in physical order).
 SELECT
     n.nspname,
     c.relname,
@@ -33,4 +33,4 @@ WHERE
 ORDER BY
     n.nspname,
     c.relname,
-    a.attname;
+    a.attnum;
