@@ -4,8 +4,6 @@ import psycopg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
-from pgmig._errors import PgmigError
-from pgmig._models import DbInfo
 from pgmig._sql import qualified
 
 
@@ -15,19 +13,20 @@ class _InvalidIndexRow(BaseModel):
     index_name: str
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+def check(conn: psycopg.Connection[Any]) -> list[str]:
     """
-    Guard: reject invalid indexes (pg_index.indisvalid = FALSE), the leftover of a
-    failed CREATE INDEX CONCURRENTLY. They are indistinguishable from a valid index in
-    the deparsed definition, so a diff over them is unreliable (false convergence, or a
-    CREATE INDEX that collides with the name the invalid index still holds).
+    Guard: report invalid indexes (pg_index.indisvalid = FALSE). An invalid index is
+    indistinguishable from a valid one in its deparsed definition, so a diff over it is
+    unreliable (false convergence, or a CREATE INDEX that collides with the name the
+    invalid index still holds). The cause is not certain from the catalog, so the finding
+    only suggests the most common one (a failed CREATE INDEX CONCURRENTLY).
     """
-    rows = _run_query(conn, "invalid_indexes.sql", _InvalidIndexRow)
-    if rows:
-        row = rows[0]
+    findings: list[str] = []
+    for row in _run_query(conn, "invalid_indexes.sql", _InvalidIndexRow):
         index = qualified(row.schema_name, row.index_name)
         table = qualified(row.schema_name, row.table_name)
-        raise PgmigError(
-            f"Invalid index {index} on {table}: a failed CREATE INDEX CONCURRENTLY leaves an invalid index "
-            f"behind. Drop it (DROP INDEX {index}) or rebuild it (REINDEX INDEX {index}), then re-run."
+        findings.append(
+            f"invalid index {index} on {table} cannot be used (it may be a leftover of a failed "
+            f"CREATE INDEX CONCURRENTLY); drop it (DROP INDEX {index}) or rebuild it (REINDEX INDEX {index})"
         )
+    return findings

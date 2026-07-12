@@ -125,3 +125,4 @@ tmpfs
 initdb
 indisvalid
 deparsed
+excinfo

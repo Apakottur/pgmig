@@ -1,6 +1,6 @@
 import pytest
 
-from pgmig import generate
+from pgmig import PgmigError, generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
@@ -11,7 +11,7 @@ def test_view_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     gen_setup.dst.execute("CREATE VIEW active AS SELECT 1 AS x")
 
-    with pytest.raises(NotImplementedError, match="view is not supported"):
+    with pytest.raises(PgmigError, match=r"view .* is not supported"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
@@ -23,5 +23,5 @@ def test_materialized_view_raises_not_supported(gen_setup: GenerateSetup) -> Non
     gen_setup.dst.execute("CREATE MATERIALIZED VIEW report AS SELECT 1 AS x")
     gen_setup.dst.execute("CREATE INDEX report_x_idx ON report (x)")
 
-    with pytest.raises(NotImplementedError, match="materialized view is not supported"):
+    with pytest.raises(PgmigError, match=r"materialized view .* is not supported"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)

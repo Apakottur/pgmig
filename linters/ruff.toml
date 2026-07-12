@@ -129,6 +129,7 @@ ban-relative-imports = "all"
 ]
 "tests/*" = [
   "S101", # Use of `assert` detected
+  "S608", # Possible SQL injection (tests build fixture SQL from hard-coded values)
 ]
 "scripts/*" = [
   "T201", # `print` found

@@ -4,10 +4,10 @@ import psycopg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
-from pgmig._models import DbInfo
+from pgmig._sql import qualified
 
 # Human-readable name per unsupported kind (pg_class relkind or pg_type typtype), for
-# the raised message.
+# the reported finding.
 _KIND_NAMES = {
     "v": "view",
     "m": "materialized view",
@@ -25,16 +25,15 @@ class _UnsupportedRow(BaseModel):
     kind: str
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+def check(conn: psycopg.Connection[Any]) -> list[str]:
     """
-    Guard: reject object kinds that are not modelled yet (views, materialized views,
+    Guard: report object kinds that are not modelled yet (views, materialized views,
     partitioned tables, foreign tables, composite types, domains, range types). Without
     this, generate() diffs only the supported kinds and returns "" for a database whose
-    whole objects are missing on one side, falsely claiming convergence. Consistent with
-    raising on unsupported column changes.
+    whole objects are missing on one side, falsely claiming convergence.
     """
     rows = _run_query(conn, "unsupported.sql", _UnsupportedRow)
-    if rows:
-        row = rows[0]
-        kind = _KIND_NAMES.get(row.kind, row.kind)
-        raise NotImplementedError(f"{kind} is not supported yet: {row.schema_name}.{row.obj_name}")
+    return [
+        f"{_KIND_NAMES.get(row.kind, row.kind)} {qualified(row.schema_name, row.obj_name)} is not supported yet"
+        for row in rows
+    ]
