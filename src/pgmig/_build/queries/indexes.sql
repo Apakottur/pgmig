@@ -44,4 +44,8 @@ WHERE
             d.classid = 'pg_class'::regclass
             AND d.objid = i.indexrelid
             AND d.refclassid = 'pg_constraint'::regclass
-            AND d.deptype = 'i');
+            AND d.deptype = 'i')
+ORDER BY
+    n.nspname,
+    c.relname,
+    ic.relname;

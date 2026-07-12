@@ -2,7 +2,8 @@
 SELECT
     n.nspname AS schema_name,
     t.typname AS enum_name,
-    array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_values
+    array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_values,
+    obj_description(t.oid, 'pg_type') AS enum_comment
 FROM
     pg_type t
     JOIN pg_namespace n ON n.oid = t.typnamespace
@@ -20,5 +21,9 @@ WHERE
             d.objid = t.oid
             AND d.deptype = 'e')
 GROUP BY
+    n.nspname,
+    t.oid,
+    t.typname
+ORDER BY
     n.nspname,
     t.typname;

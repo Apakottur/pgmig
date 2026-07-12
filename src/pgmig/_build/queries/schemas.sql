@@ -14,4 +14,6 @@ WHERE
             pg_depend d
         WHERE
             d.objid = n.oid
-            AND d.deptype = 'e');
+            AND d.deptype = 'e')
+ORDER BY
+    n.nspname;

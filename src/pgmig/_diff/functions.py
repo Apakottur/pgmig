@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import DbInfo, Function
 from pgmig._sql import comment_on, qualified
 
@@ -21,6 +21,22 @@ def _drop_function_sql(schema_name: str, function: Function) -> str:
             f"and dependency-aware drop ordering is not implemented yet."
         )
     return f"DROP {function.drop_keyword} {qualified(schema_name, function.name)}({function.identity_arguments});"
+
+
+def _function_comment_statements(schema_name: str, src: dict[str, Function], dst: dict[str, Function]) -> list[str]:
+    """
+    Emit COMMENT ON FUNCTION / PROCEDURE (by kind) for target routines whose comment
+    differs from source.
+    """
+    return _diff_comments(
+        src,
+        dst,
+        render=lambda _signature, func: comment_on(
+            func.drop_keyword,
+            f"{qualified(schema_name, func.name)}({func.identity_arguments})",
+            func.comment,
+        ),
+    )
 
 
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
@@ -51,9 +67,7 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
                     yield Statement(Phase.FUNCTION_DROP, _drop_function_sql(schema_name, src_func))
                 yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
 
-            # Sync comment for a target routine (COMMENT ON FUNCTION / PROCEDURE by kind).
-            if dst_func is not None:
-                src_comment = src_func.comment if src_func else None
-                if src_comment != dst_func.comment:
-                    path = f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})"
-                    yield Statement(Phase.FUNCTION_CREATE, comment_on(dst_func.drop_keyword, path, dst_func.comment))
+        # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
+        # the routines they annotate have been created above.
+        for sql in _function_comment_statements(schema_name, src_functions, dst_functions):
+            yield Statement(Phase.FUNCTION_CREATE, sql)

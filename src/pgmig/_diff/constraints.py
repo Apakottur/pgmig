@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_renamable, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
 from pgmig._models import Constraint, DbInfo
 from pgmig._sql import comment_on, ident, qualified
 
@@ -30,12 +30,11 @@ def _constraint_comment_statements(
     Emit COMMENT ON CONSTRAINT for target constraints whose comment differs from source.
     """
     table = qualified(schema_name, table_name)
-    statements: list[str] = []
-    for name, dst_constraint in dst.items():
-        src_constraint = src.get(name)
-        if (src_constraint.comment if src_constraint else None) != dst_constraint.comment:
-            statements.append(comment_on("CONSTRAINT", f"{ident(name)} ON {table}", dst_constraint.comment))
-    return statements
+    return _diff_comments(
+        src,
+        dst,
+        render=lambda name, constraint: comment_on("CONSTRAINT", f"{ident(name)} ON {table}", constraint.comment),
+    )
 
 
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:

@@ -60,6 +60,7 @@ class Trigger:
     definition: str  # pg_get_triggerdef output: a full CREATE TRIGGER ...
     # `definition` with the trigger's own name stripped out, for rename detection.
     canonical: str
+    comment: str | None
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,7 @@ class EnumType:
 
     name: str
     values: list[str]  # labels in enum sort order
+    comment: str | None
 
 
 @dataclass

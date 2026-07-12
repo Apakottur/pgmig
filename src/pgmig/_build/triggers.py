@@ -13,6 +13,7 @@ class _TriggerRow(BaseModel):
     trigger_name: str
     trigger_def: str
     trigger_canonical: str
+    trigger_comment: str | None
 
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
@@ -25,4 +26,5 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
             name=trigger_row.trigger_name,
             definition=trigger_row.trigger_def,
             canonical=trigger_row.trigger_canonical,
+            comment=trigger_row.trigger_comment,
         )

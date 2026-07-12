@@ -31,4 +31,8 @@ WHERE
             pg_depend d
         WHERE
             d.objid = p.oid
-            AND d.deptype = 'e');
+            AND d.deptype = 'e')
+ORDER BY
+    n.nspname,
+    p.proname,
+    pg_get_function_identity_arguments(p.oid);
