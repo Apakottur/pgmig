@@ -95,7 +95,7 @@ adds a few more (`—` in the library column):
 | ------------------------ | -------------------- | ------------------------------------------------------- |
 | `--source`, `-s`         | `source`             | DSN of the source (current) database. Falls back to the `PGMIG_SOURCE` environment variable. |
 | `--target`, `-t`         | `target`             | DSN of the target (desired) database. Falls back to the `PGMIG_TARGET` environment variable. |
-| `--index-concurrently`, `-C` | `index_concurrently` | Emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`, so index maintenance takes no blocking lock. These statements cannot run inside a transaction block — apply them outside `BEGIN`/`COMMIT`. |
+| `--index-concurrently`, `-C` | `index_concurrently` | Whether to emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`. Using `CONCURRENTLY` avoids blocking index read/write operations, but takes longer to execute and cannot be run inside a transaction block. |
 | `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
 | `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 
