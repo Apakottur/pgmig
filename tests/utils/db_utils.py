@@ -8,9 +8,6 @@ import tenacity
 from psycopg import sql
 from typing_extensions import LiteralString
 
-# 15432 is deliberately below the kernel's ephemeral port range (32768-60999):
-# ports inside it are occasionally claimed as source ports of outgoing
-# connections, which made the previous in-range port flake in CI.
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _ADMIN_DB_NAME = "postgres"
 
