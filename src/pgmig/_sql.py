@@ -24,3 +24,17 @@ def literal(text: str) -> str:
     """
     escaped = text.replace("'", "''")
     return f"'{escaped}'"
+
+
+def comment_on(kind: str, path: str, comment: str | None) -> str:
+    """
+    Render a COMMENT ON statement for any object kind.
+
+    Args:
+        kind: the object keyword (e.g. "TABLE", "COLUMN").
+        path: the already-quoted object path.
+        comment: the comment text, or None to remove the comment. An empty
+            string is a real (empty) comment and renders as '', not NULL.
+    """
+    value = "NULL" if comment is None else literal(comment)
+    return f"COMMENT ON {kind} {path} IS {value};"

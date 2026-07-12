@@ -1,4 +1,4 @@
-from pgmig._sql import ident, literal, qualified
+from pgmig._sql import comment_on, ident, literal, qualified
 
 
 def test_ident() -> None:
@@ -19,3 +19,10 @@ def test_literal() -> None:
     assert literal("a'b") == "'a''b'"
     assert literal("a'b'c") == "'a''b''c'"
     assert literal("") == "''"
+
+
+def test_comment_on() -> None:
+    assert comment_on("TABLE", '"public"."person"', "hi") == 'COMMENT ON TABLE "public"."person" IS \'hi\';'
+    assert comment_on("COLUMN", '"public"."person"."id"', None) == 'COMMENT ON COLUMN "public"."person"."id" IS NULL;'
+    assert comment_on("TABLE", '"public"."person"', "") == 'COMMENT ON TABLE "public"."person" IS \'\';'
+    assert comment_on("TABLE", '"public"."person"', "a'b") == "COMMENT ON TABLE \"public\".\"person\" IS 'a''b';"

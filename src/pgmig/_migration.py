@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import TypeVar
 
 from pgmig._models import Column, Constraint, DbInfo, Index, Schema, Sequence, Table
-from pgmig._sql import ident, literal, qualified
+from pgmig._sql import comment_on, ident, literal, qualified
 
 _Renamable = TypeVar("_Renamable")
 
@@ -195,8 +195,7 @@ def _table_comment_statements(schema_name: str, src_table: Table | None, dst_tab
     dst_comment = dst_table.comment
     if src_comment == dst_comment:
         return []
-    target = "NULL" if dst_comment is None else literal(dst_comment)
-    return [f"COMMENT ON TABLE {qualified(schema_name, dst_table.name)} IS {target};"]
+    return [comment_on("TABLE", qualified(schema_name, dst_table.name), dst_comment)]
 
 
 def _column_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -212,8 +211,7 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
         src_comment = src_columns[column_name].comment if column_name in src_columns else None
         dst_comment = dst_columns[column_name].comment
         if src_comment != dst_comment:
-            target = "NULL" if dst_comment is None else literal(dst_comment)
-            statements.append(f"COMMENT ON COLUMN {qualified(schema_name, dst_table.name, column_name)} IS {target};")
+            statements.append(comment_on("COLUMN", qualified(schema_name, dst_table.name, column_name), dst_comment))
     return statements
 
 
