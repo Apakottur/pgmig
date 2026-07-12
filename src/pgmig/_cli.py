@@ -30,6 +30,14 @@ def generate(
         Path | None,
         typer.Option("--output", "-o", help="Write the migration SQL to this file instead of stdout."),
     ] = None,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Exit with a non-zero status if the databases differ. Useful as a CI gate; "
+            "the migration is still emitted so the drift is visible.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -50,19 +58,21 @@ def generate(
         )
         raise typer.Exit(code=1) from error
 
-    if not sql:
-        return
+    if sql:
+        if output is None:
+            typer.echo(sql)
+        else:
+            # Writing: an unwritable --output path is a clean error, not a traceback.
+            try:
+                output.write_text(f"{sql}\n", encoding="utf-8")
+            except OSError as error:
+                typer.echo(f"Could not write migration output: {error}", err=True)
+                raise typer.Exit(code=1) from error
 
-    if output is None:
-        typer.echo(sql)
-        return
-
-    # Writing: an unwritable --output path is a clean error, not a traceback.
-    try:
-        output.write_text(f"{sql}\n", encoding="utf-8")
-    except OSError as error:
-        typer.echo(f"Could not write migration output: {error}", err=True)
-        raise typer.Exit(code=1) from error
+    # Check mode: a non-empty diff means the source is out of date -> fail the gate.
+    if check and sql:
+        typer.echo("Databases differ: a migration is required.", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.callback()

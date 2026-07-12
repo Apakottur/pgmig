@@ -66,6 +66,25 @@ def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
     assert "ValueError" in result.output
 
 
+def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
+    # --check turns a non-empty diff into a non-zero exit (CI gate) while still showing it.
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--check"])
+
+    assert result.exit_code == 1
+    assert 'CREATE TABLE "public"."person" ("name" text);' in result.output
+    assert "differ" in result.output.lower()
+
+
+def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
+    # No diff under --check is a clean pass: zero exit, nothing on stdout.
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--check"])
+
+    assert result.exit_code == 0
+    assert result.stdout == ""
+
+
 def test_version() -> None:
     result = _runner.invoke(app, ["--version"])
 
