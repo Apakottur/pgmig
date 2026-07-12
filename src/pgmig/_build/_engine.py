@@ -10,6 +10,7 @@ from pgmig._build import (
     sequences,
     tables,
     triggers,
+    unsupported,
 )
 from pgmig._build._core import Loader
 from pgmig._errors import PgmigError
@@ -17,8 +18,11 @@ from pgmig._models import DbInfo
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
 # the objects that attach to them (indexes, constraints, triggers). Extensions are
-# database-level and independent.
+# database-level and independent. The unsupported-relkind guard runs first so a
+# relation that is not modelled yet (view, materialized view, partitioned or foreign
+# table) raises before any partial introspection.
 _LOADERS: tuple[Loader, ...] = (
+    unsupported.load,
     schemas.load,
     tables.load,
     indexes.load,
