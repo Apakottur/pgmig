@@ -57,7 +57,7 @@ repos:
     hooks:
       - id: vulture
         args: ["--ignore-decorators",
-               "@pytest.fixture",
+               "@pytest.fixture,@app.callback,@app.command",
                "--ignore-names",
                "pytest_*",
                "src",

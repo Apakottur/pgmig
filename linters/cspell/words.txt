@@ -102,3 +102,4 @@ rettype
 overloadable
 inplace
 renamable
+typer
