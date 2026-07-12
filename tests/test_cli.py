@@ -76,6 +76,41 @@ def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
     assert result.stdout == ""
 
 
+def test_generate_dsn_from_env_vars(gen_setup: GenerateSetup) -> None:
+    # With no --source/--target flags, the DSNs are read from PGMIG_SOURCE/PGMIG_TARGET.
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+
+    result = _runner.invoke(
+        app, ["generate"], env={"PGMIG_SOURCE": gen_setup.src.dsn, "PGMIG_TARGET": gen_setup.dst.dsn}
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
+
+
+def test_generate_flag_overrides_env_var(gen_setup: GenerateSetup) -> None:
+    # An explicit flag wins over the environment variable.
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+
+    result = _runner.invoke(
+        app,
+        ["generate", "--source", gen_setup.src.dsn, "--target", gen_setup.dst.dsn],
+        env={"PGMIG_SOURCE": "not-a-dsn", "PGMIG_TARGET": "not-a-dsn"},
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
+
+
+def test_generate_missing_source_mentions_env_var(gen_setup: GenerateSetup) -> None:
+    # No flag and no env var: the error must point at both ways of passing the DSN.
+    result = _runner.invoke(app, ["generate", "--target", gen_setup.dst.dsn])
+
+    assert result.exit_code == 2
+    assert "--source" in result.output
+    assert "PGMIG_SOURCE" in result.output
+
+
 def test_version() -> None:
     result = _runner.invoke(app, ["--version"])
 

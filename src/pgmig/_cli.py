@@ -16,6 +16,17 @@ app = typer.Typer(
 )
 
 
+def _require_dsn(value: str | None, *, flag: str, env_var: str) -> str:
+    """
+    Return the DSN, failing with a usage error when neither the flag nor its
+    environment variable provided one.
+    """
+    if value is None:
+        typer.echo(f"Missing option '{flag}' (or set the {env_var} environment variable).", err=True)
+        raise typer.Exit(code=2)
+    return value
+
+
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(version("pgmig"))
@@ -24,8 +35,14 @@ def _version_callback(value: bool) -> None:
 
 @app.command()
 def generate(
-    source: Annotated[str, typer.Option("--source", "-s", help="DSN of the source (current) database.")],
-    target: Annotated[str, typer.Option("--target", "-t", help="DSN of the target (desired) database.")],
+    source: Annotated[
+        str | None,
+        typer.Option("--source", "-s", envvar="PGMIG_SOURCE", help="DSN of the source (current) database."),
+    ] = None,
+    target: Annotated[
+        str | None,
+        typer.Option("--target", "-t", envvar="PGMIG_TARGET", help="DSN of the target (desired) database."),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Write the migration SQL to this file instead of stdout."),
@@ -57,8 +74,13 @@ def generate(
     """
     Generate the migration SQL that turns the source database into the target database.
     """
+    # DSNs come from the flag or its environment variable; missing both is a usage error.
+    source = _require_dsn(source, flag="--source", env_var="PGMIG_SOURCE")
+    target = _require_dsn(target, flag="--target", env_var="PGMIG_TARGET")
+
     # --ignore-all-extension-versions wins over a per-extension list.
     ignore_versions: bool | list[str] = ignore_all_extension_versions or (ignore_extension_version or [])
+
     try:
         # Generate the migration SQL.
         sql = generate_migration(source=source, target=target, ignore_extension_version=ignore_versions)
