@@ -1,4 +1,4 @@
-from pgmig._build import build_db_info
+from pgmig._build._engine import build_db_info
 from pgmig._diff._engine import generate_migration_sql
 
 
