@@ -47,6 +47,19 @@ class Index:
     # `definition` with the index's own name stripped out, so two indexes that
     # differ only by name compare equal (drives rename detection).
     canonical: str
+    comment: str | None
+
+
+@dataclass(frozen=True)
+class Trigger:
+    """
+    A Postgres trigger, owned by a table.
+    """
+
+    name: str
+    definition: str  # pg_get_triggerdef output: a full CREATE TRIGGER ...
+    # `definition` with the trigger's own name stripped out, for rename detection.
+    canonical: str
 
 
 @dataclass(frozen=True)
@@ -60,6 +73,7 @@ class Constraint:
     definition: str
     contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
+    comment: str | None
 
     @property
     def is_primary_key(self) -> bool:
@@ -82,6 +96,7 @@ class Table:
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
+    trigger_by_name: dict[str, Trigger]
 
     def get_primary_key_columns(self) -> set[str]:
         """
@@ -109,6 +124,7 @@ class Sequence:
     max_value: int
     cache: int
     cycle: bool
+    comment: str | None
 
 
 @dataclass(frozen=True)
@@ -122,6 +138,7 @@ class Function:
     definition: str  # pg_get_functiondef output: a full CREATE OR REPLACE ...
     return_type: str | None  # format_type(prorettype); None for procedures
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
+    comment: str | None
 
     @property
     def drop_keyword(self) -> str:
@@ -131,6 +148,16 @@ class Function:
         return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
+@dataclass(frozen=True)
+class EnumType:
+    """
+    A Postgres enum type, owned by a schema.
+    """
+
+    name: str
+    values: list[str]  # labels in enum sort order
+
+
 @dataclass
 class Schema:
     """
@@ -138,9 +165,11 @@ class Schema:
     """
 
     name: str
+    comment: str | None
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]
+    enum_by_name: dict[str, EnumType]
 
 
 @dataclass(frozen=True)

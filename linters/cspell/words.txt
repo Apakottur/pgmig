@@ -104,3 +104,13 @@ inplace
 renamable
 typer
 Apakottur
+triggerdef
+tgname
+tgrelid
+tgisinternal
+typname
+typnamespace
+typtype
+enumlabel
+enumsortorder
+enumtypid

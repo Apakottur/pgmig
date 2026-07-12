@@ -1,15 +1,44 @@
+import pytest
+
+from pgmig import generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
-def test_table_column_ordered_by_name(gen_setup: GenerateSetup) -> None:
+def test_table_column_type_change_raises(gen_setup: GenerateSetup) -> None:
     """
-    Table columns should be ordered by name.
+    A shared column whose type differs between source and target is an unsupported
+    ALTER; the tool must fail loudly rather than emit an empty (silently converged)
+    migration.
     """
-    # Create the table with columns not ordered by name.
-    gen_setup.dst.execute("CREATE TABLE person (name text, age integer)")
+    gen_setup.src.execute("CREATE TABLE person (id integer)")
+    gen_setup.dst.execute("CREATE TABLE person (id bigint)")
 
-    # Verify the migration SQL orders the columns by name.
-    gen_setup.assert_migration_sql('CREATE TABLE "public"."person" ("age" integer, "name" text);')
+    with pytest.raises(NotImplementedError, match="type change"):
+        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+
+
+def test_table_column_identity_change_raises(gen_setup: GenerateSetup) -> None:
+    """
+    A shared column that gains or loses an identity is unsupported; the tool must fail
+    loudly instead of silently dropping the identity and reading as in sync.
+    """
+    gen_setup.src.execute("CREATE TABLE person (id integer)")
+    gen_setup.dst.execute("CREATE TABLE person (id integer GENERATED ALWAYS AS IDENTITY)")
+
+    with pytest.raises(NotImplementedError, match="identity change"):
+        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+
+
+def test_table_column_physical_order_preserved(gen_setup: GenerateSetup) -> None:
+    """
+    CREATE TABLE emits columns in the target's physical (attnum) order, not
+    alphabetically. Names are deliberately out of alphabetical order so a sort-by-name
+    introspection would reorder them; positional INSERT / SELECT * / pg_dump all depend
+    on this order matching the target.
+    """
+    gen_setup.dst.execute("CREATE TABLE person (zebra text, apple text, mango text)")
+
+    gen_setup.assert_migration_sql('CREATE TABLE "public"."person" ("zebra" text, "apple" text, "mango" text);')
 
 
 def test_table_create_with_column_attributes(gen_setup: GenerateSetup) -> None:
@@ -54,16 +83,6 @@ def test_table_column_added_and_dropped_ordered(gen_setup: GenerateSetup) -> Non
             'ALTER TABLE "public"."person" ADD COLUMN "email" text;',
         ]
     )
-
-
-def test_table_column_type_change_ignored(gen_setup: GenerateSetup) -> None:
-    """
-    Same column name with a different type -> no migration SQL (type changes are out of scope).
-    """
-    gen_setup.src.execute("CREATE TABLE person (age text)")
-    gen_setup.dst.execute("CREATE TABLE person (age integer)")
-
-    gen_setup.assert_migration_sql("")
 
 
 def test_table_column_added_with_attributes(gen_setup: GenerateSetup) -> None:

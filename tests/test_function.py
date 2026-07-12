@@ -104,3 +104,13 @@ def test_function_unchanged(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$")
 
     gen_setup.assert_migration_sql("")
+
+
+def test_function_comment_added(gen_setup: GenerateSetup) -> None:
+    """
+    Comment added to a function present on both sides -> COMMENT ON FUNCTION.
+    """
+    gen_setup.execute_both("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$")
+    gen_setup.dst.execute("COMMENT ON FUNCTION add(integer, integer) IS 'adds'")
+
+    gen_setup.assert_migration_sql('COMMENT ON FUNCTION "public"."add"(a integer, b integer) IS \'adds\';')

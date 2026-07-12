@@ -25,3 +25,14 @@ def test_schema_drop(gen_setup: GenerateSetup) -> None:
 
     # Verify the migration SQL drops it.
     gen_setup.assert_migration_sql(f'DROP SCHEMA "{new_schema_name}";')
+
+
+def test_schema_comment_added(gen_setup: GenerateSetup) -> None:
+    """
+    Comment added to a schema present on both sides -> COMMENT ON SCHEMA.
+    """
+    gen_setup.src.execute("CREATE SCHEMA store")
+    gen_setup.dst.execute("CREATE SCHEMA store")
+    gen_setup.dst.execute("COMMENT ON SCHEMA store IS 'the store'")
+
+    gen_setup.assert_migration_sql("COMMENT ON SCHEMA \"store\" IS 'the store';")

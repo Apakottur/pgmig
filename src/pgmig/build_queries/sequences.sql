@@ -1,14 +1,15 @@
 -- Sequences (standalone only; sequences owned by a serial/identity column are excluded).
 SELECT
-    n.nspname,
-    c.relname,
-    format_type(s.seqtypid, NULL),
-    s.seqstart,
-    s.seqincrement,
-    s.seqmin,
-    s.seqmax,
-    s.seqcache,
-    s.seqcycle
+    n.nspname AS schema_name,
+    c.relname AS seq_name,
+    format_type(s.seqtypid, NULL) AS seq_type,
+    s.seqstart AS seq_start,
+    s.seqincrement AS seq_inc,
+    s.seqmin AS seq_min,
+    s.seqmax AS seq_max,
+    s.seqcache AS seq_cache,
+    s.seqcycle AS seq_cycle,
+    obj_description(c.oid, 'pg_class') AS seq_comment
 FROM
     pg_sequence s
     JOIN pg_class c ON c.oid = s.seqrelid

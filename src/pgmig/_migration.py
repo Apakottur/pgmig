@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar
 
-from pgmig._models import Column, Constraint, DbInfo, Index, Schema, Sequence, Table
+from pgmig._models import Column, Constraint, DbInfo, Function, Index, Schema, Sequence, Table, Trigger
 from pgmig._sql import comment_on, ident, literal, qualified
 
 _Renamable = TypeVar("_Renamable")
@@ -18,16 +18,20 @@ class Phase(Enum):
     """
 
     FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
+    TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
     EXTENSION = auto()
+    TYPE_CREATE = auto()  # Before tables (a column may be of the type) and its ADD VALUE alters.
     SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
     TABLE = auto()
     INDEX = auto()
     CONSTRAINT = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
+    TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
+    TYPE_DROP = auto()  # After tables whose columns used the type are gone.
     SCHEMA_DROP = auto()
 
 
@@ -63,63 +67,55 @@ def _iter_table_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, str
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
 
 
-def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _generate_schemas(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of schemas.
     """
-    statements: list[Statement] = []
-
-    for name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        # Present in target only: create it.
-        if name not in source.schema_by_name:
-            statements.append(Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};"))
+    for name, src_schema, dst_schema in _iter_schema_pairs(source, target):
         # Present in source only: drop it.
-        elif name not in target.schema_by_name:
-            statements.append(Statement(Phase.SCHEMA_DROP, f"DROP SCHEMA {ident(name)};"))
+        if dst_schema is None:
+            yield Statement(Phase.SCHEMA_DROP, f"DROP SCHEMA {ident(name)};")
+            continue
+        # Present in target only: create it.
+        if src_schema is None:
+            yield Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};")
+        # Sync comment.
+        src_comment = src_schema.comment if src_schema else None
+        if src_comment != dst_schema.comment:
+            yield Statement(Phase.SCHEMA_CREATE, comment_on("SCHEMA", ident(name), dst_schema.comment))
 
-    return statements
 
-
-def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _generate_extensions(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of extensions.
     """
-    statements: list[Statement] = []
-
     for name in sorted(source.extension_by_name.keys() | target.extension_by_name.keys()):
         # Present in target only: create it.
         if name not in source.extension_by_name:
             dst_ext = target.extension_by_name[name]
-            statements.append(
-                Statement(
-                    Phase.EXTENSION,
-                    f"CREATE EXTENSION {ident(dst_ext.name)} VERSION {literal(dst_ext.version)}"
-                    f" SCHEMA {ident(dst_ext.schema)};",
-                )
+            yield Statement(
+                Phase.EXTENSION,
+                f"CREATE EXTENSION {ident(dst_ext.name)} VERSION {literal(dst_ext.version)}"
+                f" SCHEMA {ident(dst_ext.schema)};",
             )
         # Present in source only: drop it.
         elif name not in target.extension_by_name:
             src_ext = source.extension_by_name[name]
-            statements.append(Statement(Phase.EXTENSION, f"DROP EXTENSION {ident(src_ext.name)};"))
+            yield Statement(Phase.EXTENSION, f"DROP EXTENSION {ident(src_ext.name)};")
 
         # Present in both: alter version and/or schema if they differ.
         else:
             src_ext = source.extension_by_name[name]
             dst_ext = target.extension_by_name[name]
             if src_ext.version != dst_ext.version:
-                statements.append(
-                    Statement(
-                        Phase.EXTENSION,
-                        f"ALTER EXTENSION {ident(dst_ext.name)} UPDATE TO {literal(dst_ext.version)};",
-                    )
+                yield Statement(
+                    Phase.EXTENSION,
+                    f"ALTER EXTENSION {ident(dst_ext.name)} UPDATE TO {literal(dst_ext.version)};",
                 )
             if src_ext.schema != dst_ext.schema:
-                statements.append(
-                    Statement(
-                        Phase.EXTENSION, f"ALTER EXTENSION {ident(dst_ext.name)} SET SCHEMA {ident(dst_ext.schema)};"
-                    )
+                yield Statement(
+                    Phase.EXTENSION, f"ALTER EXTENSION {ident(dst_ext.name)} SET SCHEMA {ident(dst_ext.schema)};"
                 )
-    return statements
 
 
 def _column_def(column: Column) -> str:
@@ -130,6 +126,12 @@ def _column_def(column: Column) -> str:
     # default and NOT NULL are all implied and must not be emitted alongside it.
     if column.serial_type is not None:
         return f"{ident(column.name)} {column.serial_type}"
+
+    # An identity column has no GENERATED ... AS IDENTITY clause rendered here, so
+    # emitting it would create a plain column and silently drop the identity. Refuse
+    # loudly rather than produce a migration that never converges.
+    if column.identity != "":
+        raise NotImplementedError(f"Identity column is not supported: {ident(column.name)}")
 
     parts = [f"{ident(column.name)} {column.type}"]
     if column.default is not None:
@@ -152,7 +154,8 @@ def _alter_columns(
 ) -> list[str]:
     """
     Sync the columns of a table present on both sides: add/drop by name, and for a
-    shared column sync DEFAULT then NOT NULL. Type changes are out of scope.
+    shared column sync DEFAULT then NOT NULL. A type or identity change is unsupported
+    and raises rather than emitting a silently-empty (falsely converged) migration.
 
     A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
     ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. Passing the set in
@@ -171,6 +174,19 @@ def _alter_columns(
         else:
             src_column = src_columns[column_name]
             dst_column = dst_columns[column_name]
+            # Type and identity changes are not yet modelled. Emitting nothing would be
+            # indistinguishable from "in sync", so fail loudly instead of lying.
+            if src_column.type != dst_column.type:
+                raise NotImplementedError(
+                    f"Column type change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
+                    f"{src_column.type} -> {dst_column.type}"
+                )
+            if src_column.identity != dst_column.identity:
+                raise NotImplementedError(
+                    f"Column identity change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)}"
+                )
             prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             if src_column.default != dst_column.default:
                 if dst_column.default is None:
@@ -215,57 +231,76 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     return statements
 
 
-def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _generate_tables(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of tables: drop, create, or alter columns, followed by
     table and column comment sync.
     """
-    statements: list[str] = []
-
     for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
         # Present in source only: drop it (attached objects are dropped with it).
         if dst_table is None:
-            statements.append(f"DROP TABLE {qualified(schema_name, table_name)};")
+            yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")
             continue
 
         if src_table is None:
-            statements.extend(_create_table(schema_name, dst_table))
+            rendered = _create_table(schema_name, dst_table)
         else:
-            statements.extend(
-                _alter_columns(
-                    schema_name=schema_name,
-                    table_name=table_name,
-                    src_table=src_table,
-                    dst_table=dst_table,
-                    pk_columns=dst_table.get_primary_key_columns(),
-                )
+            rendered = _alter_columns(
+                schema_name=schema_name,
+                table_name=table_name,
+                src_table=src_table,
+                dst_table=dst_table,
+                pk_columns=dst_table.get_primary_key_columns(),
             )
+        rendered += _table_comment_statements(schema_name, src_table, dst_table)
+        rendered += _column_comment_statements(schema_name, src_table, dst_table)
 
-        statements.extend(_table_comment_statements(schema_name, src_table, dst_table))
-        statements.extend(_column_comment_statements(schema_name, src_table, dst_table))
-
-    return [Statement(Phase.TABLE, sql) for sql in statements]
+        for sql in rendered:
+            yield Statement(Phase.TABLE, sql)
 
 
-def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _generate_indexes(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
     """
-    statements: list[str] = []
-
     for schema_name, _table_name, src_table, dst_table in _iter_table_pairs(source, target):
         # Table dropped: its indexes are dropped with it.
         if dst_table is None:
             continue
 
         src_indexes = src_table.index_by_name if src_table else {}
-        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_table.index_by_name)
+        dst_indexes = dst_table.index_by_name
+        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
         # Emit drops first (frees names), then renames, then creates.
-        statements.extend(drops)
-        statements.extend(renames)
-        statements.extend(creates)
+        for sql in (*drops, *renames, *creates):
+            yield Statement(Phase.INDEX, sql)
 
-    return [Statement(Phase.INDEX, sql) for sql in statements]
+        # Sync comments for target indexes.
+        for index_name, dst_index in dst_indexes.items():
+            src_index = src_indexes.get(index_name)
+            if (src_index.comment if src_index else None) != dst_index.comment:
+                yield Statement(Phase.INDEX, comment_on("INDEX", qualified(schema_name, index_name), dst_index.comment))
+
+
+def _generate_triggers(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+    """
+    Generate the migration SQL of triggers. Drops are phased before the functions they
+    call are dropped; creates (with renames) after those functions and tables exist.
+    """
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Table dropped: its triggers are dropped with it.
+        if dst_table is None:
+            continue
+
+        src_triggers = src_table.trigger_by_name if src_table else {}
+        drops, renames, creates = _diff_triggers(
+            schema_name=schema_name, table_name=table_name, src=src_triggers, dst=dst_table.trigger_by_name
+        )
+        for sql in drops:
+            yield Statement(Phase.TRIGGER_DROP, sql)
+        # Renames carry no function dependency, so they ride with the creates.
+        for sql in (*renames, *creates):
+            yield Statement(Phase.TRIGGER_CREATE, sql)
 
 
 def _diff_renamable(
@@ -336,6 +371,24 @@ def _diff_indexes(
     )
 
 
+def _diff_triggers(
+    *, schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Diff one table's triggers into (drops, renames, creates), using each trigger's
+    name-independent canonical form as the rename key.
+    """
+    table = qualified(schema_name, table_name)
+    return _diff_renamable(
+        src,
+        dst,
+        key=lambda trigger: trigger.canonical,
+        render_drop=lambda name: f"DROP TRIGGER {ident(name)} ON {table};",
+        render_rename=lambda old, new: f"ALTER TRIGGER {ident(old)} ON {table} RENAME TO {ident(new)};",
+        render_create=lambda _name, trigger: f"{trigger.definition};",
+    )
+
+
 def _diff_constraints(
     *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
 ) -> tuple[list[str], list[str], list[str]]:
@@ -354,72 +407,83 @@ def _diff_constraints(
     )
 
 
-def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _constraint_comment_statements(
+    schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
+) -> list[str]:
+    """
+    Emit COMMENT ON CONSTRAINT for target constraints whose comment differs from source.
+    """
+    table = qualified(schema_name, table_name)
+    statements: list[str] = []
+    for name, dst_constraint in dst.items():
+        src_constraint = src.get(name)
+        if (src_constraint.comment if src_constraint else None) != dst_constraint.comment:
+            statements.append(comment_on("CONSTRAINT", f"{ident(name)} ON {table}", dst_constraint.comment))
+    return statements
+
+
+def _generate_constraints(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
     """
-    statements: list[str] = []
-
     for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
         # Table dropped: its constraints are dropped with it.
         if dst_table is None:
             continue
 
         src_constraints = src_table.constraint_by_name if src_table else {}
+        dst_constraints = dst_table.constraint_by_name
         drops, renames, adds = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
-            dst=dst_table.constraint_by_name,
+            dst=dst_constraints,
         )
-        # Drops first (frees names), then renames, then adds.
-        statements.extend(drops)
-        statements.extend(renames)
-        statements.extend(adds)
-
-    return [Statement(Phase.CONSTRAINT, sql) for sql in statements]
+        comments = _constraint_comment_statements(schema_name, table_name, src_constraints, dst_constraints)
+        # Drops first (frees names), then renames, then adds, then comments.
+        for sql in (*drops, *renames, *adds, *comments):
+            yield Statement(Phase.CONSTRAINT, sql)
 
 
-def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of foreign key constraints. Drops are phased before
     referenced objects are dropped; adds (with renames) after referenced tables and
     their keys exist.
     """
-    fk_drops: list[str] = []
-    fk_adds: list[str] = []
-
     for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
-        # Table dropped: its foreign keys are dropped with it.
-        if dst_table is None:
-            continue
-
         src_fks = src_table.foreign_key_by_name if src_table else {}
+        # Table dropped: its foreign keys must still be dropped explicitly, in the
+        # FOREIGN_KEY_DROP phase (before any DROP TABLE), so a referenced table can be
+        # dropped even while its referencing table's constraint has not yet cascaded away.
+        dst_fks = dst_table.foreign_key_by_name if dst_table else {}
         drops, renames, adds = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_fks,
-            dst=dst_table.foreign_key_by_name,
+            dst=dst_fks,
         )
-        fk_drops.extend(drops)
+        for sql in drops:
+            yield Statement(Phase.FOREIGN_KEY_DROP, sql)
         # Renames carry no referenced-object dependency, so they ride with the adds.
-        fk_adds.extend(renames)
-        fk_adds.extend(adds)
-
-    return [Statement(Phase.FOREIGN_KEY_DROP, sql) for sql in fk_drops] + [
-        Statement(Phase.FOREIGN_KEY_ADD, sql) for sql in fk_adds
-    ]
+        comments = _constraint_comment_statements(schema_name, table_name, src_fks, dst_fks)
+        for sql in (*renames, *adds, *comments):
+            yield Statement(Phase.FOREIGN_KEY_ADD, sql)
 
 
-def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _drop_function_sql(schema_name: str, function: Function) -> str:
+    """
+    Render the DROP FUNCTION / DROP PROCEDURE statement for a routine (by signature).
+    """
+    return f"DROP {function.drop_keyword} {qualified(schema_name, function.name)}({function.identity_arguments});"
+
+
+def _generate_functions(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of functions and procedures. Creates (including
     CREATE OR REPLACE) are phased after tables so routine bodies can reference them;
     drops run early.
     """
-    creates: list[str] = []
-    drops: list[str] = []
-
     for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
         src_functions = src_schema.function_by_signature if src_schema else {}
         dst_functions = dst_schema.function_by_signature if dst_schema else {}
@@ -431,26 +495,23 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             # Present in target only: create it.
             if src_func is None:
                 # pg_get_functiondef has no trailing semicolon; add one to terminate the statement.
-                creates.append(f"{dst_functions[signature].definition};")
+                yield Statement(Phase.FUNCTION_CREATE, f"{dst_functions[signature].definition};")
             # Present in source only: drop it.
             elif dst_func is None:
-                drops.append(
-                    f"DROP {src_func.drop_keyword} {qualified(schema_name, src_func.name)}"
-                    f"({src_func.identity_arguments});"
-                )
+                yield Statement(Phase.FUNCTION_DROP, _drop_function_sql(schema_name, src_func))
             # Present in both: re-create if the definition changed.
             elif src_func.definition != dst_func.definition:
                 # CREATE OR REPLACE cannot change the return type, so drop first when it differs.
                 if src_func.return_type != dst_func.return_type:
-                    drops.append(
-                        f"DROP {src_func.drop_keyword} {qualified(schema_name, src_func.name)}"
-                        f"({src_func.identity_arguments});"
-                    )
-                creates.append(f"{dst_func.definition};")
+                    yield Statement(Phase.FUNCTION_DROP, _drop_function_sql(schema_name, src_func))
+                yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
 
-    return [Statement(Phase.FUNCTION_CREATE, sql) for sql in creates] + [
-        Statement(Phase.FUNCTION_DROP, sql) for sql in drops
-    ]
+            # Sync comment for a target routine (COMMENT ON FUNCTION / PROCEDURE by kind).
+            if dst_func is not None:
+                src_comment = src_func.comment if src_func else None
+                if src_comment != dst_func.comment:
+                    path = f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})"
+                    yield Statement(Phase.FUNCTION_CREATE, comment_on(dst_func.drop_keyword, path, dst_func.comment))
 
 
 def _sequence_tail(sequence: Sequence) -> str:
@@ -470,25 +531,25 @@ def _sequence_tail(sequence: Sequence) -> str:
     return tail
 
 
-def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+def _generate_sequences(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone sequences. Creates and alters are phased
     before tables (a column default may reference a sequence); drops run after.
     """
-    creates: list[str] = []
-    drops: list[str] = []
-
     for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
         src_sequences = src_schema.sequence_by_name if src_schema else {}
         dst_sequences = dst_schema.sequence_by_name if dst_schema else {}
 
         for name in sorted(src_sequences.keys() | dst_sequences.keys()):
+            qualified_name = qualified(schema_name, name)
             # Present in target only: create it.
             if name not in src_sequences:
-                creates.append(f"CREATE SEQUENCE {qualified(schema_name, name)} {_sequence_tail(dst_sequences[name])};")
+                yield Statement(
+                    Phase.SEQUENCE_CREATE, f"CREATE SEQUENCE {qualified_name} {_sequence_tail(dst_sequences[name])};"
+                )
             # Present in source only: drop it.
             elif name not in dst_sequences:
-                drops.append(f"DROP SEQUENCE {qualified(schema_name, name)};")
+                yield Statement(Phase.SEQUENCE_DROP, f"DROP SEQUENCE {qualified_name};")
             # Present in both: alter the parameters that differ.
             else:
                 src_seq = src_sequences[name]
@@ -509,11 +570,72 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                 if src_seq.cycle != dst_seq.cycle:
                     clauses.append("CYCLE" if dst_seq.cycle else "NO CYCLE")
                 if clauses:
-                    creates.append(f"ALTER SEQUENCE {qualified(schema_name, name)} {' '.join(clauses)};")
+                    yield Statement(Phase.SEQUENCE_CREATE, f"ALTER SEQUENCE {qualified_name} {' '.join(clauses)};")
 
-    return [Statement(Phase.SEQUENCE_CREATE, sql) for sql in creates] + [
-        Statement(Phase.SEQUENCE_DROP, sql) for sql in drops
-    ]
+        # Sync comments for target sequences.
+        for name, dst_seq in dst_sequences.items():
+            src_seq = src_sequences.get(name)
+            if (src_seq.comment if src_seq else None) != dst_seq.comment:
+                yield Statement(
+                    Phase.SEQUENCE_CREATE, comment_on("SEQUENCE", qualified(schema_name, name), dst_seq.comment)
+                )
+
+
+def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_values: list[str]) -> list[str]:
+    """
+    Render ALTER TYPE ... ADD VALUE statements for values added to an enum.
+
+    Only additions are supported: the source values must remain a subsequence of the
+    target values (same relative order, values only inserted). A removal, reorder, or
+    renamed-looking label raises NotImplementedError rather than emitting a wrong or
+    non-converging migration.
+    """
+    target_iter = iter(dst_values)
+    if not all(value in target_iter for value in src_values):
+        raise NotImplementedError(
+            f"Unsupported enum change for {qualified_name}: values may only be appended or inserted, "
+            f"not removed, reordered, or renamed ({src_values} -> {dst_values})."
+        )
+
+    src_set = set(src_values)
+    statements: list[str] = []
+    for index, value in enumerate(dst_values):
+        if value in src_set:
+            continue
+        following = next((later for later in dst_values[index + 1 :] if later in src_set), None)
+        if following is None:
+            statements.append(f"ALTER TYPE {qualified_name} ADD VALUE {literal(value)};")
+        else:
+            statements.append(f"ALTER TYPE {qualified_name} ADD VALUE {literal(value)} BEFORE {literal(following)};")
+    return statements
+
+
+def _generate_enums(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+    """
+    Generate the migration SQL of enum types (create, drop, ADD VALUE). Creates and
+    value additions are phased before tables (a column may be of the type); drops run
+    after.
+    """
+    for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
+        src_enums = src_schema.enum_by_name if src_schema else {}
+        dst_enums = dst_schema.enum_by_name if dst_schema else {}
+
+        for name in sorted(src_enums.keys() | dst_enums.keys()):
+            src_enum = src_enums.get(name)
+            dst_enum = dst_enums.get(name)
+            qualified_name = qualified(schema_name, name)
+
+            # Present in target only: create it.
+            if src_enum is None:
+                values = ", ".join(literal(value) for value in dst_enums[name].values)
+                yield Statement(Phase.TYPE_CREATE, f"CREATE TYPE {qualified_name} AS ENUM ({values});")
+            # Present in source only: drop it.
+            elif dst_enum is None:
+                yield Statement(Phase.TYPE_DROP, f"DROP TYPE {qualified_name};")
+            # Present in both: add any new values (removal/reorder/rename unsupported).
+            elif src_enum.values != dst_enum.values:
+                for sql in _enum_add_value_statements(qualified_name, src_enum.values, dst_enum.values):
+                    yield Statement(Phase.TYPE_CREATE, sql)
 
 
 def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
@@ -525,12 +647,14 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     for generate in (
         _generate_schemas,
         _generate_extensions,
+        _generate_enums,
         _generate_sequences,
         _generate_tables,
         _generate_indexes,
         _generate_constraints,
         _generate_foreign_keys,
         _generate_functions,
+        _generate_triggers,
     ):
         for statement in generate(source=source, target=target):
             statements_by_phase[statement.phase].append(statement.sql)

@@ -171,3 +171,28 @@ def test_constraint_check_unchanged(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)")
 
     gen_setup.assert_migration_sql("")
+
+
+def test_constraint_comment_added(gen_setup: GenerateSetup) -> None:
+    """
+    Comment added to a constraint present on both sides -> COMMENT ON CONSTRAINT.
+    """
+    gen_setup.execute_both("CREATE TABLE person (email text)")
+    gen_setup.execute_both("ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)")
+    gen_setup.dst.execute("COMMENT ON CONSTRAINT person_email_key ON person IS 'unique email'")
+
+    gen_setup.assert_migration_sql('COMMENT ON CONSTRAINT "person_email_key" ON "public"."person" IS \'unique email\';')
+
+
+def test_foreign_key_comment_added(gen_setup: GenerateSetup) -> None:
+    """
+    Comment added to a foreign key -> COMMENT ON CONSTRAINT.
+    """
+    gen_setup.execute_both("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
+    gen_setup.execute_both("CREATE TABLE person (team_id integer)")
+    gen_setup.execute_both(
+        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
+    )
+    gen_setup.dst.execute("COMMENT ON CONSTRAINT person_team_fkey ON person IS 'team ref'")
+
+    gen_setup.assert_migration_sql('COMMENT ON CONSTRAINT "person_team_fkey" ON "public"."person" IS \'team ref\';')
