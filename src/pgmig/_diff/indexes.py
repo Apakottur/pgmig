@@ -7,7 +7,7 @@ from pgmig._sql import comment_on, ident, qualified
 
 def _diff_indexes(
     *, schema_name: str, src: dict[str, Index], dst: dict[str, Index]
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], set[str]]:
     """
     Diff one table's standalone indexes into (drops, renames, creates), using each
     index's name-independent canonical form as the rename key.
@@ -22,12 +22,17 @@ def _diff_indexes(
     )
 
 
-def _index_comment_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
+def _index_comment_statements(
+    schema_name: str, src: dict[str, Index], dst: dict[str, Index], recreated: set[str]
+) -> list[str]:
     """
     Emit COMMENT ON INDEX for target indexes whose comment differs from source.
     """
     return _diff_comments(
-        src, dst, render=lambda name, index: comment_on("INDEX", qualified(schema_name, name), index.comment)
+        src,
+        dst,
+        render=lambda name, index: comment_on("INDEX", qualified(schema_name, name), index.comment),
+        recreated=recreated,
     )
 
 
@@ -42,8 +47,8 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
 
         src_indexes = src_table.index_by_name if src_table else {}
         dst_indexes = dst_table.index_by_name
-        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
-        comments = _index_comment_statements(schema_name, src_indexes, dst_indexes)
+        drops, renames, creates, recreated = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
+        comments = _index_comment_statements(schema_name, src_indexes, dst_indexes, recreated)
         # Emit drops first (frees names), then renames, then creates, then comments.
         for sql in (*drops, *renames, *creates, *comments):
             yield Statement(Phase.INDEX, sql)

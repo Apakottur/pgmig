@@ -7,7 +7,7 @@ from pgmig._sql import comment_on, ident, qualified
 
 def _diff_triggers(
     *, schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], set[str]]:
     """
     Diff one table's triggers into (drops, renames, creates), using each trigger's
     name-independent canonical form as the rename key.
@@ -24,14 +24,17 @@ def _diff_triggers(
 
 
 def _trigger_comment_statements(
-    schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
+    schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger], recreated: set[str]
 ) -> list[str]:
     """
     Emit COMMENT ON TRIGGER for target triggers whose comment differs from source.
     """
     table = qualified(schema_name, table_name)
     return _diff_comments(
-        src, dst, render=lambda name, trigger: comment_on("TRIGGER", f"{ident(name)} ON {table}", trigger.comment)
+        src,
+        dst,
+        render=lambda name, trigger: comment_on("TRIGGER", f"{ident(name)} ON {table}", trigger.comment),
+        recreated=recreated,
     )
 
 
@@ -47,13 +50,13 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
 
         src_triggers = src_table.trigger_by_name if src_table else {}
         dst_triggers = dst_table.trigger_by_name
-        drops, renames, creates = _diff_triggers(
+        drops, renames, creates, recreated = _diff_triggers(
             schema_name=schema_name, table_name=table_name, src=src_triggers, dst=dst_triggers
         )
         for sql in drops:
             yield Statement(Phase.TRIGGER_DROP, sql)
         # Renames carry no function dependency, so they ride with the creates. Comments
         # follow, after the triggers they annotate exist.
-        comments = _trigger_comment_statements(schema_name, table_name, src_triggers, dst_triggers)
+        comments = _trigger_comment_statements(schema_name, table_name, src_triggers, dst_triggers, recreated)
         for sql in (*renames, *creates, *comments):
             yield Statement(Phase.TRIGGER_CREATE, sql)

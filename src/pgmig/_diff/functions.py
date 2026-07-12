@@ -23,7 +23,9 @@ def _drop_function_sql(schema_name: str, function: Function) -> str:
     return f"DROP {function.drop_keyword} {qualified(schema_name, function.name)}({function.identity_arguments});"
 
 
-def _function_comment_statements(schema_name: str, src: dict[str, Function], dst: dict[str, Function]) -> list[str]:
+def _function_comment_statements(
+    schema_name: str, src: dict[str, Function], dst: dict[str, Function], recreated: set[str]
+) -> list[str]:
     """
     Emit COMMENT ON FUNCTION / PROCEDURE (by kind) for target routines whose comment
     differs from source.
@@ -36,6 +38,7 @@ def _function_comment_statements(schema_name: str, src: dict[str, Function], dst
             f"{qualified(schema_name, func.name)}({func.identity_arguments})",
             func.comment,
         ),
+        recreated=recreated,
     )
 
 
@@ -49,6 +52,9 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
         src_functions = src_schema.function_by_signature if src_schema else {}
         dst_functions = dst_schema.function_by_signature if dst_schema else {}
 
+        # Routines dropped and recreated (return-type change): CREATE OR REPLACE keeps the
+        # comment, but a drop-and-recreate resets it, so its comment must be re-emitted.
+        recreated: set[str] = set()
         for signature in sorted(src_functions.keys() | dst_functions.keys()):
             src_func = src_functions.get(signature)
             dst_func = dst_functions.get(signature)
@@ -65,9 +71,10 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
                 # CREATE OR REPLACE cannot change the return type, so drop first when it differs.
                 if src_func.return_type != dst_func.return_type:
                     yield Statement(Phase.FUNCTION_DROP, _drop_function_sql(schema_name, src_func))
+                    recreated.add(signature)
                 yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
 
         # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
         # the routines they annotate have been created above.
-        for sql in _function_comment_statements(schema_name, src_functions, dst_functions):
+        for sql in _function_comment_statements(schema_name, src_functions, dst_functions, recreated):
             yield Statement(Phase.FUNCTION_CREATE, sql)
