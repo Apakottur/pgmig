@@ -6,7 +6,17 @@ SELECT
     pg_get_functiondef(p.oid) AS func_def,
     format_type(p.prorettype, NULL) AS func_rettype,
     p.prokind AS func_kind,
-    obj_description(p.oid, 'pg_proc') AS func_comment
+    obj_description(p.oid, 'pg_proc') AS func_comment,
+    EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.refclassid = 'pg_proc'::regclass
+            AND d.refobjid = p.oid
+            AND d.deptype IN ('n', 'a')
+            AND d.classid <> 'pg_trigger'::regclass) AS func_has_dependents
 FROM
     pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace

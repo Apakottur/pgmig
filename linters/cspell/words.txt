@@ -71,6 +71,7 @@ indisprimary
 indrelid
 indexrelid
 refclassid
+refobjid
 regclass
 conkey
 conname
