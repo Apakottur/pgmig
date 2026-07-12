@@ -101,3 +101,4 @@ prorettype
 rettype
 overloadable
 inplace
+renamable
