@@ -14,7 +14,6 @@ _KIND_NAMES = {
     "p": "partitioned table",
     "f": "foreign table",
     "c": "composite type",
-    "d": "domain",
     "r": "range type",
 }
 
