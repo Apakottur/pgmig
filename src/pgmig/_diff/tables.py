@@ -74,6 +74,17 @@ def _alter_columns(
                     f"Column identity change is not supported: "
                     f"{qualified(schema_name, table_name)}.{ident(column_name)}"
                 )
+            # A serial change keeps the integer type, so the type guard above does not
+            # fire. Its owned sequence is excluded from introspection, so emitting the
+            # SET DEFAULT nextval('..._seq') would reference a sequence that is never
+            # created (apply fails "relation does not exist"). Raise until real support
+            # (create sequence + OWNED BY + default) lands.
+            if src_column.serial_type != dst_column.serial_type:
+                raise NotImplementedError(
+                    f"Column serial change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
+                    f"{src_column.serial_type} -> {dst_column.serial_type}"
+                )
             prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             if src_column.default != dst_column.default:
                 if dst_column.default is None:
