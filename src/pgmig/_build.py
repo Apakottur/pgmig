@@ -4,6 +4,7 @@ from typing import Any, cast
 import psycopg
 from typing_extensions import LiteralString
 
+from pgmig._errors import PgmigError
 from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table
 
 
@@ -23,8 +24,14 @@ def build_db_info(dsn: str) -> DbInfo:
     schema_by_name: dict[str, Schema] = {}
     extension_by_name = {}
 
+    # Open the connection, surfacing connection failures as a clean PgmigError.
+    try:
+        conn = psycopg.connect(dsn, options="-c default_transaction_read_only=on")
+    except psycopg.Error as error:
+        raise PgmigError(f"Could not connect to database: {error}") from error
+
     # Construct database attributes.
-    with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
+    with conn:
         # Schemas (user namespaces, excluding system and extension-owned ones).
         for (schema_name,) in _run_query(conn, "schemas.sql"):
             schema_by_name[schema_name] = Schema(

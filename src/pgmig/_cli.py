@@ -1,14 +1,17 @@
+import traceback
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from pgmig._errors import PgmigError
 from pgmig.api import generate as generate_migration
 
 app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
+    pretty_exceptions_enable=False,
     help="Generate migrations between Postgres databases.",
 )
 
@@ -33,8 +36,16 @@ def generate(
     """
     try:
         sql = generate_migration(source=source, target=target)
+    except PgmigError as error:
+        typer.echo(error.message, err=True)
+        raise typer.Exit(code=1) from error
     except Exception as error:
-        typer.echo(f"Error: {error}", err=True)
+        typer.echo(traceback.format_exc(), err=True)
+        typer.echo(
+            "This is an internal error in pgmig. Please open an issue with the traceback above:\n"
+            "https://github.com/Apakottur/pgmig/issues",
+            err=True,
+        )
         raise typer.Exit(code=1) from error
 
     if not sql:

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 from pgmig._cli import app
@@ -44,8 +45,29 @@ def test_generate_empty_diff_no_output(gen_setup: GenerateSetup) -> None:
     assert result.stdout == ""
 
 
-def test_generate_bad_dsn_errors() -> None:
+def test_generate_connection_error_is_clean() -> None:
+    # A bad connection string is a known (PgmigError) failure: clean message, no traceback.
     result = _runner.invoke(app, ["generate", "-s", "not-a-dsn", "-t", "not-a-dsn"])
 
     assert result.exit_code == 1
-    assert "Error" in result.output
+    assert "Could not connect to database" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
+    # An unexpected failure is an internal error: full traceback plus an issue prompt.
+    mocker.patch("pgmig._cli.generate_migration", side_effect=ValueError("boom"))
+
+    result = _runner.invoke(app, ["generate", "-s", "src", "-t", "tgt"])
+
+    assert result.exit_code == 1
+    assert "internal error" in result.output.lower()
+    assert "github.com/Apakottur/pgmig/issues" in result.output
+    assert "ValueError" in result.output
+
+
+def test_version() -> None:
+    result = _runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() != ""
