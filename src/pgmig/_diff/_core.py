@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol, TypeVar
@@ -108,6 +108,10 @@ class Context:
     # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
     # run inside a transaction block.
     index_concurrently: bool = False
+
+    # Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ... UPDATE TO
+    # is emitted for them. Empty (default) ignores none.
+    ignore_extension_version: Sequence[str] = ()
 
 
 class Generator(Protocol):

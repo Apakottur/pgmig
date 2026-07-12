@@ -139,3 +139,34 @@ def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp_path:
     assert result.exit_code == 1
     assert "Could not write migration output" in result.output
     assert "Traceback" not in result.output
+
+
+def test_ignore_extension_version_flags_pass_list(mocker: MockerFixture) -> None:
+    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
+
+    result = _runner.invoke(
+        app,
+        [
+            "generate",
+            "-s",
+            "src",
+            "-t",
+            "tgt",
+            "--ignore-extension-version",
+            "postgis",
+            "--ignore-extension-version",
+            "hstore",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert spy.call_args.kwargs["ignore_extension_version"] == ["postgis", "hstore"]
+
+
+def test_no_ignore_flags_passes_empty_list(mocker: MockerFixture) -> None:
+    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
+
+    result = _runner.invoke(app, ["generate", "-s", "src", "-t", "tgt"])
+
+    assert result.exit_code == 0
+    assert spy.call_args.kwargs["ignore_extension_version"] == []

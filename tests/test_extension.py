@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from psycopg import sql
 
+from pgmig import generate
 from tests.fixtures.generate_setup import GenerateSetup
 from tests.utils.db_utils import DbConnection
 
@@ -245,6 +246,34 @@ def test_extension_version_update(gen_setup: GenerateSetup) -> None:
 
     # Verify migration.
     gen_setup.assert_migration_sql(f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}';")
+
+
+def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: GenerateSetup) -> None:
+    """
+    A list naming the extension suppresses only that extension's version update.
+    """
+    ext_info = _pick_multi_version_extension(gen_setup.src)
+    _create_extension(gen_setup.src, ext_info.name, version=ext_info.min_version)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.max_version)
+
+    sql_out = generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name])
+
+    assert sql_out == ""
+
+
+def test_ignore_extension_version_list_non_matching_still_updates(gen_setup: GenerateSetup) -> None:
+    """
+    A list that does not name the extension leaves its version update in place.
+    """
+    ext_info = _pick_multi_version_extension(gen_setup.src)
+    _create_extension(gen_setup.src, ext_info.name, version=ext_info.min_version)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.max_version)
+
+    sql_out = generate(
+        source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=["some_other_extension"]
+    )
+
+    assert sql_out == f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}';"
 
 
 def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
