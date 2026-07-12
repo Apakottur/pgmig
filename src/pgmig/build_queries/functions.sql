@@ -1,12 +1,12 @@
 -- Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
 SELECT
-    n.nspname,
-    p.proname,
-    pg_get_function_identity_arguments(p.oid),
-    pg_get_functiondef(p.oid),
-    format_type(p.prorettype, NULL),
-    p.prokind,
-    obj_description(p.oid, 'pg_proc')
+    n.nspname AS schema_name,
+    p.proname AS func_name,
+    pg_get_function_identity_arguments(p.oid) AS func_args,
+    pg_get_functiondef(p.oid) AS func_def,
+    format_type(p.prorettype, NULL) AS func_rettype,
+    p.prokind AS func_kind,
+    obj_description(p.oid, 'pg_proc') AS func_comment
 FROM
     pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace

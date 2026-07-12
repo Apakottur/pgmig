@@ -1,10 +1,10 @@
 -- Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
 SELECT
-    n.nspname,
-    c.relname,
-    t.tgname,
-    pg_get_triggerdef(t.oid),
-    replace(pg_get_triggerdef(t.oid), 'TRIGGER ' || quote_ident(t.tgname) || ' ', 'TRIGGER ')
+    n.nspname AS schema_name,
+    c.relname AS table_name,
+    t.tgname AS trigger_name,
+    pg_get_triggerdef(t.oid) AS trigger_def,
+    replace(pg_get_triggerdef(t.oid), 'TRIGGER ' || quote_ident(t.tgname) || ' ', 'TRIGGER ') AS trigger_canonical
 FROM
     pg_trigger t
     JOIN pg_class c ON c.oid = t.tgrelid

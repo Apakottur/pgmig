@@ -1,11 +1,12 @@
 -- Indexes (standalone only; constraint-backed indexes are excluded).
 SELECT
-    n.nspname,
-    c.relname,
-    ic.relname,
-    pg_get_indexdef(i.indexrelid),
-    replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON '),
-    obj_description(i.indexrelid, 'pg_class')
+    n.nspname AS schema_name,
+    c.relname AS table_name,
+    ic.relname AS index_name,
+    pg_get_indexdef(i.indexrelid) AS index_def,
+    replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ')
+	AS index_canonical,
+    obj_description(i.indexrelid, 'pg_class') AS index_comment
 FROM
     pg_index i
     JOIN pg_class ic ON ic.oid = i.indexrelid

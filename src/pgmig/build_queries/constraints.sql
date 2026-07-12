@@ -1,10 +1,10 @@
 -- Constraints (primary key, unique, and check).
 SELECT
-    n.nspname,
-    c.relname,
-    con.conname,
-    pg_get_constraintdef(con.oid),
-    con.contype,
+    n.nspname AS schema_name,
+    c.relname AS table_name,
+    con.conname AS con_name,
+    pg_get_constraintdef(con.oid) AS con_def,
+    con.contype AS con_type,
     (
         SELECT
             array_agg(a.attname ORDER BY k.ord)
@@ -12,8 +12,8 @@ SELECT
             unnest(con.conkey)
             WITH ORDINALITY AS k (attnum, ord)
             JOIN pg_attribute a ON a.attrelid = con.conrelid
-                AND a.attnum = k.attnum),
-        obj_description(con.oid, 'pg_constraint')
+                AND a.attnum = k.attnum) AS con_columns,
+        obj_description(con.oid, 'pg_constraint') AS con_comment
     FROM
         pg_constraint con
     JOIN pg_class c ON c.oid = con.conrelid
