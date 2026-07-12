@@ -1,13 +1,13 @@
 from tests.fixtures.generate_setup import GenerateSetup
 
-_FUNCTION = "CREATE FUNCTION log_change() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END;$$"
-
 
 def _setup(gen_setup: GenerateSetup) -> None:
     """
     Create the trigger function and the table on both sides, so tests isolate the trigger.
     """
-    gen_setup.execute_both(_FUNCTION)
+    gen_setup.execute_both(
+        "CREATE FUNCTION log_change() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END;$$"
+    )
     gen_setup.execute_both("CREATE TABLE person (name text)")
 
 
