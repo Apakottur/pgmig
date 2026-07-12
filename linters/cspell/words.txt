@@ -118,3 +118,4 @@ enumsortorder
 enumtypid
 libpq
 dbname
+deparse

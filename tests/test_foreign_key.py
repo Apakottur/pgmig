@@ -19,7 +19,7 @@ def test_foreign_key_add(gen_setup: GenerateSetup) -> None:
     )
 
     gen_setup.assert_migration_sql(
-        'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES team(id);'
+        'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES public.team(id);'
     )
 
 
@@ -68,7 +68,7 @@ def test_foreign_key_definition_changed(gen_setup: GenerateSetup) -> None:
         [
             'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey";',
             'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
-            "FOREIGN KEY (team_id) REFERENCES team(id) ON DELETE CASCADE;",
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) ON DELETE CASCADE;",
         ]
     )
 
@@ -101,7 +101,7 @@ def test_foreign_key_add_ordered_after_referenced_pk(gen_setup: GenerateSetup) -
             'CREATE TABLE "public"."person" ("team_id" integer);',
             'CREATE TABLE "public"."team" ("id" integer NOT NULL);',
             'ALTER TABLE "public"."team" ADD CONSTRAINT "team_pkey" PRIMARY KEY (id);',
-            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES team(id);',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES public.team(id);',
         ]
     )
 
