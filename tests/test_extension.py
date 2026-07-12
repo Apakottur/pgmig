@@ -109,6 +109,32 @@ def test_extension_create(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
+    """
+    A table an extension owns directly (as PostGIS owns spatial_ref_sys in public) must
+    not be re-emitted: CREATE EXTENSION already creates it, plus its indexes and
+    constraints, so a CREATE TABLE would fail with "relation already exists". The
+    migration must contain only the CREATE EXTENSION.
+
+    Extension ownership is reproduced with ALTER EXTENSION ... ADD, which records the
+    same pg_depend deptype='e' membership PostGIS relies on -- no PostGIS image needed.
+    """
+    ext_info = _get_installable_extension(gen_setup.dst)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+
+    # A table with a primary key and a secondary index. Extension membership is
+    # recorded on the table; the constraint and index are excluded because their
+    # owning table is extension-owned, exercising all three query exclusions.
+    gen_setup.dst.execute("CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY, name text)")
+    gen_setup.dst.execute("CREATE INDEX spatial_ref_sys_name_idx ON spatial_ref_sys (name)")
+    ext = sql.Identifier(ext_info.name)
+    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD TABLE spatial_ref_sys").format(ext=ext))
+
+    gen_setup.assert_migration_sql(
+        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+    )
+
+
 def test_extension_drop(gen_setup: GenerateSetup) -> None:
     """
     Extension present in source but missing in target -> DROP EXTENSION.

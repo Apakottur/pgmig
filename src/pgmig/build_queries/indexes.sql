@@ -22,6 +22,16 @@ WHERE
         WHERE
             d.objid = n.oid
             AND d.deptype = 'e')
+    -- Exclude indexes on tables an extension owns directly: they are recreated by
+    -- CREATE EXTENSION, so re-emitting them would conflict.
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
+            AND d.deptype = 'e')
     AND NOT i.indisprimary
     AND NOT EXISTS (
         SELECT
