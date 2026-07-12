@@ -71,3 +71,15 @@ def test_version() -> None:
 
     assert result.exit_code == 0
     assert result.stdout.strip() != ""
+
+
+def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp_path: Path) -> None:
+    # --output pointing into a nonexistent directory is a clean write failure, not a traceback.
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    out = tmp_path / "nope" / "migration.sql"
+
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-o", str(out)])
+
+    assert result.exit_code == 1
+    assert "Could not write migration output" in result.output
+    assert "Traceback" not in result.output

@@ -137,7 +137,7 @@ class Function:
     name: str
     identity_arguments: str  # pg_get_function_identity_arguments, e.g. "a integer" (the DROP signature)
     definition: str  # pg_get_functiondef output: a full CREATE OR REPLACE ...
-    return_type: str | None  # format_type(prorettype); None for procedures
+    return_type: str  # format_type(prorettype); "void" for a procedure
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
     # Whether a non-trigger object (column default, check constraint, expression

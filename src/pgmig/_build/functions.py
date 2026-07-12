@@ -12,7 +12,7 @@ class _FunctionRow(BaseModel):
     func_name: str
     func_args: str
     func_def: str
-    func_rettype: str | None
+    func_rettype: str
     func_kind: str
     func_comment: str | None
     func_has_dependents: bool

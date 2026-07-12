@@ -105,7 +105,7 @@ def test_extension_create(gen_setup: GenerateSetup) -> None:
 
     # Verify migration.
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
@@ -131,7 +131,7 @@ def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD TABLE spatial_ref_sys").format(ext=ext))
 
     gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
     )
 
 
