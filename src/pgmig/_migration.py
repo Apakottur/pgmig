@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from dataclasses import dataclass
+from enum import Enum, auto
 from typing import TypeVar
 
 from pgmig._models import Column, Constraint, DbInfo, Index, Sequence
@@ -6,53 +8,88 @@ from pgmig._models import Column, Constraint, DbInfo, Index, Sequence
 _Renamable = TypeVar("_Renamable")
 
 
-def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+class Phase(Enum):
+    """
+    Global ordering bucket for a migration statement. Members are declared in
+    execution order (priority); statements are grouped by phase and emitted by
+    iterating the enum, so a statement's position is decided by its dependency
+    phase, not by generator call order.
+    """
+
+    FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
+    FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
+    SCHEMA_CREATE = auto()
+    EXTENSION = auto()
+    SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
+    TABLE = auto()
+    INDEX = auto()
+    CONSTRAINT = auto()
+    FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
+    FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
+    SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
+    SCHEMA_DROP = auto()
+
+
+@dataclass(frozen=True)
+class Statement:
+    """
+    A migration SQL statement tagged with the phase that fixes its global position.
+    """
+
+    phase: Phase
+    sql: str
+
+
+def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     Generate the migration SQL of schemas.
-
-    Returns:
-        A 2-tuple of schema lists: (creates, drops).
     """
-    creates: list[str] = []
-    drops: list[str] = []
+    statements: list[Statement] = []
 
     for name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
         # Present in target only: create it.
         if name not in source.schema_by_name:
-            creates.append(f'CREATE SCHEMA "{name}";')
+            statements.append(Statement(Phase.SCHEMA_CREATE, f'CREATE SCHEMA "{name}";'))
         # Present in source only: drop it.
         elif name not in target.schema_by_name:
-            drops.append(f'DROP SCHEMA "{name}";')
+            statements.append(Statement(Phase.SCHEMA_DROP, f'DROP SCHEMA "{name}";'))
 
-    return creates, drops
+    return statements
 
 
-def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[str]:
+def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     Generate the migration SQL of extensions.
     """
-    statements: list[str] = []
+    statements: list[Statement] = []
 
     for name in sorted(source.extension_by_name.keys() | target.extension_by_name.keys()):
         # Present in target only: create it.
         if name not in source.extension_by_name:
             dst_ext = target.extension_by_name[name]
             statements.append(
-                f'CREATE EXTENSION "{dst_ext.name}" VERSION \'{dst_ext.version}\' SCHEMA "{dst_ext.schema}";'
+                Statement(
+                    Phase.EXTENSION,
+                    f'CREATE EXTENSION "{dst_ext.name}" VERSION \'{dst_ext.version}\' SCHEMA "{dst_ext.schema}";',
+                )
             )
         # Present in source only: drop it.
         elif name not in target.extension_by_name:
             src_ext = source.extension_by_name[name]
-            statements.append(f'DROP EXTENSION "{src_ext.name}";')
+            statements.append(Statement(Phase.EXTENSION, f'DROP EXTENSION "{src_ext.name}";'))
 
         # Present in both: alter version and/or schema if they differ.
         else:
             src_ext = source.extension_by_name[name]
             dst_ext = target.extension_by_name[name]
             if src_ext.version != dst_ext.version:
-                statements.append(f"ALTER EXTENSION \"{dst_ext.name}\" UPDATE TO '{dst_ext.version}';")
+                statements.append(
+                    Statement(Phase.EXTENSION, f"ALTER EXTENSION \"{dst_ext.name}\" UPDATE TO '{dst_ext.version}';")
+                )
             if src_ext.schema != dst_ext.schema:
-                statements.append(f'ALTER EXTENSION "{dst_ext.name}" SET SCHEMA "{dst_ext.schema}";')
+                statements.append(
+                    Statement(Phase.EXTENSION, f'ALTER EXTENSION "{dst_ext.name}" SET SCHEMA "{dst_ext.schema}";')
+                )
     return statements
 
 
@@ -98,9 +135,9 @@ def _column_comment_statements(
     return statements
 
 
-def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
+def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
-    Generate the migration SQL of tables.
+    Generate the migration SQL of tables (create/drop, columns, comments).
     """
     statements: list[str] = []
 
@@ -183,10 +220,10 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[str]:
                 )
             )
 
-    return statements
+    return [Statement(Phase.TABLE, sql) for sql in statements]
 
 
-def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
+def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
     """
@@ -212,7 +249,7 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
             statements.extend(renames)
             statements.extend(creates)
 
-    return statements
+    return [Statement(Phase.INDEX, sql) for sql in statements]
 
 
 def _diff_renamable(
@@ -301,7 +338,7 @@ def _diff_constraints(
     )
 
 
-def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
+def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
     """
@@ -330,16 +367,14 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:
             statements.extend(renames)
             statements.extend(adds)
 
-    return statements
+    return [Statement(Phase.CONSTRAINT, sql) for sql in statements]
 
 
-def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
-    Generate the migration SQL of foreign key constraints.
-
-    Returns:
-        A 2-tuple (drops, adds). Drops run before referenced objects are dropped;
-        adds (including renames) run after referenced tables and their keys exist.
+    Generate the migration SQL of foreign key constraints. Drops are phased before
+    referenced objects are dropped; adds (with renames) after referenced tables and
+    their keys exist.
     """
     fk_drops: list[str] = []
     fk_adds: list[str] = []
@@ -367,16 +402,16 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> tuple[list[str]
             fk_adds.extend(renames)
             fk_adds.extend(adds)
 
-    return fk_drops, fk_adds
+    return [Statement(Phase.FOREIGN_KEY_DROP, sql) for sql in fk_drops] + [
+        Statement(Phase.FOREIGN_KEY_ADD, sql) for sql in fk_adds
+    ]
 
 
-def _generate_functions(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
-    Generate the migration SQL of functions and procedures.
-
-    Returns:
-        A 2-tuple (creates, drops). Creates (including CREATE OR REPLACE) run after
-        tables so routine bodies can reference them; drops run early.
+    Generate the migration SQL of functions and procedures. Creates (including
+    CREATE OR REPLACE) are phased after tables so routine bodies can reference them;
+    drops run early.
     """
     creates: list[str] = []
     drops: list[str] = []
@@ -409,7 +444,9 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> tuple[list[str], l
                     )
                 creates.append(f"{dst_func.definition};")
 
-    return creates, drops
+    return [Statement(Phase.FUNCTION_CREATE, sql) for sql in creates] + [
+        Statement(Phase.FUNCTION_DROP, sql) for sql in drops
+    ]
 
 
 def _sequence_tail(sequence: Sequence) -> str:
@@ -429,13 +466,10 @@ def _sequence_tail(sequence: Sequence) -> str:
     return tail
 
 
-def _generate_sequences(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
-    Generate the migration SQL of standalone sequences.
-
-    Returns:
-        A 2-tuple: (creates and alters, drops). Creates run before tables (a column
-        default may reference a sequence); drops run after.
+    Generate the migration SQL of standalone sequences. Creates and alters are phased
+    before tables (a column default may reference a sequence); drops run after.
     """
     creates: list[str] = []
     drops: list[str] = []
@@ -475,38 +509,29 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> tuple[list[str], l
                 if clauses:
                     creates.append(f'ALTER SEQUENCE "{schema_name}"."{name}" {" ".join(clauses)};')
 
-    return creates, drops
+    return [Statement(Phase.SEQUENCE_CREATE, sql) for sql in creates] + [
+        Statement(Phase.SEQUENCE_DROP, sql) for sql in drops
+    ]
 
 
 def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     """
     Get the migration SQL between the given source and target databases.
     """
-    statements: list[str] = []
+    # Collect statements by phase.
+    statements_by_phase: dict[Phase, list[str]] = {phase: [] for phase in Phase}
+    for generate in (
+        _generate_schemas,
+        _generate_extensions,
+        _generate_sequences,
+        _generate_tables,
+        _generate_indexes,
+        _generate_constraints,
+        _generate_foreign_keys,
+        _generate_functions,
+    ):
+        for statement in generate(source=source, target=target):
+            statements_by_phase[statement.phase].append(statement.sql)
 
-    # Generate all statements.
-    schema_creates, schema_drops = _generate_schemas(source=source, target=target)
-    extension_statements = _generate_extensions(source=source, target=target)
-    sequence_creates, sequence_drops = _generate_sequences(source=source, target=target)
-    table_statements = _generate_tables(source=source, target=target)
-    index_statements = _generate_indexes(source=source, target=target)
-    constraint_statements = _generate_constraints(source=source, target=target)
-    foreign_key_drops, foreign_key_adds = _generate_foreign_keys(source=source, target=target)
-    function_creates, function_drops = _generate_functions(source=source, target=target)
-
-    # Add statements in the correct order.
-    statements.extend(foreign_key_drops)  # Before referenced tables / keys are dropped.
-    statements.extend(function_drops)  # Before tables a routine body may depend on.
-    statements.extend(schema_creates)
-    statements.extend(extension_statements)
-    statements.extend(sequence_creates)
-    statements.extend(table_statements)
-    statements.extend(index_statements)
-    statements.extend(constraint_statements)
-    statements.extend(function_creates)  # After tables so routine bodies can reference them.
-    statements.extend(foreign_key_adds)  # After referenced tables and their keys exist.
-    statements.extend(sequence_drops)
-    statements.extend(schema_drops)
-
-    # Join all statements into a single string.
-    return "\n".join(statements)
+    # Join statements by phase, ordering by phase declaration order.
+    return "\n".join(sql for phase in Phase for sql in statements_by_phase[phase])
