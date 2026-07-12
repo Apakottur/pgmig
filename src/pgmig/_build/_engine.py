@@ -44,8 +44,20 @@ def build_db_info(dsn: str) -> DbInfo:
     # search_path and forces the deparse functions (format_type, pg_get_expr,
     # pg_get_constraintdef, pg_get_indexdef, ...) to fully qualify every name, so the
     # emitted SQL is deterministic and portable regardless of the runner's search_path.
+    #
+    # REPEATABLE READ takes a single catalog snapshot at the first query and holds it for
+    # the whole transaction, so all loaders below see one frozen instant. Without it, each
+    # statement gets its own snapshot (READ COMMITTED), and concurrent DDL between loaders
+    # could produce a torn view (e.g. a constraint row for a table tables.load never saw).
     try:
-        conn = psycopg.connect(dsn, options="-c default_transaction_read_only=on -c search_path=")
+        conn = psycopg.connect(
+            dsn,
+            options=(
+                "-c default_transaction_read_only=on"
+                " -c default_transaction_isolation=repeatable\\ read"
+                " -c search_path="
+            ),
+        )
     except psycopg.Error as error:
         raise PgmigError(f"Could not connect to database: {error}") from error
 
