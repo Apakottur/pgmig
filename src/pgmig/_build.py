@@ -1,6 +1,6 @@
 import psycopg
 
-from pgmig._models import Column, Constraint, DbInfo, Extension, Index, Schema, Sequence, Table
+from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table
 
 
 def build_db_info(dsn: str) -> DbInfo:
@@ -33,7 +33,9 @@ def build_db_info(dsn: str) -> DbInfo:
             """
         ).fetchall()
         for (schema_name,) in rows:
-            schema_by_name[schema_name] = Schema(name=schema_name, table_by_name={}, sequence_by_name={})
+            schema_by_name[schema_name] = Schema(
+                name=schema_name, table_by_name={}, sequence_by_name={}, function_by_signature={}
+            )
 
         # Tables (and their columns, ordered by name).
         rows = conn.execute(
@@ -244,6 +246,43 @@ def build_db_info(dsn: str) -> DbInfo:
                 max_value=seq_max,
                 cache=seq_cache,
                 cycle=seq_cycle,
+            )
+
+        # Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
+        rows = conn.execute(
+            """
+            SELECT
+                n.nspname,
+                p.proname,
+                pg_get_function_identity_arguments(p.oid),
+                pg_get_functiondef(p.oid),
+                format_type(p.prorettype, NULL),
+                p.prokind
+            FROM
+                pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE
+                p.prokind IN ('f', 'p')
+                AND n.nspname NOT LIKE 'pg_%'
+                AND n.nspname <> 'information_schema'
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        pg_depend d
+                    WHERE
+                        d.objid = p.oid
+                        AND d.deptype = 'e')
+            """
+        ).fetchall()
+        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in rows:
+            signature = f"{func_name}({func_args})"
+            schema_by_name[schema_name].function_by_signature[signature] = Function(
+                name=func_name,
+                identity_arguments=func_args,
+                definition=func_def.rstrip(),
+                return_type=func_rettype,
+                kind=func_kind,
             )
 
         # Extensions (database-level).

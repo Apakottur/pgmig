@@ -351,6 +351,48 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> tuple[list[str]
     return fk_drops, fk_adds
 
 
+def _generate_functions(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
+    """
+    Generate the migration SQL of functions and procedures.
+
+    Returns:
+        A 2-tuple (creates, drops). Creates (including CREATE OR REPLACE) run after
+        tables so routine bodies can reference them; drops run early.
+    """
+    creates: list[str] = []
+    drops: list[str] = []
+
+    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
+        src_schema = source.schema_by_name.get(schema_name)
+        dst_schema = target.schema_by_name.get(schema_name)
+        src_functions = src_schema.function_by_signature if src_schema else {}
+        dst_functions = dst_schema.function_by_signature if dst_schema else {}
+
+        for signature in sorted(src_functions.keys() | dst_functions.keys()):
+            src_func = src_functions.get(signature)
+            dst_func = dst_functions.get(signature)
+
+            # Present in target only: create it.
+            if src_func is None:
+                # pg_get_functiondef has no trailing semicolon; add one to terminate the statement.
+                creates.append(f"{dst_functions[signature].definition};")
+            # Present in source only: drop it.
+            elif dst_func is None:
+                drops.append(
+                    f'DROP {src_func.drop_keyword} "{schema_name}"."{src_func.name}"({src_func.identity_arguments});'
+                )
+            # Present in both: re-create if the definition changed.
+            elif src_func.definition != dst_func.definition:
+                # CREATE OR REPLACE cannot change the return type, so drop first when it differs.
+                if src_func.return_type != dst_func.return_type:
+                    drops.append(
+                        f'DROP {src_func.drop_keyword} "{schema_name}"."{src_func.name}"({src_func.identity_arguments});'
+                    )
+                creates.append(f"{dst_func.definition};")
+
+    return creates, drops
+
+
 def _sequence_tail(sequence: Sequence) -> str:
     """
     Render the parameter tail shared by CREATE SEQUENCE.
@@ -431,15 +473,18 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     index_statements = _generate_indexes(source=source, target=target)
     constraint_statements = _generate_constraints(source=source, target=target)
     foreign_key_drops, foreign_key_adds = _generate_foreign_keys(source=source, target=target)
+    function_creates, function_drops = _generate_functions(source=source, target=target)
 
     # Add statements in the correct order.
     statements.extend(foreign_key_drops)  # Before referenced tables / keys are dropped.
+    statements.extend(function_drops)  # Before tables a routine body may depend on.
     statements.extend(schema_creates)
     statements.extend(extension_statements)
     statements.extend(sequence_creates)
     statements.extend(table_statements)
     statements.extend(index_statements)
     statements.extend(constraint_statements)
+    statements.extend(function_creates)  # After tables so routine bodies can reference them.
     statements.extend(foreign_key_adds)  # After referenced tables and their keys exist.
     statements.extend(sequence_drops)
     statements.extend(schema_drops)
