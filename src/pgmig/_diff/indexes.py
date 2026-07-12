@@ -74,7 +74,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
             schema_name=schema_name,
             src=src_indexes,
             dst=dst_indexes,
-            concurrently=ctx.options.index_concurrently,
+            concurrently=ctx.index_concurrently,
         )
         comments = _index_comment_statements(schema_name, src_indexes, dst_indexes, recreated)
         # Emit drops first (frees names), then renames, then creates, then comments.

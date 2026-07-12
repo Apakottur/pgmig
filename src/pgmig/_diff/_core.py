@@ -93,31 +93,21 @@ class Statement:
 
 
 @dataclass(frozen=True)
-class Options:
-    """
-    Output options that tune how statements are rendered (most generators ignore these;
-    today only index generation reads a field).
-
-    index_concurrently: emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with
-        CONCURRENTLY so index maintenance does not take a blocking lock. The resulting
-        statements cannot run inside a transaction block -- the caller must apply them
-        outside BEGIN/COMMIT.
-    """
-
-    index_concurrently: bool = False
-
-
-@dataclass(frozen=True)
 class Context:
     """
-    Everything a generator needs: the two databases being diffed and the output options.
-    Bundling them keeps every generator's signature uniform (`ctx`) without threading a
-    fixed list of parameters that most generators only partially use.
+    Everything a generator needs: the two databases being diffed and the output configuration.
     """
 
+    # Databases.
     source: DbInfo
     target: DbInfo
-    options: Options
+
+    # Output configuration.
+
+    # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
+    # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
+    # run inside a transaction block.
+    index_concurrently: bool = False
 
 
 class Generator(Protocol):
