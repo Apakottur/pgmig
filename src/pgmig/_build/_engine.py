@@ -2,6 +2,7 @@ import psycopg
 
 from pgmig._build import (
     constraints,
+    domains,
     enums,
     extensions,
     functions,
@@ -41,6 +42,7 @@ _LOADERS: tuple[Loader, ...] = (
     triggers.load,
     enums.load,
     views.load,
+    domains.load,
     extensions.load,
 )
 

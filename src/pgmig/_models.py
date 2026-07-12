@@ -176,6 +176,20 @@ class View:
     comment: str | None
 
 
+@dataclass(frozen=True)
+class Domain:
+    """
+    A Postgres domain type, owned by a schema.
+    """
+
+    name: str
+    data_type: str  # base type, format_type(typbasetype, typtypmod)
+    default: str | None  # default expression text (pg_type.typdefault), None if absent
+    not_null: bool
+    check_by_name: dict[str, str]  # CHECK constraint name -> pg_get_constraintdef ("CHECK (...)")
+    comment: str | None
+
+
 @dataclass
 class Schema:
     """
@@ -189,6 +203,7 @@ class Schema:
     function_by_signature: dict[str, Function]
     enum_by_name: dict[str, EnumType]
     view_by_name: dict[str, View]
+    domain_by_name: dict[str, Domain]
 
 
 @dataclass(frozen=True)

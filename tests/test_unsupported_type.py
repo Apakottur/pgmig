@@ -16,16 +16,6 @@ def test_composite_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
-def test_domain_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A domain (pg_type typtype 'd') is not modelled yet and must raise.
-    """
-    gen_setup.dst.execute("CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0)")
-
-    with pytest.raises(PgmigError, match=r"domain .* is not supported"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
-
-
 def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     A range type (pg_type typtype 'r') is not modelled yet and must raise.
