@@ -266,14 +266,15 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             continue
 
         src_indexes = src_table.index_by_name if src_table else {}
-        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_table.index_by_name)
+        dst_indexes = dst_table.index_by_name
+        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
         # Emit drops first (frees names), then renames, then creates.
         statements.extend(drops)
         statements.extend(renames)
         statements.extend(creates)
 
         # Sync comments for target indexes.
-        for index_name, dst_index in dst_table.index_by_name.items():
+        for index_name, dst_index in dst_indexes.items():
             src_index = src_indexes.get(index_name)
             if (src_index.comment if src_index else None) != dst_index.comment:
                 statements.append(comment_on("INDEX", qualified(schema_name, index_name), dst_index.comment))
@@ -439,19 +440,18 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             continue
 
         src_constraints = src_table.constraint_by_name if src_table else {}
+        dst_constraints = dst_table.constraint_by_name
         drops, renames, adds = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
-            dst=dst_table.constraint_by_name,
+            dst=dst_constraints,
         )
         # Drops first (frees names), then renames, then adds.
         statements.extend(drops)
         statements.extend(renames)
         statements.extend(adds)
-        statements.extend(
-            _constraint_comment_statements(schema_name, table_name, src_constraints, dst_table.constraint_by_name)
-        )
+        statements.extend(_constraint_comment_statements(schema_name, table_name, src_constraints, dst_constraints))
 
     return [Statement(Phase.CONSTRAINT, sql) for sql in statements]
 
@@ -471,17 +471,18 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]
             continue
 
         src_fks = src_table.foreign_key_by_name if src_table else {}
+        dst_fks = dst_table.foreign_key_by_name
         drops, renames, adds = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_fks,
-            dst=dst_table.foreign_key_by_name,
+            dst=dst_fks,
         )
         fk_drops.extend(drops)
         # Renames carry no referenced-object dependency, so they ride with the adds.
         fk_adds.extend(renames)
         fk_adds.extend(adds)
-        fk_adds.extend(_constraint_comment_statements(schema_name, table_name, src_fks, dst_table.foreign_key_by_name))
+        fk_adds.extend(_constraint_comment_statements(schema_name, table_name, src_fks, dst_fks))
 
     return [Statement(Phase.FOREIGN_KEY_DROP, sql) for sql in fk_drops] + [
         Statement(Phase.FOREIGN_KEY_ADD, sql) for sql in fk_adds
