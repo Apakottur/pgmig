@@ -92,10 +92,23 @@ print(sql)  # the migration SQL
 
 | Option           | Description                                             |
 | ---------------- | ------------------------------------------------------- |
-| `--source`, `-s` | DSN of the source (current) database. **Required.**     |
-| `--target`, `-t` | DSN of the target (desired) database. **Required.**     |
+| `--source`, `-s` | DSN of the source (current) database. Falls back to the `PGMIG_SOURCE` environment variable. |
+| `--target`, `-t` | DSN of the target (desired) database. Falls back to the `PGMIG_TARGET` environment variable. |
 | `--output`, `-o` | Write the migration SQL to this file instead of stdout. |
 | `--check`, `-c`  | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
+
+### Connections
+
+Each DSN can be passed as a flag or through its environment variable; an explicit flag wins.
+Command-line arguments are visible in `ps` output and shell history, so prefer the environment
+variables for anything containing secrets — for example, in CI:
+
+```yaml
+- run: pgmig generate --check
+  env:
+    PGMIG_SOURCE: ${{ secrets.PROD_DATABASE_URL }}
+    PGMIG_TARGET: postgresql://postgres:postgres@localhost:5432/desired
+```
 
 Other commands:
 
