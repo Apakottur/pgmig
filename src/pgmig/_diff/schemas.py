@@ -1,11 +1,11 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _iter_schema_pairs
+from pgmig._diff._core import Options, Phase, Statement, _iter_schema_pairs
 from pgmig._models import DbInfo
 from pgmig._sql import comment_on, ident
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of schemas.
     """

@@ -1,11 +1,11 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement
+from pgmig._diff._core import Options, Phase, Statement
 from pgmig._models import DbInfo
 from pgmig._sql import comment_on, ident, literal
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of extensions.
     """
@@ -32,7 +32,7 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
         else:
             src_ext = source.extension_by_name[name]
             dst_ext = target.extension_by_name[name]
-            if src_ext.version != dst_ext.version:
+            if src_ext.version != dst_ext.version and not options.should_ignore_extension_version(name):
                 yield Statement(
                     Phase.EXTENSION_CREATE,
                     f"ALTER EXTENSION {ident(dst_ext.name)} UPDATE TO {literal(dst_ext.version)};",

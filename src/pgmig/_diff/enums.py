@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._core import Options, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import DbInfo, EnumType
 from pgmig._sql import comment_on, literal, qualified
 
@@ -43,7 +43,7 @@ def _enum_comment_statements(schema_name: str, src: dict[str, EnumType], dst: di
     )
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of enum types (create, drop, ADD VALUE). Creates and
     value additions are phased before tables (a column may be of the type); drops run

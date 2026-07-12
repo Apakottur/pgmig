@@ -92,14 +92,32 @@ class Statement:
     sql: str
 
 
-class Generator(Protocol):
+@dataclass(frozen=True)
+class Options:
     """
-    The shared shape of every object-kind generator: keyword-only source and target,
-    yielding phase-tagged statements. Annotating the registry with this enforces one
-    uniform signature (names included) across all generators.
+    Tuning for what the diff emits. Threaded to every generator (most ignore it).
+
+    `ignore_extension_version`: suppress the ALTER EXTENSION ... UPDATE TO for a version
+    mismatch. True ignores every extension; a list ignores only the named ones; False
+    (default) ignores none.
     """
 
-    def __call__(self, *, source: DbInfo, target: DbInfo) -> Iterator[Statement]: ...
+    ignore_extension_version: bool | list[str] = False
+
+    def should_ignore_extension_version(self, name: str) -> bool:
+        if isinstance(self.ignore_extension_version, bool):
+            return self.ignore_extension_version
+        return name in self.ignore_extension_version
+
+
+class Generator(Protocol):
+    """
+    The shared shape of every object-kind generator: keyword-only source, target, and
+    options, yielding phase-tagged statements. Annotating the registry with this enforces
+    one uniform signature (names included) across all generators.
+    """
+
+    def __call__(self, *, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:

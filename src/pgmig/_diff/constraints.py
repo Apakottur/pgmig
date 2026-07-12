@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._diff._core import Options, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
 from pgmig._models import Constraint, DbInfo
 from pgmig._sql import comment_on, ident, qualified
 
@@ -38,7 +38,7 @@ def _constraint_comment_statements(
     )
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
     """
@@ -61,7 +61,7 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
             yield Statement(Phase.CONSTRAINT, sql)
 
 
-def generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate_foreign_keys(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of foreign key constraints. Drops are phased before
     referenced objects are dropped; adds (with renames) after referenced tables and

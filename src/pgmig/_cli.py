@@ -39,13 +39,29 @@ def generate(
             "the migration is still emitted so the drift is visible.",
         ),
     ] = False,
+    ignore_extension_version: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--ignore-extension-version",
+            help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
+        ),
+    ] = None,
+    ignore_all_extension_versions: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-all-extension-versions",
+            help="Do not emit ALTER EXTENSION ... UPDATE TO for any extension's version mismatch.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
     """
+    # --ignore-all-extension-versions wins over a per-extension list.
+    ignore_versions: bool | list[str] = ignore_all_extension_versions or (ignore_extension_version or [])
     try:
         # Generate the migration SQL.
-        sql = generate_migration(source=source, target=target)
+        sql = generate_migration(source=source, target=target, ignore_extension_version=ignore_versions)
     except PgmigError as error:
         # Known error - print message without traceback.
         typer.echo(error.message, err=True)

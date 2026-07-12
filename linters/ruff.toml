@@ -123,6 +123,11 @@ ban-relative-imports = "all"
 
 # Per file ignores.
 [lint.per-file-ignores]
+"src/pgmig/_diff/*.py" = [
+  # Every generator shares one uniform signature (source, target, options) enforced by
+  # the Generator protocol; not all of them read every argument.
+  "ARG001",
+]
 "src/pgmig/_cli.py" = [
   "FBT001", # Boolean-typed positional argument (typer option callbacks require it)
   "FBT002", # Boolean default positional argument (typer --version flag)
