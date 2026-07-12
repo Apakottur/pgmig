@@ -5,12 +5,9 @@ import pytest
 import shpyx
 
 from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import DbConnection
+from tests.utils.db_utils import DST_DB, SRC_DB, DbConnection
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
-
-_SRC_DB = "pgmig_src"
-_DST_DB = "pgmig_dst"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -54,8 +51,8 @@ def gen_setup(_admin_conn: DbConnection) -> Iterator[GenerateSetup]:
     Main fixture for testing `generate`.
     """
     # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(_SRC_DB, admin_conn=_admin_conn)
-    dst_conn = DbConnection(_DST_DB, admin_conn=_admin_conn)
+    src_conn = DbConnection(SRC_DB, admin_conn=_admin_conn)
+    dst_conn = DbConnection(DST_DB, admin_conn=_admin_conn)
 
     # Provide the utility class for the test.
     try:

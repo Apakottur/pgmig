@@ -12,6 +12,28 @@ class Column:
     not_null: bool
     default: str | None
     comment: str | None
+    identity: str  # pg_attribute.attidentity ('' for a non-identity column)
+    serial_sequence: str | None  # sequence owned via a nextval() default, else None
+
+    @property
+    def serial_type(self) -> str | None:
+        """
+        The serial pseudo-type to emit ("serial"/"bigserial"/"smallserial"), or None.
+
+        A serial column owns a sequence via its nextval() default and is not an
+        identity column; its integer type maps to the matching pseudo-type.
+        """
+        if self.serial_sequence is None or self.identity != "":
+            return None
+        match self.type:
+            case "smallint":
+                return "smallserial"
+            case "integer":
+                return "serial"
+            case "bigint":
+                return "bigserial"
+            case _:
+                raise NotImplementedError(f"Unknown integer type: {self.type}")
 
 
 @dataclass(frozen=True)
@@ -89,6 +111,26 @@ class Sequence:
     cycle: bool
 
 
+@dataclass(frozen=True)
+class Function:
+    """
+    A Postgres function or procedure. Identified by name and argument types (overloadable).
+    """
+
+    name: str
+    identity_arguments: str  # pg_get_function_identity_arguments, e.g. "a integer" (the DROP signature)
+    definition: str  # pg_get_functiondef output: a full CREATE OR REPLACE ...
+    return_type: str | None  # format_type(prorettype); None for procedures
+    kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
+
+    @property
+    def drop_keyword(self) -> str:
+        """
+        The DROP object keyword for this routine's kind.
+        """
+        return "PROCEDURE" if self.kind == "p" else "FUNCTION"
+
+
 @dataclass
 class Schema:
     """
@@ -98,6 +140,7 @@ class Schema:
     name: str
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
+    function_by_signature: dict[str, Function]
 
 
 @dataclass(frozen=True)

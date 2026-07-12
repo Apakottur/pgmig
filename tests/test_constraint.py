@@ -5,8 +5,7 @@ def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:
     """
     Primary key present in target but missing in source -> ADD CONSTRAINT.
     """
-    gen_setup.src.execute("CREATE TABLE person (id integer NOT NULL)")
-    gen_setup.dst.execute("CREATE TABLE person (id integer NOT NULL)")
+    gen_setup.execute_both("CREATE TABLE person (id integer NOT NULL)")
     gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_pkey PRIMARY KEY (id)")
 
     gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id);')
@@ -27,8 +26,7 @@ def test_constraint_add_unique(gen_setup: GenerateSetup) -> None:
     """
     Unique constraint present in target but missing in source -> ADD CONSTRAINT.
     """
-    gen_setup.src.execute("CREATE TABLE person (email text)")
-    gen_setup.dst.execute("CREATE TABLE person (email text)")
+    gen_setup.execute_both("CREATE TABLE person (email text)")
     gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)")
 
     gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" UNIQUE (email);')

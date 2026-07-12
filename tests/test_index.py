@@ -5,8 +5,7 @@ def test_index_create(gen_setup: GenerateSetup) -> None:
     """
     Index present in target but missing in source -> CREATE INDEX.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    gen_setup.execute_both("CREATE TABLE person (name text)")
     gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
 
     gen_setup.assert_migration_sql("CREATE INDEX person_name_idx ON public.person USING btree (name);")
@@ -68,8 +67,7 @@ def test_index_unique(gen_setup: GenerateSetup) -> None:
     """
     Unique index round-trips as CREATE UNIQUE INDEX.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    gen_setup.execute_both("CREATE TABLE person (name text)")
     gen_setup.dst.execute("CREATE UNIQUE INDEX person_name_idx ON person (name)")
 
     gen_setup.assert_migration_sql("CREATE UNIQUE INDEX person_name_idx ON public.person USING btree (name);")
@@ -79,8 +77,7 @@ def test_index_partial(gen_setup: GenerateSetup) -> None:
     """
     Partial index (WHERE predicate) is created with its predicate.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    gen_setup.execute_both("CREATE TABLE person (name text)")
     gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name) WHERE name IS NOT NULL")
 
     gen_setup.assert_migration_sql(

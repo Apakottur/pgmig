@@ -1,3 +1,6 @@
+from psycopg import sql
+from typing_extensions import LiteralString
+
 from pgmig import generate
 from tests.utils.db_utils import DbConnection
 
@@ -10,6 +13,13 @@ class GenerateSetup:
     def __init__(self, src_conn: DbConnection, dst_conn: DbConnection) -> None:
         self.src = src_conn
         self.dst = dst_conn
+
+    def execute_both(self, query: LiteralString | sql.Composed) -> None:
+        """
+        Run the same query on both the source and target databases.
+        """
+        self.src.execute(query)
+        self.dst.execute(query)
 
     def assert_migration_sql(self, expected: str | list[str], *, apply: bool = True) -> None:
         """
@@ -34,8 +44,10 @@ class GenerateSetup:
 
         # Apply the migration to the source and confirm it converges: after applying,
         # source should match target, so a second generate must produce nothing.
+        # The whole migration is run as one script; individual statements are
+        # ";"-terminated and may themselves span multiple lines (e.g. functions),
+        # so it must not be split on newlines.
         if apply and result:
-            sql_statements = result.split("\n")
-            self.src.execute_all(sql_statements)  # type: ignore[arg-type] # ty: ignore[invalid-argument-type]
+            self.src.execute(result)  # type: ignore[arg-type] # ty: ignore[invalid-argument-type]
             residual = generate(source=self.src.dsn, target=self.dst.dsn)
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"

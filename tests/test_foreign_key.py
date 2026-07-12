@@ -5,9 +5,8 @@ def _setup_tables(gen_setup: GenerateSetup) -> None:
     """
     Create a referenced table (with a primary key) and a referencing table on both sides.
     """
-    for db in (gen_setup.src, gen_setup.dst):
-        db.execute("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
-        db.execute("CREATE TABLE person (team_id integer)")
+    gen_setup.execute_both("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
+    gen_setup.execute_both("CREATE TABLE person (team_id integer)")
 
 
 def test_foreign_key_add(gen_setup: GenerateSetup) -> None:
@@ -79,8 +78,9 @@ def test_foreign_key_unchanged(gen_setup: GenerateSetup) -> None:
     Identical foreign key on both sides -> no migration SQL.
     """
     _setup_tables(gen_setup)
-    for db in (gen_setup.src, gen_setup.dst):
-        db.execute("ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)")
+    gen_setup.execute_both(
+        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
+    )
 
     gen_setup.assert_migration_sql("")
 
