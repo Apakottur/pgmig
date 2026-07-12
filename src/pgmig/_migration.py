@@ -437,16 +437,16 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]
     fk_adds: list[str] = []
 
     for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
-        # Table dropped: its foreign keys are dropped with it.
-        if dst_table is None:
-            continue
-
         src_fks = src_table.foreign_key_by_name if src_table else {}
+        # Table dropped: its foreign keys must still be dropped explicitly, in the
+        # FOREIGN_KEY_DROP phase (before any DROP TABLE), so a referenced table can be
+        # dropped even while its referencing table's constraint has not yet cascaded away.
+        dst_fks = dst_table.foreign_key_by_name if dst_table else {}
         drops, renames, adds = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_fks,
-            dst=dst_table.foreign_key_by_name,
+            dst=dst_fks,
         )
         fk_drops.extend(drops)
         # Renames carry no referenced-object dependency, so they ride with the adds.
