@@ -34,4 +34,7 @@ WHERE
             d.classid = 'pg_class'::regclass
             AND d.objid = c.oid
             AND d.refclassid = 'pg_class'::regclass
-            AND d.deptype IN ('a', 'i'));
+            AND d.deptype IN ('a', 'i'))
+ORDER BY
+    n.nspname,
+    c.relname;

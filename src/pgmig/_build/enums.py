@@ -11,6 +11,7 @@ class _EnumRow(BaseModel):
     schema_name: str
     enum_name: str
     enum_values: list[str]
+    enum_comment: str | None
 
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
@@ -19,5 +20,5 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     """
     for enum_row in _run_query(conn, "enums.sql", _EnumRow):
         db_info.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = EnumType(
-            name=enum_row.enum_name, values=enum_row.enum_values
+            name=enum_row.enum_name, values=enum_row.enum_values, comment=enum_row.enum_comment
         )

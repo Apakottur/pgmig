@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_renamable, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
 from pgmig._models import DbInfo, Index
 from pgmig._sql import comment_on, ident, qualified
 
@@ -22,6 +22,15 @@ def _diff_indexes(
     )
 
 
+def _index_comment_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
+    """
+    Emit COMMENT ON INDEX for target indexes whose comment differs from source.
+    """
+    return _diff_comments(
+        src, dst, render=lambda name, index: comment_on("INDEX", qualified(schema_name, name), index.comment)
+    )
+
+
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
@@ -34,12 +43,7 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
         src_indexes = src_table.index_by_name if src_table else {}
         dst_indexes = dst_table.index_by_name
         drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
-        # Emit drops first (frees names), then renames, then creates.
-        for sql in (*drops, *renames, *creates):
+        comments = _index_comment_statements(schema_name, src_indexes, dst_indexes)
+        # Emit drops first (frees names), then renames, then creates, then comments.
+        for sql in (*drops, *renames, *creates, *comments):
             yield Statement(Phase.INDEX, sql)
-
-        # Sync comments for target indexes.
-        for index_name, dst_index in dst_indexes.items():
-            src_index = src_indexes.get(index_name)
-            if (src_index.comment if src_index else None) != dst_index.comment:
-                yield Statement(Phase.INDEX, comment_on("INDEX", qualified(schema_name, index_name), dst_index.comment))

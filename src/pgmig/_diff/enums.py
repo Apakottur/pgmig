@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _iter_schema_pairs
-from pgmig._models import DbInfo
-from pgmig._sql import literal, qualified
+from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._models import DbInfo, EnumType
+from pgmig._sql import comment_on, literal, qualified
 
 
 def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_values: list[str]) -> list[str]:
@@ -34,6 +34,15 @@ def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_v
     return statements
 
 
+def _enum_comment_statements(schema_name: str, src: dict[str, EnumType], dst: dict[str, EnumType]) -> list[str]:
+    """
+    Emit COMMENT ON TYPE for target enums whose comment differs from source.
+    """
+    return _diff_comments(
+        src, dst, render=lambda name, enum: comment_on("TYPE", qualified(schema_name, name), enum.comment)
+    )
+
+
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
     """
     Generate the migration SQL of enum types (create, drop, ADD VALUE). Creates and
@@ -60,3 +69,7 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
             elif src_enum.values != dst_enum.values:
                 for sql in _enum_add_value_statements(qualified_name, src_enum.values, dst_enum.values):
                     yield Statement(Phase.TYPE_CREATE, sql)
+
+        # Sync comments for target enums, after the types they annotate exist.
+        for sql in _enum_comment_statements(schema_name, src_enums, dst_enums):
+            yield Statement(Phase.TYPE_CREATE, sql)

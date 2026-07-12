@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_table_pairs
 from pgmig._models import Column, DbInfo, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -120,13 +120,11 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     src_columns = {column.name: column for column in src_table.columns} if src_table else {}
     dst_columns = {column.name: column for column in dst_table.columns}
 
-    statements: list[str] = []
-    for column_name in sorted(dst_columns.keys()):
-        src_comment = src_columns[column_name].comment if column_name in src_columns else None
-        dst_comment = dst_columns[column_name].comment
-        if src_comment != dst_comment:
-            statements.append(comment_on("COLUMN", qualified(schema_name, dst_table.name, column_name), dst_comment))
-    return statements
+    return _diff_comments(
+        src_columns,
+        dst_columns,
+        render=lambda name, column: comment_on("COLUMN", qualified(schema_name, dst_table.name, name), column.comment),
+    )
 
 
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:

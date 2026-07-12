@@ -5,4 +5,6 @@ SELECT
     n.nspname AS extension_schema
 FROM
     pg_extension e
-    JOIN pg_namespace n ON n.oid = e.extnamespace;
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+ORDER BY
+    e.extname;

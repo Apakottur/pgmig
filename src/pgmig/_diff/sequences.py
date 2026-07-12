@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import DbInfo, Sequence
 from pgmig._sql import comment_on, qualified
 
@@ -20,6 +20,15 @@ def _sequence_tail(sequence: Sequence) -> str:
     if sequence.cycle:
         tail += " CYCLE"
     return tail
+
+
+def _sequence_comment_statements(schema_name: str, src: dict[str, Sequence], dst: dict[str, Sequence]) -> list[str]:
+    """
+    Emit COMMENT ON SEQUENCE for target sequences whose comment differs from source.
+    """
+    return _diff_comments(
+        src, dst, render=lambda name, sequence: comment_on("SEQUENCE", qualified(schema_name, name), sequence.comment)
+    )
 
 
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
@@ -64,9 +73,5 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
                     yield Statement(Phase.SEQUENCE_CREATE, f"ALTER SEQUENCE {qualified_name} {' '.join(clauses)};")
 
         # Sync comments for target sequences.
-        for name, dst_seq in dst_sequences.items():
-            src_seq = src_sequences.get(name)
-            if (src_seq.comment if src_seq else None) != dst_seq.comment:
-                yield Statement(
-                    Phase.SEQUENCE_CREATE, comment_on("SEQUENCE", qualified(schema_name, name), dst_seq.comment)
-                )
+        for sql in _sequence_comment_statements(schema_name, src_sequences, dst_sequences):
+            yield Statement(Phase.SEQUENCE_CREATE, sql)

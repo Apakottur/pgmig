@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol, TypeVar
@@ -6,6 +6,43 @@ from typing import Protocol, TypeVar
 from pgmig._models import DbInfo, Schema, Table
 
 _Renamable = TypeVar("_Renamable")
+
+
+class _Commented(Protocol):
+    """
+    Any object carrying an optional comment. Declared as a read-only property so plain
+    (frozen) dataclass attributes satisfy it.
+    """
+
+    @property
+    def comment(self) -> str | None: ...
+
+
+_CommentedT = TypeVar("_CommentedT", bound=_Commented)
+
+
+def _diff_comments(
+    src: Mapping[str, _CommentedT],
+    dst: Mapping[str, _CommentedT],
+    *,
+    render: Callable[[str, _CommentedT], str],
+) -> list[str]:
+    """
+    Diff comments across two name->object mappings whose objects carry `.comment`.
+
+    Returns a rendered COMMENT ON statement, in sorted-name order, for every target
+    object whose comment differs from source (an absent source object counts as no
+    comment). The sorted iteration makes the output deterministic regardless of the
+    introspection row order, and gathering the pattern here removes the hand-copied
+    "(src.comment if src else None) != dst.comment" checks scattered per object kind.
+    """
+    statements: list[str] = []
+    for name in sorted(dst):
+        src_obj = src.get(name)
+        src_comment = src_obj.comment if src_obj is not None else None
+        if src_comment != dst[name].comment:
+            statements.append(render(name, dst[name]))
+    return statements
 
 
 class Phase(Enum):

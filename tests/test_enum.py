@@ -86,3 +86,59 @@ def test_enum_typed_column_ordered_after_type(gen_setup: GenerateSetup) -> None:
             'CREATE TABLE "public"."person" ("feeling" mood);',
         ]
     )
+
+
+def test_enum_create_with_comment(gen_setup: GenerateSetup) -> None:
+    """
+    Enum created on target with a comment -> CREATE TYPE then COMMENT ON TYPE.
+    """
+    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
+    gen_setup.dst.execute("COMMENT ON TYPE mood IS 'feelings'")
+
+    gen_setup.assert_migration_sql(
+        [
+            "CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'happy');",
+            'COMMENT ON TYPE "public"."mood" IS \'feelings\';',
+        ]
+    )
+
+
+def test_enum_comment_added(gen_setup: GenerateSetup) -> None:
+    """
+    Identical enum both sides, comment only on target -> COMMENT ON TYPE.
+    """
+    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
+    gen_setup.dst.execute("COMMENT ON TYPE mood IS 'feelings'")
+
+    gen_setup.assert_migration_sql('COMMENT ON TYPE "public"."mood" IS \'feelings\';')
+
+
+def test_enum_comment_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Same enum both sides with differing comments -> COMMENT ON TYPE with target's.
+    """
+    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
+    gen_setup.src.execute("COMMENT ON TYPE mood IS 'old'")
+    gen_setup.dst.execute("COMMENT ON TYPE mood IS 'new'")
+
+    gen_setup.assert_migration_sql('COMMENT ON TYPE "public"."mood" IS \'new\';')
+
+
+def test_enum_comment_removed(gen_setup: GenerateSetup) -> None:
+    """
+    Comment on source enum but none on target -> COMMENT ON TYPE ... IS NULL.
+    """
+    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
+    gen_setup.src.execute("COMMENT ON TYPE mood IS 'feelings'")
+
+    gen_setup.assert_migration_sql('COMMENT ON TYPE "public"."mood" IS NULL;')
+
+
+def test_enum_comment_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Same enum and same comment on both sides -> no migration SQL.
+    """
+    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
+    gen_setup.execute_both("COMMENT ON TYPE mood IS 'feelings'")
+
+    gen_setup.assert_migration_sql("")
