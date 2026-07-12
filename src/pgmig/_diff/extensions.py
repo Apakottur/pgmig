@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement
 from pgmig._models import DbInfo
-from pgmig._sql import ident, literal
+from pgmig._sql import comment_on, ident, literal
 
 
 def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
@@ -41,3 +41,7 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
                 yield Statement(
                     Phase.EXTENSION_CREATE, f"ALTER EXTENSION {ident(dst_ext.name)} SET SCHEMA {ident(dst_ext.schema)};"
                 )
+            # A newly created extension already carries its control-file comment, so
+            # comments are synced only for an extension present on both sides.
+            if src_ext.comment != dst_ext.comment:
+                yield Statement(Phase.EXTENSION_CREATE, comment_on("EXTENSION", ident(dst_ext.name), dst_ext.comment))

@@ -281,3 +281,17 @@ def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> No
             'DROP EXTENSION "citext";',
         ]
     )
+
+
+def test_extension_comment_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Extension present on both sides with differing comments -> COMMENT ON EXTENSION with
+    the target's. (A newly created extension already carries its control-file comment, so
+    comments are only synced for the present-on-both case.)
+    """
+    ext_info = _get_installable_extension(gen_setup.dst)
+    _create_extension(gen_setup.src, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+    gen_setup.dst.execute(sql.SQL("COMMENT ON EXTENSION {name} IS 'custom'").format(name=sql.Identifier(ext_info.name)))
+
+    gen_setup.assert_migration_sql(f"COMMENT ON EXTENSION \"{ext_info.name}\" IS 'custom';")

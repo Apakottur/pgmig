@@ -11,6 +11,7 @@ class _ExtensionRow(BaseModel):
     name: str
     version: str
     extension_schema: str
+    extension_comment: str | None
 
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
@@ -19,5 +20,8 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     """
     for ext_row in _run_query(conn, "extensions.sql", _ExtensionRow):
         db_info.extension_by_name[ext_row.name] = Extension(
-            name=ext_row.name, version=ext_row.version, schema=ext_row.extension_schema
+            name=ext_row.name,
+            version=ext_row.version,
+            schema=ext_row.extension_schema,
+            comment=ext_row.extension_comment,
         )

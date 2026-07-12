@@ -13,7 +13,12 @@ SELECT
 FROM
     pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
-    JOIN pg_attribute a ON a.attrelid = c.oid
+    -- LEFT JOIN (with the column filters in the ON, not the WHERE) so a zero-column
+    -- table still yields one row -- otherwise it produces no rows and is invisible to
+    -- the diff, silently claiming convergence while the whole table is missing.
+    LEFT JOIN pg_attribute a ON a.attrelid = c.oid
+        AND a.attnum > 0
+        AND NOT a.attisdropped
     LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid
         AND ad.adnum = a.attnum
 WHERE
@@ -45,8 +50,6 @@ WHERE
         WHERE
             d.objid = c.oid
             AND d.deptype = 'e')
-    AND a.attnum > 0
-    AND NOT a.attisdropped
 ORDER BY
     n.nspname,
     c.relname,

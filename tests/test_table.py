@@ -43,3 +43,13 @@ def test_table_unchanged(gen_setup: GenerateSetup) -> None:
 
     # Verify no migration SQL is generated.
     gen_setup.assert_migration_sql("")
+
+
+def test_table_create_zero_columns(gen_setup: GenerateSetup) -> None:
+    """
+    A table with no columns still has a pg_class row; it must be introspected (via the
+    LEFT JOIN to pg_attribute) and created, not silently invisible.
+    """
+    gen_setup.dst.execute("CREATE TABLE marker ()")
+
+    gen_setup.assert_migration_sql('CREATE TABLE "public"."marker" ();')
