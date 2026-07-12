@@ -52,6 +52,7 @@ atttypid
 atttypmod
 attrelid
 attnum
+attname
 attisdropped
 attnotnull
 attidentity
@@ -99,3 +100,4 @@ pronamespace
 prorettype
 rettype
 overloadable
+inplace

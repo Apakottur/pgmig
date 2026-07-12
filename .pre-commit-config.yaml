@@ -63,3 +63,12 @@ repos:
                "src",
                "tests"
         ]
+  #######
+  # SQL #
+  #######
+  - repo: https://github.com/darold/pgFormatter
+    rev: v5.10
+    hooks:
+      - id: pg_format
+        args: ["--inplace", "--wrap-limit", "120"]
+        files: '\.sql$'
