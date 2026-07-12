@@ -6,23 +6,29 @@ from pgmig._build import (
     extensions,
     functions,
     indexes,
+    invalid_indexes,
     schemas,
     sequences,
     tables,
     triggers,
     unsupported,
 )
-from pgmig._build._core import Loader
+from pgmig._build._core import Guard, Loader
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo
 
+# Preconditions run before any loader. Each guard reports every object it finds that
+# pgmig cannot process; all findings are collected and reported together, so the user
+# sees every problem at once instead of one per re-run.
+_GUARDS: tuple[Guard, ...] = (
+    unsupported.check,
+    invalid_indexes.check,
+)
+
 # Order is dependency-significant: schemas must exist before tables, and tables before
 # the objects that attach to them (indexes, constraints, triggers). Extensions are
-# database-level and independent. The unsupported-relkind guard runs first so a
-# relation that is not modelled yet (view, materialized view, partitioned or foreign
-# table) raises before any partial introspection.
+# database-level and independent.
 _LOADERS: tuple[Loader, ...] = (
-    unsupported.load,
     schemas.load,
     tables.load,
     indexes.load,
@@ -61,8 +67,16 @@ def build_db_info(dsn: str) -> DbInfo:
     except psycopg.Error as error:
         raise PgmigError(f"Could not connect to database: {error}") from error
 
-    db_info = DbInfo(schema_by_name={}, extension_by_name={})
     with conn:
+        # Run every guard first and collect all findings, so a database with several
+        # problems reports them together rather than one failure per re-run.
+        problems = [finding for guard in _GUARDS for finding in guard(conn)]
+        if problems:
+            raise PgmigError(
+                "pgmig cannot process this database:\n" + "\n".join(f"  - {problem}" for problem in problems)
+            )
+
+        db_info = DbInfo(schema_by_name={}, extension_by_name={})
         for load in _LOADERS:
             load(conn, db_info)
     return db_info

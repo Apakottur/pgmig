@@ -37,4 +37,4 @@ services:
     tmpfs:
       - /pgdata
     ports:
-      - "55432:5432"
+      - "15432:5432"

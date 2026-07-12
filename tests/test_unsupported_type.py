@@ -1,6 +1,6 @@
 import pytest
 
-from pgmig import generate
+from pgmig import PgmigError, generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
@@ -12,7 +12,7 @@ def test_composite_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     gen_setup.dst.execute("CREATE TYPE pair AS (a integer, b integer)")
 
-    with pytest.raises(NotImplementedError, match="composite type is not supported"):
+    with pytest.raises(PgmigError, match=r"composite type .* is not supported"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
@@ -22,7 +22,7 @@ def test_domain_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     gen_setup.dst.execute("CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0)")
 
-    with pytest.raises(NotImplementedError, match="domain is not supported"):
+    with pytest.raises(PgmigError, match=r"domain .* is not supported"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
@@ -32,5 +32,5 @@ def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     gen_setup.dst.execute("CREATE TYPE float_range AS RANGE (subtype = float8)")
 
-    with pytest.raises(NotImplementedError, match="range type is not supported"):
+    with pytest.raises(PgmigError, match=r"range type .* is not supported"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)

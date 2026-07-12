@@ -31,3 +31,14 @@ class Loader(Protocol):
     """
 
     def __call__(self, conn: psycopg.Connection[Any], db_info: DbInfo) -> None: ...
+
+
+class Guard(Protocol):
+    """
+    A precondition check run before any loader: return a human-readable finding for each
+    object the database contains that pgmig cannot process (an unsupported kind, an
+    invalid index). An empty list means the guard passed. Findings from every guard are
+    collected and reported together so the user sees all problems at once.
+    """
+
+    def __call__(self, conn: psycopg.Connection[Any]) -> list[str]: ...

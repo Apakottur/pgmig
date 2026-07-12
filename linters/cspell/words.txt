@@ -123,3 +123,6 @@ reemits
 pgdata
 tmpfs
 initdb
+indisvalid
+deparsed
+excinfo
