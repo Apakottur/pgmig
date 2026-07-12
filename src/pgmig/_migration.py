@@ -1,9 +1,9 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar
 
-from pgmig._models import Column, Constraint, DbInfo, Index, Sequence
+from pgmig._models import Column, Constraint, DbInfo, Index, Schema, Sequence, Table
 
 _Renamable = TypeVar("_Renamable")
 
@@ -38,6 +38,28 @@ class Statement:
 
     phase: Phase
     sql: str
+
+
+def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:
+    """
+    Yield (schema_name, source_schema, target_schema) for every schema across both
+    databases, sorted by name. Either schema is None when absent on that side.
+    """
+    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
+        yield schema_name, source.schema_by_name.get(schema_name), target.schema_by_name.get(schema_name)
+
+
+def _iter_table_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, str, Table | None, Table | None]]:
+    """
+    Yield (schema_name, table_name, source_table, target_table) for every table across
+    both databases, sorted by schema then table. Either table is None when absent on
+    that side.
+    """
+    for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
+        src_tables = src_schema.table_by_name if src_schema else {}
+        dst_tables = dst_schema.table_by_name if dst_schema else {}
+        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
+            yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
@@ -141,84 +163,74 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     statements: list[str] = []
 
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        src_schema = source.schema_by_name.get(schema_name)
-        dst_schema = target.schema_by_name.get(schema_name)
-        src_tables = src_schema.table_by_name if src_schema else {}
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Present in source only: drop it (attached objects are dropped with it).
+        if dst_table is None:
+            statements.append(f'DROP TABLE "{schema_name}"."{table_name}";')
+            continue
 
-        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            # Present in source only: drop it (attached objects are dropped with it).
-            if table_name not in dst_tables:
-                drop_table_sql = f'DROP TABLE "{schema_name}"."{table_name}";'
-                statements.append(drop_table_sql)
-                continue
+        # Columns covered by a target primary key are made NOT NULL by the
+        # ADD PRIMARY KEY, so their standalone SET NOT NULL is redundant.
+        dst_pk_columns = dst_table.get_primary_key_columns()
 
-            # Columns covered by a target primary key are made NOT NULL by the
-            # ADD PRIMARY KEY, so their standalone SET NOT NULL is redundant.
-            dst_pk_columns = dst_tables[table_name].get_primary_key_columns()
+        if src_table is not None:
+            # Table exists in source: get details.
+            src_comment = src_table.comment
+            src_columns = {column.name: column for column in src_table.columns}
 
-            if table_name in src_tables:
-                # Table exists in source: get details.
-                src_comment = src_tables[table_name].comment
-                src_columns = {column.name: column for column in src_tables[table_name].columns}
-
-                # Sync columns (add/drop by name; type changes are out of scope).
-                dst_columns = {column.name: column for column in dst_tables[table_name].columns}
-                for column_name in sorted(src_columns.keys() | dst_columns.keys()):
-                    if column_name not in src_columns:
-                        column = dst_columns[column_name]
-                        statements.append(
-                            f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN {_column_def(column)};'
-                        )
-                    elif column_name not in dst_columns:
-                        statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
-                    else:
-                        # Column on both sides: sync DEFAULT then NOT NULL (type changes are out of scope).
-                        src_column = src_columns[column_name]
-                        dst_column = dst_columns[column_name]
-                        prefix = f'ALTER TABLE "{schema_name}"."{table_name}" ALTER COLUMN "{column_name}"'
-                        if src_column.default != dst_column.default:
-                            if dst_column.default is None:
-                                statements.append(f"{prefix} DROP DEFAULT;")
-                            else:
-                                statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
-                        if src_column.not_null != dst_column.not_null:
-                            if dst_column.not_null:
-                                # Skip if a target primary key already covers this column.
-                                if column_name not in dst_pk_columns:
-                                    statements.append(f"{prefix} SET NOT NULL;")
-                            else:
-                                statements.append(f"{prefix} DROP NOT NULL;")
-            else:
-                # Present in target only: default details.
-                src_comment = None
-                src_columns = {}
-
-                # Create the table.
-                dst_columns = {column.name: column for column in dst_tables[table_name].columns}
-                columns = ", ".join(_column_def(column) for column in dst_tables[table_name].columns)
-                create_table_sql = f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});'
-                statements.append(create_table_sql)
-
-            # Sync table comment.
-            dst_comment = dst_tables[table_name].comment
-            if src_comment != dst_comment:
-                if dst_comment is None:
-                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
+            # Sync columns (add/drop by name; type changes are out of scope).
+            dst_columns = {column.name: column for column in dst_table.columns}
+            for column_name in sorted(src_columns.keys() | dst_columns.keys()):
+                if column_name not in src_columns:
+                    column = dst_columns[column_name]
+                    statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN {_column_def(column)};')
+                elif column_name not in dst_columns:
+                    statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
                 else:
-                    escaped = dst_comment.replace("'", "''")
-                    statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
+                    # Column on both sides: sync DEFAULT then NOT NULL (type changes are out of scope).
+                    src_column = src_columns[column_name]
+                    dst_column = dst_columns[column_name]
+                    prefix = f'ALTER TABLE "{schema_name}"."{table_name}" ALTER COLUMN "{column_name}"'
+                    if src_column.default != dst_column.default:
+                        if dst_column.default is None:
+                            statements.append(f"{prefix} DROP DEFAULT;")
+                        else:
+                            statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
+                    if src_column.not_null != dst_column.not_null:
+                        if dst_column.not_null:
+                            # Skip if a target primary key already covers this column.
+                            if column_name not in dst_pk_columns:
+                                statements.append(f"{prefix} SET NOT NULL;")
+                        else:
+                            statements.append(f"{prefix} DROP NOT NULL;")
+        else:
+            # Present in target only: default details.
+            src_comment = None
+            src_columns = {}
 
-            # Sync column comments (a separate statement; cannot be inline).
-            statements.extend(
-                _column_comment_statements(
-                    schema_name=schema_name,
-                    table_name=table_name,
-                    src_columns=src_columns,
-                    dst_columns=dst_columns,
-                )
+            # Create the table.
+            dst_columns = {column.name: column for column in dst_table.columns}
+            columns = ", ".join(_column_def(column) for column in dst_table.columns)
+            statements.append(f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});')
+
+        # Sync table comment.
+        dst_comment = dst_table.comment
+        if src_comment != dst_comment:
+            if dst_comment is None:
+                statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
+            else:
+                escaped = dst_comment.replace("'", "''")
+                statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
+
+        # Sync column comments (a separate statement; cannot be inline).
+        statements.extend(
+            _column_comment_statements(
+                schema_name=schema_name,
+                table_name=table_name,
+                src_columns=src_columns,
+                dst_columns=dst_columns,
             )
+        )
 
     return [Statement(Phase.TABLE, sql) for sql in statements]
 
@@ -229,25 +241,17 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     statements: list[str] = []
 
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        src_schema = source.schema_by_name.get(schema_name)
-        dst_schema = target.schema_by_name.get(schema_name)
-        src_tables = src_schema.table_by_name if src_schema else {}
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
+    for schema_name, _table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Table dropped: its indexes are dropped with it.
+        if dst_table is None:
+            continue
 
-        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            # Table dropped: its indexes are dropped with it.
-            if table_name not in dst_tables:
-                continue
-
-            src_indexes = src_tables[table_name].index_by_name if table_name in src_tables else {}
-            drops, renames, creates = _diff_indexes(
-                schema_name=schema_name, src=src_indexes, dst=dst_tables[table_name].index_by_name
-            )
-            # Emit drops first (frees names), then renames, then creates.
-            statements.extend(drops)
-            statements.extend(renames)
-            statements.extend(creates)
+        src_indexes = src_table.index_by_name if src_table else {}
+        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_table.index_by_name)
+        # Emit drops first (frees names), then renames, then creates.
+        statements.extend(drops)
+        statements.extend(renames)
+        statements.extend(creates)
 
     return [Statement(Phase.INDEX, sql) for sql in statements]
 
@@ -344,28 +348,22 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     statements: list[str] = []
 
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        src_schema = source.schema_by_name.get(schema_name)
-        dst_schema = target.schema_by_name.get(schema_name)
-        src_tables = src_schema.table_by_name if src_schema else {}
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Table dropped: its constraints are dropped with it.
+        if dst_table is None:
+            continue
 
-        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            # Table dropped: its constraints are dropped with it.
-            if table_name not in dst_tables:
-                continue
-
-            src_constraints = src_tables[table_name].constraint_by_name if table_name in src_tables else {}
-            drops, renames, adds = _diff_constraints(
-                schema_name=schema_name,
-                table_name=table_name,
-                src=src_constraints,
-                dst=dst_tables[table_name].constraint_by_name,
-            )
-            # Drops first (frees names), then renames, then adds.
-            statements.extend(drops)
-            statements.extend(renames)
-            statements.extend(adds)
+        src_constraints = src_table.constraint_by_name if src_table else {}
+        drops, renames, adds = _diff_constraints(
+            schema_name=schema_name,
+            table_name=table_name,
+            src=src_constraints,
+            dst=dst_table.constraint_by_name,
+        )
+        # Drops first (frees names), then renames, then adds.
+        statements.extend(drops)
+        statements.extend(renames)
+        statements.extend(adds)
 
     return [Statement(Phase.CONSTRAINT, sql) for sql in statements]
 
@@ -379,28 +377,22 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]
     fk_drops: list[str] = []
     fk_adds: list[str] = []
 
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        src_schema = source.schema_by_name.get(schema_name)
-        dst_schema = target.schema_by_name.get(schema_name)
-        src_tables = src_schema.table_by_name if src_schema else {}
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Table dropped: its foreign keys are dropped with it.
+        if dst_table is None:
+            continue
 
-        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            # Table dropped: its foreign keys are dropped with it.
-            if table_name not in dst_tables:
-                continue
-
-            src_fks = src_tables[table_name].foreign_key_by_name if table_name in src_tables else {}
-            drops, renames, adds = _diff_constraints(
-                schema_name=schema_name,
-                table_name=table_name,
-                src=src_fks,
-                dst=dst_tables[table_name].foreign_key_by_name,
-            )
-            fk_drops.extend(drops)
-            # Renames carry no referenced-object dependency, so they ride with the adds.
-            fk_adds.extend(renames)
-            fk_adds.extend(adds)
+        src_fks = src_table.foreign_key_by_name if src_table else {}
+        drops, renames, adds = _diff_constraints(
+            schema_name=schema_name,
+            table_name=table_name,
+            src=src_fks,
+            dst=dst_table.foreign_key_by_name,
+        )
+        fk_drops.extend(drops)
+        # Renames carry no referenced-object dependency, so they ride with the adds.
+        fk_adds.extend(renames)
+        fk_adds.extend(adds)
 
     return [Statement(Phase.FOREIGN_KEY_DROP, sql) for sql in fk_drops] + [
         Statement(Phase.FOREIGN_KEY_ADD, sql) for sql in fk_adds
@@ -416,9 +408,7 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     creates: list[str] = []
     drops: list[str] = []
 
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        src_schema = source.schema_by_name.get(schema_name)
-        dst_schema = target.schema_by_name.get(schema_name)
+    for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
         src_functions = src_schema.function_by_signature if src_schema else {}
         dst_functions = dst_schema.function_by_signature if dst_schema else {}
 
@@ -474,9 +464,7 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     creates: list[str] = []
     drops: list[str] = []
 
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        src_schema = source.schema_by_name.get(schema_name)
-        dst_schema = target.schema_by_name.get(schema_name)
+    for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
         src_sequences = src_schema.sequence_by_name if src_schema else {}
         dst_sequences = dst_schema.sequence_by_name if dst_schema else {}
 
