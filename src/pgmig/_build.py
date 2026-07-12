@@ -1,6 +1,19 @@
+from pathlib import Path
+from typing import Any, cast
+
 import psycopg
+from typing_extensions import LiteralString
 
 from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table
+
+
+def _run_query(conn: psycopg.Connection[tuple[Any, ...]], file_name: str) -> list[tuple[Any, ...]]:
+    """
+    Load a bundled SQL query from the build_queries directory, run it, and return all rows.
+    """
+    file_path = Path(__file__).parent.joinpath("build_queries").joinpath(file_name)
+    query = cast("LiteralString", file_path.read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
+    return conn.execute(query).fetchall()
 
 
 def build_db_info(dsn: str) -> DbInfo:
@@ -13,64 +26,12 @@ def build_db_info(dsn: str) -> DbInfo:
     # Construct database attributes.
     with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
         # Schemas (user namespaces, excluding system and extension-owned ones).
-        rows = conn.execute(
-            """
-            SELECT
-                n.nspname
-            FROM
-                pg_namespace n
-            WHERE
-                n.nspname NOT LIKE 'pg_%'
-                AND n.nspname <> 'information_schema'
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.objid = n.oid
-                        AND d.deptype = 'e')
-            """
-        ).fetchall()
-        for (schema_name,) in rows:
+        for (schema_name,) in _run_query(conn, "schemas.sql"):
             schema_by_name[schema_name] = Schema(
                 name=schema_name, table_by_name={}, sequence_by_name={}, function_by_signature={}
             )
 
         # Tables (and their columns, ordered by name).
-        rows = conn.execute(
-            """
-            SELECT
-                n.nspname,
-                c.relname,
-                a.attname,
-                format_type(a.atttypid, a.atttypmod),
-                a.attnotnull,
-                pg_get_expr(ad.adbin, ad.adrelid),
-                col_description(a.attrelid, a.attnum),
-                obj_description(c.oid, 'pg_class'),
-                a.attidentity,
-                pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname)
-            FROM
-                pg_class c
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                JOIN pg_attribute a ON a.attrelid = c.oid
-                LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
-            WHERE
-                c.relkind = 'r'
-                AND n.nspname NOT LIKE 'pg_%'
-                AND n.nspname <> 'information_schema'
-                AND NOT EXISTS (
-                    SELECT 1 FROM pg_depend d WHERE d.objid = n.oid AND d.deptype = 'e'
-                )
-                AND a.attnum > 0
-                AND NOT a.attisdropped
-            ORDER BY
-                n.nspname,
-                c.relname,
-                a.attname
-            """
-        ).fetchall()
         for (
             schema_name,
             table_name,
@@ -82,7 +43,7 @@ def build_db_info(dsn: str) -> DbInfo:
             table_comment,
             column_identity,
             column_serial_sequence,
-        ) in rows:
+        ) in _run_query(conn, "tables.sql"):
             if table_name not in schema_by_name[schema_name].table_by_name:
                 schema_by_name[schema_name].table_by_name[table_name] = Table(
                     name=table_name,
@@ -105,48 +66,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Indexes (standalone only; constraint-backed indexes are excluded).
-        rows = conn.execute(
-            """
-            SELECT
-                n.nspname,
-                c.relname,
-                ic.relname,
-                pg_get_indexdef(i.indexrelid),
-                replace(
-                    pg_get_indexdef(i.indexrelid),
-                    'INDEX ' || quote_ident(ic.relname) || ' ON ',
-                    'INDEX ON ')
-            FROM
-                pg_index i
-                JOIN pg_class ic ON ic.oid = i.indexrelid
-                JOIN pg_class c ON c.oid = i.indrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE
-                c.relkind = 'r'
-                AND n.nspname NOT LIKE 'pg_%'
-                AND n.nspname <> 'information_schema'
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.objid = n.oid
-                        AND d.deptype = 'e')
-                AND NOT i.indisprimary
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.classid = 'pg_class'::regclass
-                        AND d.objid = i.indexrelid
-                        AND d.refclassid = 'pg_constraint'::regclass
-                        AND d.deptype = 'i')
-            """
-        ).fetchall()
-        for schema_name, table_name, index_name, index_def, index_canonical in rows:
+        for schema_name, table_name, index_name, index_def, index_canonical in _run_query(conn, "indexes.sql"):
             schema_by_name[schema_name].table_by_name[table_name].index_by_name[index_name] = Index(
                 name=index_name,
                 definition=index_def,
@@ -154,42 +74,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Constraints (primary key, unique, and check).
-        rows = conn.execute(
-            """
-            SELECT
-                n.nspname,
-                c.relname,
-                con.conname,
-                pg_get_constraintdef(con.oid),
-                con.contype,
-                (
-                    SELECT
-                        array_agg(a.attname ORDER BY k.ord)
-                    FROM
-                        unnest(con.conkey)
-                        WITH ORDINALITY AS k (attnum, ord)
-                        JOIN pg_attribute a ON a.attrelid = con.conrelid
-                            AND a.attnum = k.attnum)
-                FROM
-                    pg_constraint con
-                JOIN pg_class c ON c.oid = con.conrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE
-                c.relkind = 'r'
-                AND con.contype IN ('p', 'u', 'c', 'f')
-                AND n.nspname NOT LIKE 'pg_%'
-                AND n.nspname <> 'information_schema'
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.objid = n.oid
-                        AND d.deptype = 'e')
-            """
-        ).fetchall()
-        for schema_name, table_name, con_name, con_def, con_type, con_columns in rows:
+        for schema_name, table_name, con_name, con_def, con_type, con_columns in _run_query(conn, "constraints.sql"):
             constraint = Constraint(
                 name=con_name,
                 definition=con_def,
@@ -203,46 +88,17 @@ def build_db_info(dsn: str) -> DbInfo:
                 table.constraint_by_name[con_name] = constraint
 
         # Sequences (standalone only; sequences owned by a serial/identity column are excluded).
-        rows = conn.execute(
-            """
-            SELECT
-                n.nspname,
-                c.relname,
-                format_type(s.seqtypid, NULL),
-                s.seqstart,
-                s.seqincrement,
-                s.seqmin,
-                s.seqmax,
-                s.seqcache,
-                s.seqcycle
-            FROM
-                pg_sequence s
-                JOIN pg_class c ON c.oid = s.seqrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE
-                n.nspname NOT LIKE 'pg_%'
-                AND n.nspname <> 'information_schema'
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.objid = n.oid
-                        AND d.deptype = 'e')
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.classid = 'pg_class'::regclass
-                        AND d.objid = c.oid
-                        AND d.refclassid = 'pg_class'::regclass
-                        AND d.deptype IN ('a', 'i'))
-            """
-        ).fetchall()
-        for schema_name, seq_name, seq_type, seq_start, seq_inc, seq_min, seq_max, seq_cache, seq_cycle in rows:
+        for (
+            schema_name,
+            seq_name,
+            seq_type,
+            seq_start,
+            seq_inc,
+            seq_min,
+            seq_max,
+            seq_cache,
+            seq_cycle,
+        ) in _run_query(conn, "sequences.sql"):
             schema_by_name[schema_name].sequence_by_name[seq_name] = Sequence(
                 name=seq_name,
                 data_type=seq_type,
@@ -255,33 +111,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
-        rows = conn.execute(
-            """
-            SELECT
-                n.nspname,
-                p.proname,
-                pg_get_function_identity_arguments(p.oid),
-                pg_get_functiondef(p.oid),
-                format_type(p.prorettype, NULL),
-                p.prokind
-            FROM
-                pg_proc p
-                JOIN pg_namespace n ON n.oid = p.pronamespace
-            WHERE
-                p.prokind IN ('f', 'p')
-                AND n.nspname NOT LIKE 'pg_%'
-                AND n.nspname <> 'information_schema'
-                AND NOT EXISTS (
-                    SELECT
-                        1
-                    FROM
-                        pg_depend d
-                    WHERE
-                        d.objid = p.oid
-                        AND d.deptype = 'e')
-            """
-        ).fetchall()
-        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in rows:
+        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in _run_query(conn, "functions.sql"):
             signature = f"{func_name}({func_args})"
             schema_by_name[schema_name].function_by_signature[signature] = Function(
                 name=func_name,
@@ -292,18 +122,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Extensions (database-level).
-        rows = conn.execute(
-            """
-            SELECT
-                e.extname,
-                e.extversion,
-                n.nspname
-            FROM
-                pg_extension e
-                JOIN pg_namespace n ON n.oid = e.extnamespace
-            """
-        ).fetchall()
-        for name, version, schema in rows:
+        for name, version, schema in _run_query(conn, "extensions.sql"):
             extension_by_name[name] = Extension(name=name, version=version, schema=schema)
 
     # Build and return the database info.
