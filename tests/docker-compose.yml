@@ -36,6 +36,5 @@ services:
     # (re)created container runs initdb for a fresh cluster; it's also faster than disk.
     tmpfs:
       - /pgdata
-    # Below the kernel's ephemeral port range, so outgoing connections can't claim it.
     ports:
       - "15432:5432"
