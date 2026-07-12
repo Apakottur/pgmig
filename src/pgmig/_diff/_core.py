@@ -1,7 +1,7 @@
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
 from pgmig._models import DbInfo, Schema, Table
 
@@ -42,6 +42,16 @@ class Statement:
 
     phase: Phase
     sql: str
+
+
+class Generator(Protocol):
+    """
+    The shared shape of every object-kind generator: keyword-only source and target,
+    yielding phase-tagged statements. Annotating the registry with this enforces one
+    uniform signature (names included) across all generators.
+    """
+
+    def __call__(self, *, source: DbInfo, target: DbInfo) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:

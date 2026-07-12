@@ -1,11 +1,10 @@
 from pgmig._diff import constraints, enums, extensions, functions, indexes, schemas, sequences, tables, triggers
-from pgmig._diff._core import Phase
+from pgmig._diff._core import Generator, Phase
 from pgmig._models import DbInfo
 
-# Every generator has the same signature: generate(*, source, target) -> Iterator[Statement].
 # Registration order is cosmetic — final ordering is decided by each statement's phase.
 # A new object kind is a new module plus one entry here.
-_GENERATORS = (
+_GENERATORS: tuple[Generator, ...] = (
     schemas.generate,
     extensions.generate,
     enums.generate,
