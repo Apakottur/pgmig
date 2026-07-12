@@ -1,5 +1,6 @@
 from collections.abc import Callable
-from enum import IntEnum
+from dataclasses import dataclass
+from enum import Enum, auto
 from typing import TypeVar
 
 from pgmig._models import Column, Constraint, DbInfo, Index, Sequence
@@ -7,30 +8,36 @@ from pgmig._models import Column, Constraint, DbInfo, Index, Sequence
 _Renamable = TypeVar("_Renamable")
 
 
-class Phase(IntEnum):
+class Phase(Enum):
     """
-    Global ordering bucket for a migration statement. Statements are emitted tagged
-    with a phase and assembled by a stable sort on phase, so a statement's position
-    is decided by its dependency phase, not by call order. Values are spaced to leave
-    room for future object types between existing phases.
+    Global ordering bucket for a migration statement. Members are declared in
+    execution order (priority); statements are grouped by phase and emitted by
+    iterating the enum, so a statement's position is decided by its dependency
+    phase, not by generator call order.
     """
 
-    FOREIGN_KEY_DROP = 10  # Before a referenced table / key is dropped.
-    FUNCTION_DROP = 20  # Before tables a routine body may depend on.
-    SCHEMA_CREATE = 30
-    EXTENSION = 40
-    SEQUENCE_CREATE = 50  # Before tables (a column default may reference a sequence).
-    TABLE = 60
-    INDEX = 70
-    CONSTRAINT = 80
-    FUNCTION_CREATE = 90  # After tables so routine bodies can reference them.
-    FOREIGN_KEY_ADD = 100  # After referenced tables and their keys exist.
-    SEQUENCE_DROP = 110  # After tables that referenced the sequence are gone.
-    SCHEMA_DROP = 120
+    FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
+    FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
+    SCHEMA_CREATE = auto()
+    EXTENSION = auto()
+    SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
+    TABLE = auto()
+    INDEX = auto()
+    CONSTRAINT = auto()
+    FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
+    FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
+    SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
+    SCHEMA_DROP = auto()
 
 
-# A migration statement tagged with the phase that fixes its global position.
-Statement = tuple[Phase, str]
+@dataclass(frozen=True)
+class Statement:
+    """
+    A migration SQL statement tagged with the phase that fixes its global position.
+    """
+
+    phase: Phase
+    sql: str
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
@@ -42,10 +49,10 @@ def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     for name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
         # Present in target only: create it.
         if name not in source.schema_by_name:
-            statements.append((Phase.SCHEMA_CREATE, f'CREATE SCHEMA "{name}";'))
+            statements.append(Statement(Phase.SCHEMA_CREATE, f'CREATE SCHEMA "{name}";'))
         # Present in source only: drop it.
         elif name not in target.schema_by_name:
-            statements.append((Phase.SCHEMA_DROP, f'DROP SCHEMA "{name}";'))
+            statements.append(Statement(Phase.SCHEMA_DROP, f'DROP SCHEMA "{name}";'))
 
     return statements
 
@@ -61,7 +68,7 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
         if name not in source.extension_by_name:
             dst_ext = target.extension_by_name[name]
             statements.append(
-                (
+                Statement(
                     Phase.EXTENSION,
                     f'CREATE EXTENSION "{dst_ext.name}" VERSION \'{dst_ext.version}\' SCHEMA "{dst_ext.schema}";',
                 )
@@ -69,7 +76,7 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
         # Present in source only: drop it.
         elif name not in target.extension_by_name:
             src_ext = source.extension_by_name[name]
-            statements.append((Phase.EXTENSION, f'DROP EXTENSION "{src_ext.name}";'))
+            statements.append(Statement(Phase.EXTENSION, f'DROP EXTENSION "{src_ext.name}";'))
 
         # Present in both: alter version and/or schema if they differ.
         else:
@@ -77,10 +84,12 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             dst_ext = target.extension_by_name[name]
             if src_ext.version != dst_ext.version:
                 statements.append(
-                    (Phase.EXTENSION, f"ALTER EXTENSION \"{dst_ext.name}\" UPDATE TO '{dst_ext.version}';")
+                    Statement(Phase.EXTENSION, f"ALTER EXTENSION \"{dst_ext.name}\" UPDATE TO '{dst_ext.version}';")
                 )
             if src_ext.schema != dst_ext.schema:
-                statements.append((Phase.EXTENSION, f'ALTER EXTENSION "{dst_ext.name}" SET SCHEMA "{dst_ext.schema}";'))
+                statements.append(
+                    Statement(Phase.EXTENSION, f'ALTER EXTENSION "{dst_ext.name}" SET SCHEMA "{dst_ext.schema}";')
+                )
     return statements
 
 
@@ -211,7 +220,7 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                 )
             )
 
-    return [(Phase.TABLE, statement) for statement in statements]
+    return [Statement(Phase.TABLE, sql) for sql in statements]
 
 
 def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
@@ -240,7 +249,7 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             statements.extend(renames)
             statements.extend(creates)
 
-    return [(Phase.INDEX, statement) for statement in statements]
+    return [Statement(Phase.INDEX, sql) for sql in statements]
 
 
 def _diff_renamable(
@@ -358,7 +367,7 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             statements.extend(renames)
             statements.extend(adds)
 
-    return [(Phase.CONSTRAINT, statement) for statement in statements]
+    return [Statement(Phase.CONSTRAINT, sql) for sql in statements]
 
 
 def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]:
@@ -393,8 +402,8 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]
             fk_adds.extend(renames)
             fk_adds.extend(adds)
 
-    return [(Phase.FOREIGN_KEY_DROP, statement) for statement in fk_drops] + [
-        (Phase.FOREIGN_KEY_ADD, statement) for statement in fk_adds
+    return [Statement(Phase.FOREIGN_KEY_DROP, sql) for sql in fk_drops] + [
+        Statement(Phase.FOREIGN_KEY_ADD, sql) for sql in fk_adds
     ]
 
 
@@ -435,8 +444,8 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                     )
                 creates.append(f"{dst_func.definition};")
 
-    return [(Phase.FUNCTION_CREATE, statement) for statement in creates] + [
-        (Phase.FUNCTION_DROP, statement) for statement in drops
+    return [Statement(Phase.FUNCTION_CREATE, sql) for sql in creates] + [
+        Statement(Phase.FUNCTION_DROP, sql) for sql in drops
     ]
 
 
@@ -500,8 +509,8 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                 if clauses:
                     creates.append(f'ALTER SEQUENCE "{schema_name}"."{name}" {" ".join(clauses)};')
 
-    return [(Phase.SEQUENCE_CREATE, statement) for statement in creates] + [
-        (Phase.SEQUENCE_DROP, statement) for statement in drops
+    return [Statement(Phase.SEQUENCE_CREATE, sql) for sql in creates] + [
+        Statement(Phase.SEQUENCE_DROP, sql) for sql in drops
     ]
 
 
@@ -521,11 +530,13 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     """
     Get the migration SQL between the given source and target databases.
     """
-    # Each generator emits (phase, statement) pairs; a stable sort by phase puts every
-    # statement in its dependency-correct position regardless of generator call order.
-    statements: list[Statement] = []
+    # Each generator emits phase-tagged statements; grouping by phase and iterating
+    # Phase in declaration order puts every statement in its dependency-correct
+    # position regardless of generator call order, preserving each generator's own
+    # order within a phase.
+    statements_by_phase: dict[Phase, list[str]] = {phase: [] for phase in Phase}
     for generate in _GENERATORS:
-        statements.extend(generate(source=source, target=target))
-    statements.sort(key=lambda item: item[0])
+        for statement in generate(source=source, target=target):
+            statements_by_phase[statement.phase].append(statement.sql)
 
-    return "\n".join(statement for _phase, statement in statements)
+    return "\n".join(sql for phase in Phase for sql in statements_by_phase[phase])
