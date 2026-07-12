@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar
 
-from pgmig._models import Column, Constraint, DbInfo, Index, Schema, Sequence, Table
+from pgmig._models import Column, Constraint, DbInfo, Index, Schema, Sequence, Table, Trigger
 from pgmig._sql import comment_on, ident, literal, qualified
 
 _Renamable = TypeVar("_Renamable")
@@ -18,6 +18,7 @@ class Phase(Enum):
     """
 
     FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
+    TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
     EXTENSION = auto()
@@ -26,6 +27,7 @@ class Phase(Enum):
     INDEX = auto()
     CONSTRAINT = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
+    TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
     SCHEMA_DROP = auto()
@@ -268,6 +270,33 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     return [Statement(Phase.INDEX, sql) for sql in statements]
 
 
+def _generate_triggers(*, source: DbInfo, target: DbInfo) -> list[Statement]:
+    """
+    Generate the migration SQL of triggers. Drops are phased before the functions they
+    call are dropped; creates (with renames) after those functions and tables exist.
+    """
+    drops: list[str] = []
+    creates: list[str] = []
+
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Table dropped: its triggers are dropped with it.
+        if dst_table is None:
+            continue
+
+        src_triggers = src_table.trigger_by_name if src_table else {}
+        trigger_drops, renames, trigger_creates = _diff_triggers(
+            schema_name=schema_name, table_name=table_name, src=src_triggers, dst=dst_table.trigger_by_name
+        )
+        drops.extend(trigger_drops)
+        # Renames carry no function dependency, so they ride with the creates.
+        creates.extend(renames)
+        creates.extend(trigger_creates)
+
+    return [Statement(Phase.TRIGGER_DROP, sql) for sql in drops] + [
+        Statement(Phase.TRIGGER_CREATE, sql) for sql in creates
+    ]
+
+
 def _diff_renamable(
     src: dict[str, _Renamable],
     dst: dict[str, _Renamable],
@@ -333,6 +362,24 @@ def _diff_indexes(
         render_drop=lambda name: f"DROP INDEX {qualified(schema_name, name)};",
         render_rename=lambda old, new: f"ALTER INDEX {qualified(schema_name, old)} RENAME TO {ident(new)};",
         render_create=lambda _name, index: f"{index.definition};",
+    )
+
+
+def _diff_triggers(
+    *, schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Diff one table's triggers into (drops, renames, creates), using each trigger's
+    name-independent canonical form as the rename key.
+    """
+    table = qualified(schema_name, table_name)
+    return _diff_renamable(
+        src,
+        dst,
+        key=lambda trigger: trigger.canonical,
+        render_drop=lambda name: f"DROP TRIGGER {ident(name)} ON {table};",
+        render_rename=lambda old, new: f"ALTER TRIGGER {ident(old)} ON {table} RENAME TO {ident(new)};",
+        render_create=lambda _name, trigger: f"{trigger.definition};",
     )
 
 
@@ -531,6 +578,7 @@ def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
         _generate_constraints,
         _generate_foreign_keys,
         _generate_functions,
+        _generate_triggers,
     ):
         for statement in generate(source=source, target=target):
             statements_by_phase[statement.phase].append(statement.sql)

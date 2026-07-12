@@ -4,7 +4,7 @@ from typing import Any, cast
 import psycopg
 from typing_extensions import LiteralString
 
-from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table
+from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table, Trigger
 
 
 def _run_query(conn: psycopg.Connection[tuple[Any, ...]], file_name: str) -> list[tuple[Any, ...]]:
@@ -52,6 +52,7 @@ def build_db_info(dsn: str) -> DbInfo:
                     index_by_name={},
                     constraint_by_name={},
                     foreign_key_by_name={},
+                    trigger_by_name={},
                 )
             schema_by_name[schema_name].table_by_name[table_name].columns.append(
                 Column(
@@ -71,6 +72,14 @@ def build_db_info(dsn: str) -> DbInfo:
                 name=index_name,
                 definition=index_def,
                 canonical=index_canonical,
+            )
+
+        # Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
+        for schema_name, table_name, trigger_name, trigger_def, trigger_canonical in _run_query(conn, "triggers.sql"):
+            schema_by_name[schema_name].table_by_name[table_name].trigger_by_name[trigger_name] = Trigger(
+                name=trigger_name,
+                definition=trigger_def,
+                canonical=trigger_canonical,
             )
 
         # Constraints (primary key, unique, and check).
