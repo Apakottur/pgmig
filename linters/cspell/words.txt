@@ -116,3 +116,5 @@ typtype
 enumlabel
 enumsortorder
 enumtypid
+libpq
+dbname
