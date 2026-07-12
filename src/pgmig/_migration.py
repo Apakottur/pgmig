@@ -628,24 +628,17 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     ]
 
 
-def _is_subsequence(inner: list[str], outer: list[str]) -> bool:
-    """
-    True if `inner` appears within `outer` in the same relative order (only insertions
-    separate them), i.e. `outer` is `inner` with values added.
-    """
-    outer_iter = iter(outer)
-    return all(value in outer_iter for value in inner)
-
-
 def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_values: list[str]) -> list[str]:
     """
     Render ALTER TYPE ... ADD VALUE statements for values added to an enum.
 
     Only additions are supported: the source values must remain a subsequence of the
-    target values. A removal, reorder, or renamed-looking label raises
-    NotImplementedError rather than emitting a wrong or non-converging migration.
+    target values (same relative order, values only inserted). A removal, reorder, or
+    renamed-looking label raises NotImplementedError rather than emitting a wrong or
+    non-converging migration.
     """
-    if not _is_subsequence(src_values, dst_values):
+    target_iter = iter(dst_values)
+    if not all(value in target_iter for value in src_values):
         raise NotImplementedError(
             f"Unsupported enum change for {qualified_name}: values may only be appended or inserted, "
             f"not removed, reordered, or renamed ({src_values} -> {dst_values})."
