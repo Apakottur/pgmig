@@ -26,9 +26,13 @@ def build_db_info(dsn: str) -> DbInfo:
     # Construct database attributes.
     with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
         # Schemas (user namespaces, excluding system and extension-owned ones).
-        for (schema_name,) in _run_query(conn, "schemas.sql"):
+        for schema_name, schema_comment in _run_query(conn, "schemas.sql"):
             schema_by_name[schema_name] = Schema(
-                name=schema_name, table_by_name={}, sequence_by_name={}, function_by_signature={}
+                name=schema_name,
+                comment=schema_comment,
+                table_by_name={},
+                sequence_by_name={},
+                function_by_signature={},
             )
 
         # Tables (and their columns, ordered by name).
@@ -67,11 +71,14 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Indexes (standalone only; constraint-backed indexes are excluded).
-        for schema_name, table_name, index_name, index_def, index_canonical in _run_query(conn, "indexes.sql"):
+        for schema_name, table_name, index_name, index_def, index_canonical, index_comment in _run_query(
+            conn, "indexes.sql"
+        ):
             schema_by_name[schema_name].table_by_name[table_name].index_by_name[index_name] = Index(
                 name=index_name,
                 definition=index_def,
                 canonical=index_canonical,
+                comment=index_comment,
             )
 
         # Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
@@ -83,12 +90,15 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Constraints (primary key, unique, and check).
-        for schema_name, table_name, con_name, con_def, con_type, con_columns in _run_query(conn, "constraints.sql"):
+        for schema_name, table_name, con_name, con_def, con_type, con_columns, con_comment in _run_query(
+            conn, "constraints.sql"
+        ):
             constraint = Constraint(
                 name=con_name,
                 definition=con_def,
                 contype=con_type,
                 columns=con_columns or [],
+                comment=con_comment,
             )
             table = schema_by_name[schema_name].table_by_name[table_name]
             if constraint.is_foreign_key:
@@ -107,6 +117,7 @@ def build_db_info(dsn: str) -> DbInfo:
             seq_max,
             seq_cache,
             seq_cycle,
+            seq_comment,
         ) in _run_query(conn, "sequences.sql"):
             schema_by_name[schema_name].sequence_by_name[seq_name] = Sequence(
                 name=seq_name,
@@ -117,10 +128,13 @@ def build_db_info(dsn: str) -> DbInfo:
                 max_value=seq_max,
                 cache=seq_cache,
                 cycle=seq_cycle,
+                comment=seq_comment,
             )
 
         # Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
-        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in _run_query(conn, "functions.sql"):
+        for schema_name, func_name, func_args, func_def, func_rettype, func_kind, func_comment in _run_query(
+            conn, "functions.sql"
+        ):
             signature = f"{func_name}({func_args})"
             schema_by_name[schema_name].function_by_signature[signature] = Function(
                 name=func_name,
@@ -128,6 +142,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 definition=func_def.rstrip(),
                 return_type=func_rettype,
                 kind=func_kind,
+                comment=func_comment,
             )
 
         # Extensions (database-level).

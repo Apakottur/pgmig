@@ -71,13 +71,18 @@ def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     statements: list[Statement] = []
 
-    for name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        # Present in target only: create it.
-        if name not in source.schema_by_name:
-            statements.append(Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};"))
+    for name, src_schema, dst_schema in _iter_schema_pairs(source, target):
         # Present in source only: drop it.
-        elif name not in target.schema_by_name:
+        if dst_schema is None:
             statements.append(Statement(Phase.SCHEMA_DROP, f"DROP SCHEMA {ident(name)};"))
+            continue
+        # Present in target only: create it.
+        if src_schema is None:
+            statements.append(Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};"))
+        # Sync comment.
+        src_comment = src_schema.comment if src_schema else None
+        if src_comment != dst_schema.comment:
+            statements.append(Statement(Phase.SCHEMA_CREATE, comment_on("SCHEMA", ident(name), dst_schema.comment)))
 
     return statements
 
@@ -281,11 +286,18 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             continue
 
         src_indexes = src_table.index_by_name if src_table else {}
-        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_table.index_by_name)
+        dst_indexes = dst_table.index_by_name
+        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
         # Emit drops first (frees names), then renames, then creates.
         statements.extend(drops)
         statements.extend(renames)
         statements.extend(creates)
+
+        # Sync comments for target indexes.
+        for index_name, dst_index in dst_indexes.items():
+            src_index = src_indexes.get(index_name)
+            if (src_index.comment if src_index else None) != dst_index.comment:
+                statements.append(comment_on("INDEX", qualified(schema_name, index_name), dst_index.comment))
 
     return [Statement(Phase.INDEX, sql) for sql in statements]
 
@@ -421,6 +433,21 @@ def _diff_constraints(
     )
 
 
+def _constraint_comment_statements(
+    schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
+) -> list[str]:
+    """
+    Emit COMMENT ON CONSTRAINT for target constraints whose comment differs from source.
+    """
+    table = qualified(schema_name, table_name)
+    statements: list[str] = []
+    for name, dst_constraint in dst.items():
+        src_constraint = src.get(name)
+        if (src_constraint.comment if src_constraint else None) != dst_constraint.comment:
+            statements.append(comment_on("CONSTRAINT", f"{ident(name)} ON {table}", dst_constraint.comment))
+    return statements
+
+
 def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
@@ -433,16 +460,18 @@ def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             continue
 
         src_constraints = src_table.constraint_by_name if src_table else {}
+        dst_constraints = dst_table.constraint_by_name
         drops, renames, adds = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
-            dst=dst_table.constraint_by_name,
+            dst=dst_constraints,
         )
         # Drops first (frees names), then renames, then adds.
         statements.extend(drops)
         statements.extend(renames)
         statements.extend(adds)
+        statements.extend(_constraint_comment_statements(schema_name, table_name, src_constraints, dst_constraints))
 
     return [Statement(Phase.CONSTRAINT, sql) for sql in statements]
 
@@ -472,6 +501,7 @@ def _generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> list[Statement]
         # Renames carry no referenced-object dependency, so they ride with the adds.
         fk_adds.extend(renames)
         fk_adds.extend(adds)
+        fk_adds.extend(_constraint_comment_statements(schema_name, table_name, src_fks, dst_fks))
 
     return [Statement(Phase.FOREIGN_KEY_DROP, sql) for sql in fk_drops] + [
         Statement(Phase.FOREIGN_KEY_ADD, sql) for sql in fk_adds
@@ -514,6 +544,13 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                         f"({src_func.identity_arguments});"
                     )
                 creates.append(f"{dst_func.definition};")
+
+            # Sync comment for a target routine (COMMENT ON FUNCTION / PROCEDURE by kind).
+            if dst_func is not None:
+                src_comment = src_func.comment if src_func else None
+                if src_comment != dst_func.comment:
+                    path = f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})"
+                    creates.append(comment_on(dst_func.drop_keyword, path, dst_func.comment))
 
     return [Statement(Phase.FUNCTION_CREATE, sql) for sql in creates] + [
         Statement(Phase.FUNCTION_DROP, sql) for sql in drops
@@ -577,6 +614,12 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                     clauses.append("CYCLE" if dst_seq.cycle else "NO CYCLE")
                 if clauses:
                     creates.append(f"ALTER SEQUENCE {qualified(schema_name, name)} {' '.join(clauses)};")
+
+        # Sync comments for target sequences.
+        for name, dst_seq in dst_sequences.items():
+            src_seq = src_sequences.get(name)
+            if (src_seq.comment if src_seq else None) != dst_seq.comment:
+                creates.append(comment_on("SEQUENCE", qualified(schema_name, name), dst_seq.comment))
 
     return [Statement(Phase.SEQUENCE_CREATE, sql) for sql in creates] + [
         Statement(Phase.SEQUENCE_DROP, sql) for sql in drops

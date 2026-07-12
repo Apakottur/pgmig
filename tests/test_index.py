@@ -128,3 +128,25 @@ def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) 
             'ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id);',
         ]
     )
+
+
+def test_index_comment_added(gen_setup: GenerateSetup) -> None:
+    """
+    Comment added to an index present on both sides -> COMMENT ON INDEX.
+    """
+    gen_setup.execute_both("CREATE TABLE person (name text)")
+    gen_setup.execute_both("CREATE INDEX person_name_idx ON person (name)")
+    gen_setup.dst.execute("COMMENT ON INDEX person_name_idx IS 'by name'")
+
+    gen_setup.assert_migration_sql('COMMENT ON INDEX "public"."person_name_idx" IS \'by name\';')
+
+
+def test_index_comment_removed(gen_setup: GenerateSetup) -> None:
+    """
+    Comment removed from an index -> COMMENT ON INDEX ... IS NULL.
+    """
+    gen_setup.execute_both("CREATE TABLE person (name text)")
+    gen_setup.execute_both("CREATE INDEX person_name_idx ON person (name)")
+    gen_setup.src.execute("COMMENT ON INDEX person_name_idx IS 'by name'")
+
+    gen_setup.assert_migration_sql('COMMENT ON INDEX "public"."person_name_idx" IS NULL;')

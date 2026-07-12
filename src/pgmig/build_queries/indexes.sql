@@ -4,7 +4,8 @@ SELECT
     c.relname,
     ic.relname,
     pg_get_indexdef(i.indexrelid),
-    replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ')
+    replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON '),
+    obj_description(i.indexrelid, 'pg_class')
 FROM
     pg_index i
     JOIN pg_class ic ON ic.oid = i.indexrelid
