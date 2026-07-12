@@ -1,17 +1,8 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
 from pgmig._models import Index
 from pgmig._sql import comment_on, ident, qualified
-
-
-def _concurrently(definition: str) -> str:
-    """
-    Insert CONCURRENTLY into a `CREATE [UNIQUE] INDEX ...` statement (from
-    pg_get_indexdef), right after the INDEX keyword. pg_get_indexdef always begins with
-    `CREATE INDEX` or `CREATE UNIQUE INDEX`, so replacing the first ` INDEX ` covers both.
-    """
-    return definition.replace(" INDEX ", " INDEX CONCURRENTLY ", 1)
 
 
 def _diff_indexes(
@@ -19,26 +10,18 @@ def _diff_indexes(
     schema_name: str,
     src: dict[str, Index],
     dst: dict[str, Index],
-    concurrently: bool,
 ) -> tuple[list[str], list[str], list[str], set[str]]:
     """
     Diff one table's standalone indexes into (drops, renames, creates), using each
-    index's name-independent canonical form as the rename key. When `concurrently`,
-    creates and drops carry CONCURRENTLY (a rename cannot and never does).
+    index's name-independent canonical form as the rename key.
     """
-    drop_keyword = "DROP INDEX CONCURRENTLY" if concurrently else "DROP INDEX"
-    render_create: Callable[[str, Index], str] = (
-        (lambda _name, index: f"{_concurrently(index.definition)};")
-        if concurrently
-        else (lambda _name, index: f"{index.definition};")
-    )
     return _diff_renamable(
         src,
         dst,
         key=lambda index: index.canonical,
-        render_drop=lambda name: f"{drop_keyword} {qualified(schema_name, name)};",
+        render_drop=lambda name: f"DROP INDEX {qualified(schema_name, name)};",
         render_rename=lambda old, new: f"ALTER INDEX {qualified(schema_name, old)} RENAME TO {ident(new)};",
-        render_create=render_create,
+        render_create=lambda _name, index: f"{index.definition};",
     )
 
 
@@ -74,8 +57,12 @@ def generate(ctx: Context) -> Iterator[Statement]:
             schema_name=schema_name,
             src=src_indexes,
             dst=dst_indexes,
-            concurrently=ctx.index_concurrently,
         )
+
+        if ctx.index_concurrently:
+            drops = [drop.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for drop in drops]
+            creates = [create.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for create in creates]
+
         comments = _index_comment_statements(schema_name, src_indexes, dst_indexes, recreated)
         # Emit drops first (frees names), then renames, then creates, then comments.
         for sql in (*drops, *renames, *creates, *comments):
