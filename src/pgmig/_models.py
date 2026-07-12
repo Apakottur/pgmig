@@ -47,6 +47,7 @@ class Index:
     # `definition` with the index's own name stripped out, so two indexes that
     # differ only by name compare equal (drives rename detection).
     canonical: str
+    comment: str | None
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,7 @@ class Constraint:
     definition: str
     contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
+    comment: str | None
 
     @property
     def is_primary_key(self) -> bool:
@@ -122,6 +124,7 @@ class Sequence:
     max_value: int
     cache: int
     cycle: bool
+    comment: str | None
 
 
 @dataclass(frozen=True)
@@ -135,6 +138,7 @@ class Function:
     definition: str  # pg_get_functiondef output: a full CREATE OR REPLACE ...
     return_type: str | None  # format_type(prorettype); None for procedures
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
+    comment: str | None
 
     @property
     def drop_keyword(self) -> str:
@@ -151,6 +155,7 @@ class Schema:
     """
 
     name: str
+    comment: str | None
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]

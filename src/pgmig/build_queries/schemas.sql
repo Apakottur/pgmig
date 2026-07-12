@@ -1,6 +1,7 @@
 -- Schemas (user namespaces, excluding system and extension-owned ones).
 SELECT
-    n.nspname
+    n.nspname,
+    obj_description(n.oid, 'pg_namespace')
 FROM
     pg_namespace n
 WHERE

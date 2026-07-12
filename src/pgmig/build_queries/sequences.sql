@@ -8,7 +8,8 @@ SELECT
     s.seqmin,
     s.seqmax,
     s.seqcache,
-    s.seqcycle
+    s.seqcycle,
+    obj_description(c.oid, 'pg_class')
 FROM
     pg_sequence s
     JOIN pg_class c ON c.oid = s.seqrelid

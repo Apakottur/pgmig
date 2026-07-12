@@ -12,7 +12,8 @@ SELECT
             unnest(con.conkey)
             WITH ORDINALITY AS k (attnum, ord)
             JOIN pg_attribute a ON a.attrelid = con.conrelid
-                AND a.attnum = k.attnum)
+                AND a.attnum = k.attnum),
+        obj_description(con.oid, 'pg_constraint')
     FROM
         pg_constraint con
     JOIN pg_class c ON c.oid = con.conrelid
