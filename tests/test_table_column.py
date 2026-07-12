@@ -115,6 +115,24 @@ def test_table_column_drop_not_null(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "name" DROP NOT NULL;')
 
 
+def test_table_column_drop_not_null_after_primary_key_drop(gen_setup: GenerateSetup) -> None:
+    """
+    A source PRIMARY KEY column (implicitly NOT NULL) becomes a plain nullable column in
+    the target. The PK drop lands in the CONSTRAINT phase, so the column's DROP NOT NULL
+    must be emitted after it -- Postgres refuses DROP NOT NULL while the column is still
+    in a primary key ("column is in a primary key").
+    """
+    gen_setup.src.execute("CREATE TABLE person (id integer PRIMARY KEY)")
+    gen_setup.dst.execute("CREATE TABLE person (id integer)")
+
+    gen_setup.assert_migration_sql(
+        [
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_pkey";',
+            'ALTER TABLE "public"."person" ALTER COLUMN "id" DROP NOT NULL;',
+        ]
+    )
+
+
 def test_table_column_set_default(gen_setup: GenerateSetup) -> None:
     """
     Column with no default in source, default in target -> SET DEFAULT.

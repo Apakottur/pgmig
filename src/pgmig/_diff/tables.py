@@ -37,18 +37,31 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
 
 
 def _alter_columns(
-    *, schema_name: str, table_name: str, src_table: Table, dst_table: Table, pk_columns: set[str]
-) -> list[str]:
+    *,
+    schema_name: str,
+    table_name: str,
+    src_table: Table,
+    dst_table: Table,
+    pk_columns: set[str],
+    src_pk_columns: set[str],
+) -> tuple[list[str], list[str]]:
     """
     Sync the columns of a table present on both sides: add/drop by name, and for a
     shared column sync DEFAULT then NOT NULL. A type or identity change is unsupported
     and raises rather than emitting a silently-empty (falsely converged) migration.
 
+    Returns (statements, deferred_drop_not_null). The first run in the TABLE phase; the
+    second must run after the CONSTRAINT phase (see below).
+
     A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
-    ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. Passing the set in
-    keeps that cross-object coordination an explicit seam.
+    ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. The mirror case: a column
+    covered by the source primary key (`src_pk_columns`) that becomes nullable -- its
+    covering PK is dropped this run (a target PK would keep it NOT NULL), and Postgres
+    refuses DROP NOT NULL while the column is still in a primary key. That DROP NOT NULL
+    is deferred so it can be phased after the CONSTRAINT-phase DROP CONSTRAINT.
     """
     statements: list[str] = []
+    deferred_drop_not_null: list[str] = []
     src_columns = {column.name: column for column in src_table.columns}
     dst_columns = {column.name: column for column in dst_table.columns}
 
@@ -96,9 +109,12 @@ def _alter_columns(
                     # Skip if a target primary key already covers this column.
                     if column_name not in pk_columns:
                         statements.append(f"{prefix} SET NOT NULL;")
+                elif column_name in src_pk_columns:
+                    # Covering source PK drops this run; defer past the CONSTRAINT phase.
+                    deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")
                 else:
                     statements.append(f"{prefix} DROP NOT NULL;")
-    return statements
+    return statements, deferred_drop_not_null
 
 
 def _table_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -138,18 +154,24 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
             yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")
             continue
 
+        deferred_drop_not_null: list[str] = []
         if src_table is None:
             rendered = _create_table(schema_name, dst_table)
         else:
-            rendered = _alter_columns(
+            rendered, deferred_drop_not_null = _alter_columns(
                 schema_name=schema_name,
                 table_name=table_name,
                 src_table=src_table,
                 dst_table=dst_table,
                 pk_columns=dst_table.get_primary_key_columns(),
+                src_pk_columns=src_table.get_primary_key_columns(),
             )
         rendered += _table_comment_statements(schema_name, src_table, dst_table)
         rendered += _column_comment_statements(schema_name, src_table, dst_table)
 
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
+        # DROP NOT NULL for a column whose covering primary key drops this run must run
+        # after the CONSTRAINT-phase DROP CONSTRAINT.
+        for sql in deferred_drop_not_null:
+            yield Statement(Phase.COLUMN_DROP_NOT_NULL, sql)
