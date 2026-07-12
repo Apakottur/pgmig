@@ -264,3 +264,20 @@ def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
 
     # Verify migration.
     gen_setup.assert_migration_sql(f'ALTER EXTENSION "{ext_info.name}" SET SCHEMA "{other_schema_name}";')
+
+
+def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> None:
+    """
+    A table uses a type provided by an extension, and both are dropped. DROP EXTENSION
+    must run after DROP TABLE -- dropping the extension first fails because the table's
+    column still depends on it ("other objects depend on it").
+    """
+    gen_setup.src.execute("CREATE EXTENSION citext")
+    gen_setup.src.execute("CREATE TABLE u (e citext)")
+
+    gen_setup.assert_migration_sql(
+        [
+            'DROP TABLE "public"."u";',
+            'DROP EXTENSION "citext";',
+        ]
+    )

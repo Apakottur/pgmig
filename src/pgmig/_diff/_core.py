@@ -57,7 +57,7 @@ class Phase(Enum):
     TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
-    EXTENSION = auto()
+    EXTENSION_CREATE = auto()  # Before tables/types that may use what the extension provides.
     TYPE_CREATE = auto()  # Before tables (a column may be of the type) and its ADD VALUE alters.
     SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
     TABLE = auto()
@@ -69,6 +69,7 @@ class Phase(Enum):
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
     TYPE_DROP = auto()  # After tables whose columns used the type are gone.
+    EXTENSION_DROP = auto()  # After tables/types/functions the extension provided are gone.
     SCHEMA_DROP = auto()
 
 
