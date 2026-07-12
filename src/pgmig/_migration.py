@@ -133,6 +133,12 @@ def _column_def(column: Column) -> str:
     if column.serial_type is not None:
         return f"{ident(column.name)} {column.serial_type}"
 
+    # An identity column has no GENERATED ... AS IDENTITY clause rendered here, so
+    # emitting it would create a plain column and silently drop the identity. Refuse
+    # loudly rather than produce a migration that never converges.
+    if column.identity != "":
+        raise NotImplementedError(f"Identity column is not supported: {ident(column.name)}")
+
     parts = [f"{ident(column.name)} {column.type}"]
     if column.default is not None:
         parts.append(f"DEFAULT {column.default}")
@@ -154,7 +160,8 @@ def _alter_columns(
 ) -> list[str]:
     """
     Sync the columns of a table present on both sides: add/drop by name, and for a
-    shared column sync DEFAULT then NOT NULL. Type changes are out of scope.
+    shared column sync DEFAULT then NOT NULL. A type or identity change is unsupported
+    and raises rather than emitting a silently-empty (falsely converged) migration.
 
     A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
     ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. Passing the set in
@@ -173,6 +180,19 @@ def _alter_columns(
         else:
             src_column = src_columns[column_name]
             dst_column = dst_columns[column_name]
+            # Type and identity changes are not yet modelled. Emitting nothing would be
+            # indistinguishable from "in sync", so fail loudly instead of lying.
+            if src_column.type != dst_column.type:
+                raise NotImplementedError(
+                    f"Column type change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
+                    f"{src_column.type} -> {dst_column.type}"
+                )
+            if src_column.identity != dst_column.identity:
+                raise NotImplementedError(
+                    f"Column identity change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)}"
+                )
             prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             if src_column.default != dst_column.default:
                 if dst_column.default is None:
