@@ -83,7 +83,7 @@ def test_enum_typed_column_ordered_after_type(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql(
         [
             "CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'happy');",
-            'CREATE TABLE "public"."person" ("feeling" mood);',
+            'CREATE TABLE "public"."person" ("feeling" public.mood);',
         ]
     )
 

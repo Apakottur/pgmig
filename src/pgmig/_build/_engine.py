@@ -40,8 +40,12 @@ def build_db_info(dsn: str) -> DbInfo:
     Build the full structure of the given database.
     """
     # Open the connection, surfacing connection failures as a clean PgmigError.
+    # An empty search_path makes introspection independent of the database's own
+    # search_path and forces the deparse functions (format_type, pg_get_expr,
+    # pg_get_constraintdef, pg_get_indexdef, ...) to fully qualify every name, so the
+    # emitted SQL is deterministic and portable regardless of the runner's search_path.
     try:
-        conn = psycopg.connect(dsn, options="-c default_transaction_read_only=on")
+        conn = psycopg.connect(dsn, options="-c default_transaction_read_only=on -c search_path=")
     except psycopg.Error as error:
         raise PgmigError(f"Could not connect to database: {error}") from error
 

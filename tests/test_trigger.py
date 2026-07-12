@@ -21,7 +21,7 @@ def test_trigger_create(gen_setup: GenerateSetup) -> None:
     )
 
     gen_setup.assert_migration_sql(
-        "CREATE TRIGGER person_audit AFTER INSERT ON public.person FOR EACH ROW EXECUTE FUNCTION log_change();"
+        "CREATE TRIGGER person_audit AFTER INSERT ON public.person FOR EACH ROW EXECUTE FUNCTION public.log_change();"
     )
 
 
@@ -63,7 +63,7 @@ def test_trigger_definition_changed(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql(
         [
             'DROP TRIGGER "person_audit" ON "public"."person";',
-            "CREATE TRIGGER person_audit AFTER UPDATE ON public.person FOR EACH ROW EXECUTE FUNCTION log_change();",
+            "CREATE TRIGGER person_audit AFTER UPDATE ON public.person FOR EACH ROW EXECUTE FUNCTION public.log_change();",
         ]
     )
 
