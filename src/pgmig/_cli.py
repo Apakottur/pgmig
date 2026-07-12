@@ -39,13 +39,23 @@ def generate(
             "the migration is still emitted so the drift is visible.",
         ),
     ] = False,
+    index_concurrently: Annotated[
+        bool,
+        typer.Option(
+            "--index-concurrently",
+            "-C",
+            help="Emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY, so "
+            "index maintenance takes no blocking lock. These statements cannot run inside a "
+            "transaction block -- apply them outside BEGIN/COMMIT.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
     """
     try:
         # Generate the migration SQL.
-        sql = generate_migration(source=source, target=target)
+        sql = generate_migration(source=source, target=target, index_concurrently=index_concurrently)
     except PgmigError as error:
         # Known error - print message without traceback.
         typer.echo(error.message, err=True)

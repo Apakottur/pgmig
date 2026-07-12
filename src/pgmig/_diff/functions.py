@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._core import Options, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import DbInfo, Function
 from pgmig._sql import comment_on, qualified
 
@@ -42,7 +42,7 @@ def _function_comment_statements(
     )
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of functions and procedures. Creates (including
     CREATE OR REPLACE) are phased after tables so routine bodies can reference them;

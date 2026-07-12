@@ -1,5 +1,5 @@
 from pgmig._diff import constraints, enums, extensions, functions, indexes, schemas, sequences, tables, triggers
-from pgmig._diff._core import Generator, Phase
+from pgmig._diff._core import Generator, Options, Phase
 from pgmig._models import DbInfo
 
 # Registration order is cosmetic — final ordering is decided by each statement's phase.
@@ -18,14 +18,14 @@ _GENERATORS: tuple[Generator, ...] = (
 )
 
 
-def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
+def generate_migration_sql(*, source: DbInfo, target: DbInfo, options: Options) -> str:
     """
     Get the migration SQL between the given source and target databases.
     """
     # Collect statements by phase, then join in phase declaration order.
     statements_by_phase: dict[Phase, list[str]] = {phase: [] for phase in Phase}
     for generate in _GENERATORS:
-        for statement in generate(source=source, target=target):
+        for statement in generate(source=source, target=target, options=options):
             statements_by_phase[statement.phase].append(statement.sql)
 
     return "\n".join(sql for phase in Phase for sql in statements_by_phase[phase])

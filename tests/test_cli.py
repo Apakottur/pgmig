@@ -76,6 +76,17 @@ def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
     assert result.stdout == ""
 
 
+def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
+    # --index-concurrently emits CONCURRENTLY index statements.
+    gen_setup.execute_both("CREATE TABLE person (name text)")
+    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
+
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--index-concurrently"])
+
+    assert result.exit_code == 0
+    assert result.stdout == "CREATE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);\n"
+
+
 def test_version() -> None:
     result = _runner.invoke(app, ["--version"])
 

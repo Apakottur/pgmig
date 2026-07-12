@@ -92,14 +92,29 @@ class Statement:
     sql: str
 
 
-class Generator(Protocol):
+@dataclass(frozen=True)
+class Options:
     """
-    The shared shape of every object-kind generator: keyword-only source and target,
-    yielding phase-tagged statements. Annotating the registry with this enforces one
-    uniform signature (names included) across all generators.
+    Output options that tune how statements are rendered, threaded uniformly to every
+    generator (most ignore it; today only index generation reads a field).
+
+    index_concurrently: emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with
+        CONCURRENTLY so index maintenance does not take a blocking lock. The resulting
+        statements cannot run inside a transaction block -- the caller must apply them
+        outside BEGIN/COMMIT.
     """
 
-    def __call__(self, *, source: DbInfo, target: DbInfo) -> Iterator[Statement]: ...
+    index_concurrently: bool = False
+
+
+class Generator(Protocol):
+    """
+    The shared shape of every object-kind generator: keyword-only source, target and
+    options, yielding phase-tagged statements. Annotating the registry with this enforces
+    one uniform signature (names included) across all generators.
+    """
+
+    def __call__(self, *, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:

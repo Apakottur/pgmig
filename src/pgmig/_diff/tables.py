@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_table_pairs
+from pgmig._diff._core import Options, Phase, Statement, _diff_comments, _iter_table_pairs
 from pgmig._models import Column, DbInfo, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -143,7 +143,7 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     )
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
     """
     Generate the migration SQL of tables: drop, create, or alter columns, followed by
     table and column comment sync.
