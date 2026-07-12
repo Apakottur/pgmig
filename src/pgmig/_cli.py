@@ -66,12 +66,12 @@ def generate(
         ),
     ] = False,
     ignore_extension_version: Annotated[
-        list[str],
+        list[str] | None,
         typer.Option(
             "--ignore-extension-version",
             help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
         ),
-    ] = [],
+    ] = None,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
