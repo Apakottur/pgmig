@@ -88,8 +88,8 @@ print(sql)  # the migration SQL
 
 `pgmig` has no configuration file — everything is passed on the command line (or as arguments to `pgmig.generate`).
 
-`pgmig generate` (CLI) and `pgmig.generate` (library) accept the same options; the CLI-only
-ones (`--output`, `--check`) shape I/O and exit codes rather than the diff itself.
+The CLI (`pgmig generate`) and the library (`pgmig.generate`) share the same options; the CLI
+adds a few more (`—` in the library column):
 
 | CLI option               | Library argument     | Description                                             |
 | ------------------------ | -------------------- | ------------------------------------------------------- |
