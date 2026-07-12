@@ -1,5 +1,12 @@
 from dataclasses import dataclass
 
+# Maps a serial column's underlying integer type to its serial pseudo-type.
+_SERIAL_TYPE_BY_INT_TYPE = {
+    "smallint": "smallserial",
+    "integer": "serial",
+    "bigint": "bigserial",
+}
+
 
 @dataclass(frozen=True)
 class Column:
@@ -12,10 +19,20 @@ class Column:
     not_null: bool
     default: str | None
     comment: str | None
-    # For a serial column, the pseudo-type to emit ("serial"/"bigserial"/"smallserial");
-    # None for a regular column. A serial column's expanded integer type, nextval()
-    # default and NOT NULL are all implied by the pseudo-type, so they are not emitted.
-    serial_type: str | None = None
+    identity: str  # pg_attribute.attidentity ('' for a non-identity column)
+    serial_sequence: str | None  # sequence owned via a nextval() default, else None
+
+    @property
+    def serial_type(self) -> str | None:
+        """
+        The serial pseudo-type to emit ("serial"/"bigserial"/"smallserial"), or None.
+
+        A serial column owns a sequence via its nextval() default and is not an
+        identity column; its integer type maps to the matching pseudo-type.
+        """
+        if self.serial_sequence is None or self.identity != "":
+            return None
+        return _SERIAL_TYPE_BY_INT_TYPE.get(self.type)
 
 
 @dataclass(frozen=True)
