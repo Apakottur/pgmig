@@ -1,14 +1,14 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement
-from pgmig._models import DbInfo
+from pgmig._diff._core import Context, Phase, Statement
 from pgmig._sql import comment_on, ident, literal
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(ctx: Context) -> Iterator[Statement]:
     """
     Generate the migration SQL of extensions.
     """
+    source, target = ctx.source, ctx.target
     for name in sorted(source.extension_by_name.keys() | target.extension_by_name.keys()):
         # Present in target only: create it.
         if name not in source.extension_by_name:

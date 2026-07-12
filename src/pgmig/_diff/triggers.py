@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
-from pgmig._models import DbInfo, Trigger
+from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._models import Trigger
 from pgmig._sql import comment_on, ident, qualified
 
 
@@ -38,12 +38,12 @@ def _trigger_comment_statements(
     )
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate(ctx: Context) -> Iterator[Statement]:
     """
     Generate the migration SQL of triggers. Drops are phased before the functions they
     call are dropped; creates (with renames) after those functions and tables exist.
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(ctx.source, ctx.target):
         # Table dropped: its triggers are dropped with it.
         if dst_table is None:
             continue

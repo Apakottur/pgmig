@@ -88,14 +88,16 @@ print(sql)  # the migration SQL
 
 `pgmig` has no configuration file — everything is passed on the command line (or as arguments to `pgmig.generate`).
 
-`pgmig generate` accepts:
+The CLI (`pgmig generate`) and the library (`pgmig.generate`) share the same options; the CLI
+adds a few more (`—` in the library column):
 
-| Option           | Description                                             |
-| ---------------- | ------------------------------------------------------- |
-| `--source`, `-s` | DSN of the source (current) database. Falls back to the `PGMIG_SOURCE` environment variable. |
-| `--target`, `-t` | DSN of the target (desired) database. Falls back to the `PGMIG_TARGET` environment variable. |
-| `--output`, `-o` | Write the migration SQL to this file instead of stdout. |
-| `--check`, `-c`  | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
+| CLI option               | Library argument     | Description                                             |
+| ------------------------ | -------------------- | ------------------------------------------------------- |
+| `--source`, `-s`         | `source`             | DSN of the source (current) database. Falls back to the `PGMIG_SOURCE` environment variable. |
+| `--target`, `-t`         | `target`             | DSN of the target (desired) database. Falls back to the `PGMIG_TARGET` environment variable. |
+| `--index-concurrently`, `-C` | `index_concurrently` | Whether to emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`. Using `CONCURRENTLY` avoids blocking index read/write operations, but takes longer to execute and cannot be run inside a transaction block. |
+| `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
+| `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 
 ### Connections
 

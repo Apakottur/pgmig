@@ -92,14 +92,32 @@ class Statement:
     sql: str
 
 
-class Generator(Protocol):
+@dataclass(frozen=True)
+class Context:
     """
-    The shared shape of every object-kind generator: keyword-only source and target,
-    yielding phase-tagged statements. Annotating the registry with this enforces one
-    uniform signature (names included) across all generators.
+    Everything a generator needs: the two databases being diffed and the output configuration.
     """
 
-    def __call__(self, *, source: DbInfo, target: DbInfo) -> Iterator[Statement]: ...
+    # Databases.
+    source: DbInfo
+    target: DbInfo
+
+    # Output configuration.
+
+    # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
+    # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
+    # run inside a transaction block.
+    index_concurrently: bool = False
+
+
+class Generator(Protocol):
+    """
+    The shared shape of every object-kind generator: take the diff Context and yield
+    phase-tagged statements. Annotating the registry with this enforces one uniform
+    signature across all generators.
+    """
+
+    def __call__(self, ctx: Context) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:
