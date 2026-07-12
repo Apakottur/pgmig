@@ -33,7 +33,7 @@ class Column:
             case "bigint":
                 return "bigserial"
             case _:
-                raise ValueError(f"Unknown integer type: {self.type}")
+                raise NotImplementedError(f"Unknown integer type: {self.type}")
 
 
 @dataclass(frozen=True)
