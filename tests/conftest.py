@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -20,6 +21,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Tear down the docker compose stack after the test session (default: leave it running).",
     )
+    parser.addoption(
+        "--pg-version",
+        action="store",
+        default=None,
+        help=(
+            "Postgres major version to test against (e.g. 14). "
+            "Falls back to the PGMIG_TEST_PG_VERSION env var, then 18."
+        ),
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -28,6 +38,12 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
     """
+    # Resolve the Postgres major version: --pg-version, then PGMIG_TEST_PG_VERSION, then 18.
+    # Export it so the docker compose image tag (postgres:${PGMIG_TEST_PG_VERSION}) resolves;
+    # the subprocess inherits this environment.
+    pg_version = request.config.getoption("--pg-version") or os.environ.get("PGMIG_TEST_PG_VERSION") or "18"
+    os.environ["PGMIG_TEST_PG_VERSION"] = pg_version
+
     # Start the database server.
     shpyx.run("docker compose up -d postgres", exec_dir=_COMPOSE_FILE_DIR)
 

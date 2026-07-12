@@ -2,10 +2,39 @@ name: pgmig
 
 services:
   postgres:
-    build: .
+    # Raw major tag (unpinned minor), selected by PGMIG_TEST_PG_VERSION (default 18).
+    # conftest sets this from the --pg-version pytest option before `compose up`.
+    image: postgres:${PGMIG_TEST_PG_VERSION:-18}-alpine
+    # This Postgres instance only ever holds ephemeral test data: the databases are
+    # dropped and recreated per test and the whole container is disposable. So we
+    # trade crash-durability for speed - DROP/CREATE DATABASE otherwise force
+    # fsync/checkpoints and dominate the test runtime. None of these are safe for
+    # real data.
+    #
+    #   fsync=off               Don't force writes to physical disk. A crash can
+    #                           corrupt the cluster - fine, it's throwaway.
+    #   synchronous_commit=off  COMMIT returns before the WAL is flushed to disk. A
+    #                           crash may lose the latest commits; the DB stays
+    #                           internally consistent.
+    #   full_page_writes=off    Skip full-page images in the WAL (torn-page
+    #                           protection). Redundant once fsync is off; trims WAL
+    #                           write work.
+    command:
+      ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
     environment:
       POSTGRES_USER: pgmig
       POSTGRES_PASSWORD: pgmig
       POSTGRES_DB: pgmig
+      # Pin PGDATA to a fixed, version-independent path (the official image's default
+      # varies by major: /var/lib/postgresql/data on 14-17, /var/lib/postgresql/18/docker
+      # on 18) and back it with tmpfs below.
+      PGDATA: /pgdata
+    # RAM-backed, ephemeral data directory. This avoids the image's anonymous data
+    # VOLUME, which docker reattaches across `up` recreates - switching PGMIG_TEST_PG_VERSION
+    # would otherwise load an older major's data dir into a newer server and fail with
+    # "database files are incompatible with server". tmpfs is per-container, so each
+    # (re)created container runs initdb for a fresh cluster; it's also faster than disk.
+    tmpfs:
+      - /pgdata
     ports:
       - "55432:5432"
