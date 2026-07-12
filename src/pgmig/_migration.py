@@ -4,6 +4,7 @@ from enum import Enum, auto
 from typing import TypeVar
 
 from pgmig._models import Column, Constraint, DbInfo, Index, Schema, Sequence, Table
+from pgmig._sql import ident, literal, qualified
 
 _Renamable = TypeVar("_Renamable")
 
@@ -71,10 +72,10 @@ def _generate_schemas(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     for name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
         # Present in target only: create it.
         if name not in source.schema_by_name:
-            statements.append(Statement(Phase.SCHEMA_CREATE, f'CREATE SCHEMA "{name}";'))
+            statements.append(Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};"))
         # Present in source only: drop it.
         elif name not in target.schema_by_name:
-            statements.append(Statement(Phase.SCHEMA_DROP, f'DROP SCHEMA "{name}";'))
+            statements.append(Statement(Phase.SCHEMA_DROP, f"DROP SCHEMA {ident(name)};"))
 
     return statements
 
@@ -92,13 +93,14 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             statements.append(
                 Statement(
                     Phase.EXTENSION,
-                    f'CREATE EXTENSION "{dst_ext.name}" VERSION \'{dst_ext.version}\' SCHEMA "{dst_ext.schema}";',
+                    f"CREATE EXTENSION {ident(dst_ext.name)} VERSION {literal(dst_ext.version)}"
+                    f" SCHEMA {ident(dst_ext.schema)};",
                 )
             )
         # Present in source only: drop it.
         elif name not in target.extension_by_name:
             src_ext = source.extension_by_name[name]
-            statements.append(Statement(Phase.EXTENSION, f'DROP EXTENSION "{src_ext.name}";'))
+            statements.append(Statement(Phase.EXTENSION, f"DROP EXTENSION {ident(src_ext.name)};"))
 
         # Present in both: alter version and/or schema if they differ.
         else:
@@ -106,11 +108,16 @@ def _generate_extensions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             dst_ext = target.extension_by_name[name]
             if src_ext.version != dst_ext.version:
                 statements.append(
-                    Statement(Phase.EXTENSION, f"ALTER EXTENSION \"{dst_ext.name}\" UPDATE TO '{dst_ext.version}';")
+                    Statement(
+                        Phase.EXTENSION,
+                        f"ALTER EXTENSION {ident(dst_ext.name)} UPDATE TO {literal(dst_ext.version)};",
+                    )
                 )
             if src_ext.schema != dst_ext.schema:
                 statements.append(
-                    Statement(Phase.EXTENSION, f'ALTER EXTENSION "{dst_ext.name}" SET SCHEMA "{dst_ext.schema}";')
+                    Statement(
+                        Phase.EXTENSION, f"ALTER EXTENSION {ident(dst_ext.name)} SET SCHEMA {ident(dst_ext.schema)};"
+                    )
                 )
     return statements
 
@@ -122,9 +129,9 @@ def _column_def(column: Column) -> str:
     # A serial column expands to its pseudo-type; the integer type, nextval()
     # default and NOT NULL are all implied and must not be emitted alongside it.
     if column.serial_type is not None:
-        return f'"{column.name}" {column.serial_type}'
+        return f"{ident(column.name)} {column.serial_type}"
 
-    parts = [f'"{column.name}" {column.type}']
+    parts = [f"{ident(column.name)} {column.type}"]
     if column.default is not None:
         parts.append(f"DEFAULT {column.default}")
     if column.not_null:
@@ -137,7 +144,7 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
     Render the CREATE TABLE statement for a target-only table (columns inline).
     """
     columns = ", ".join(_column_def(column) for column in table.columns)
-    return [f'CREATE TABLE "{schema_name}"."{table.name}" ({columns});']
+    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns});"]
 
 
 def _alter_columns(
@@ -158,13 +165,13 @@ def _alter_columns(
     for column_name in sorted(src_columns.keys() | dst_columns.keys()):
         if column_name not in src_columns:
             column = dst_columns[column_name]
-            statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN {_column_def(column)};')
+            statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} ADD COLUMN {_column_def(column)};")
         elif column_name not in dst_columns:
-            statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
+            statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} DROP COLUMN {ident(column_name)};")
         else:
             src_column = src_columns[column_name]
             dst_column = dst_columns[column_name]
-            prefix = f'ALTER TABLE "{schema_name}"."{table_name}" ALTER COLUMN "{column_name}"'
+            prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             if src_column.default != dst_column.default:
                 if dst_column.default is None:
                     statements.append(f"{prefix} DROP DEFAULT;")
@@ -188,10 +195,8 @@ def _table_comment_statements(schema_name: str, src_table: Table | None, dst_tab
     dst_comment = dst_table.comment
     if src_comment == dst_comment:
         return []
-    if dst_comment is None:
-        return [f'COMMENT ON TABLE "{schema_name}"."{dst_table.name}" IS NULL;']
-    escaped = dst_comment.replace("'", "''")
-    return [f'COMMENT ON TABLE "{schema_name}"."{dst_table.name}" IS \'{escaped}\';']
+    target = "NULL" if dst_comment is None else literal(dst_comment)
+    return [f"COMMENT ON TABLE {qualified(schema_name, dst_table.name)} IS {target};"]
 
 
 def _column_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -207,12 +212,8 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
         src_comment = src_columns[column_name].comment if column_name in src_columns else None
         dst_comment = dst_columns[column_name].comment
         if src_comment != dst_comment:
-            if dst_comment is None:
-                target = "NULL"
-            else:
-                escaped = dst_comment.replace("'", "''")
-                target = f"'{escaped}'"
-            statements.append(f'COMMENT ON COLUMN "{schema_name}"."{dst_table.name}"."{column_name}" IS {target};')
+            target = "NULL" if dst_comment is None else literal(dst_comment)
+            statements.append(f"COMMENT ON COLUMN {qualified(schema_name, dst_table.name, column_name)} IS {target};")
     return statements
 
 
@@ -226,7 +227,7 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
         # Present in source only: drop it (attached objects are dropped with it).
         if dst_table is None:
-            statements.append(f'DROP TABLE "{schema_name}"."{table_name}";')
+            statements.append(f"DROP TABLE {qualified(schema_name, table_name)};")
             continue
 
         if src_table is None:
@@ -331,8 +332,8 @@ def _diff_indexes(
         src,
         dst,
         key=lambda index: index.canonical,
-        render_drop=lambda name: f'DROP INDEX "{schema_name}"."{name}";',
-        render_rename=lambda old, new: f'ALTER INDEX "{schema_name}"."{old}" RENAME TO "{new}";',
+        render_drop=lambda name: f"DROP INDEX {qualified(schema_name, name)};",
+        render_rename=lambda old, new: f"ALTER INDEX {qualified(schema_name, old)} RENAME TO {ident(new)};",
         render_create=lambda _name, index: f"{index.definition};",
     )
 
@@ -344,14 +345,14 @@ def _diff_constraints(
     Diff one table's constraints (of a single kind) into (drops, renames, adds).
     The constraint definition (from pg_get_constraintdef) is already name-independent.
     """
-    prefix = f'ALTER TABLE "{schema_name}"."{table_name}"'
+    prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
     return _diff_renamable(
         src,
         dst,
         key=lambda constraint: constraint.definition,
-        render_drop=lambda name: f'{prefix} DROP CONSTRAINT "{name}";',
-        render_rename=lambda old, new: f'{prefix} RENAME CONSTRAINT "{old}" TO "{new}";',
-        render_create=lambda name, constraint: f'{prefix} ADD CONSTRAINT "{name}" {constraint.definition};',
+        render_drop=lambda name: f"{prefix} DROP CONSTRAINT {ident(name)};",
+        render_rename=lambda old, new: f"{prefix} RENAME CONSTRAINT {ident(old)} TO {ident(new)};",
+        render_create=lambda name, constraint: f"{prefix} ADD CONSTRAINT {ident(name)} {constraint.definition};",
     )
 
 
@@ -436,14 +437,16 @@ def _generate_functions(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             # Present in source only: drop it.
             elif dst_func is None:
                 drops.append(
-                    f'DROP {src_func.drop_keyword} "{schema_name}"."{src_func.name}"({src_func.identity_arguments});'
+                    f"DROP {src_func.drop_keyword} {qualified(schema_name, src_func.name)}"
+                    f"({src_func.identity_arguments});"
                 )
             # Present in both: re-create if the definition changed.
             elif src_func.definition != dst_func.definition:
                 # CREATE OR REPLACE cannot change the return type, so drop first when it differs.
                 if src_func.return_type != dst_func.return_type:
                     drops.append(
-                        f'DROP {src_func.drop_keyword} "{schema_name}"."{src_func.name}"({src_func.identity_arguments});'
+                        f"DROP {src_func.drop_keyword} {qualified(schema_name, src_func.name)}"
+                        f"({src_func.identity_arguments});"
                     )
                 creates.append(f"{dst_func.definition};")
 
@@ -484,10 +487,10 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
         for name in sorted(src_sequences.keys() | dst_sequences.keys()):
             # Present in target only: create it.
             if name not in src_sequences:
-                creates.append(f'CREATE SEQUENCE "{schema_name}"."{name}" {_sequence_tail(dst_sequences[name])};')
+                creates.append(f"CREATE SEQUENCE {qualified(schema_name, name)} {_sequence_tail(dst_sequences[name])};")
             # Present in source only: drop it.
             elif name not in dst_sequences:
-                drops.append(f'DROP SEQUENCE "{schema_name}"."{name}";')
+                drops.append(f"DROP SEQUENCE {qualified(schema_name, name)};")
             # Present in both: alter the parameters that differ.
             else:
                 src_seq = src_sequences[name]
@@ -508,7 +511,7 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
                 if src_seq.cycle != dst_seq.cycle:
                     clauses.append("CYCLE" if dst_seq.cycle else "NO CYCLE")
                 if clauses:
-                    creates.append(f'ALTER SEQUENCE "{schema_name}"."{name}" {" ".join(clauses)};')
+                    creates.append(f"ALTER SEQUENCE {qualified(schema_name, name)} {' '.join(clauses)};")
 
     return [Statement(Phase.SEQUENCE_CREATE, sql) for sql in creates] + [
         Statement(Phase.SEQUENCE_DROP, sql) for sql in drops

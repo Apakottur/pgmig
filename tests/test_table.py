@@ -12,6 +12,16 @@ def test_table_create(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql('CREATE TABLE "public"."person" ("name" text);')
 
 
+def test_table_create_with_quote_in_name(gen_setup: GenerateSetup) -> None:
+    """
+    A table (and column) whose name contains a double quote is quoted correctly:
+    the embedded quote is doubled, so the emitted DDL is valid and converges.
+    """
+    gen_setup.dst.execute('CREATE TABLE "we""ird" ("c""ol" text)')
+
+    gen_setup.assert_migration_sql('CREATE TABLE "public"."we""ird" ("c""ol" text);')
+
+
 def test_table_drop(gen_setup: GenerateSetup) -> None:
     """
     Table present in source but missing in target -> DROP TABLE.
