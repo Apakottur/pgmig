@@ -514,29 +514,24 @@ def _generate_sequences(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     ]
 
 
-_GENERATORS = (
-    _generate_schemas,
-    _generate_extensions,
-    _generate_sequences,
-    _generate_tables,
-    _generate_indexes,
-    _generate_constraints,
-    _generate_foreign_keys,
-    _generate_functions,
-)
-
-
 def generate_migration_sql(*, source: DbInfo, target: DbInfo) -> str:
     """
     Get the migration SQL between the given source and target databases.
     """
-    # Each generator emits phase-tagged statements; grouping by phase and iterating
-    # Phase in declaration order puts every statement in its dependency-correct
-    # position regardless of generator call order, preserving each generator's own
-    # order within a phase.
+    # Collect statements by phase.
     statements_by_phase: dict[Phase, list[str]] = {phase: [] for phase in Phase}
-    for generate in _GENERATORS:
+    for generate in (
+        _generate_schemas,
+        _generate_extensions,
+        _generate_sequences,
+        _generate_tables,
+        _generate_indexes,
+        _generate_constraints,
+        _generate_foreign_keys,
+        _generate_functions,
+    ):
         for statement in generate(source=source, target=target):
             statements_by_phase[statement.phase].append(statement.sql)
 
+    # Join statements by phase, ordering by phase declaration order.
     return "\n".join(sql for phase in Phase for sql in statements_by_phase[phase])
