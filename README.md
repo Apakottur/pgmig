@@ -77,7 +77,6 @@ import pgmig
 sql = pgmig.generate(
     source="postgresql://user:pass@localhost:5432/current",
     target="postgresql://user:pass@localhost:5432/desired",
-    index_concurrently=False,  # set True to emit CONCURRENTLY index statements
 )
 
 print(sql)  # the migration SQL
