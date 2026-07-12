@@ -58,3 +58,18 @@ def test_identity_column_raises_not_serial(gen_setup: GenerateSetup) -> None:
 
     with pytest.raises(NotImplementedError, match="Identity column"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+
+
+def test_serial_change_in_alter_path_raises(gen_setup: GenerateSetup) -> None:
+    """
+    A shared column changing between plain integer and serial is unsupported. The type
+    stays 'integer', so the type/identity guards do not fire; without a serial guard the
+    diff would emit SET DEFAULT nextval('..._seq') referencing an owned sequence that is
+    excluded from introspection and never created -> apply fails "relation does not
+    exist". It must raise instead.
+    """
+    gen_setup.src.execute("CREATE TABLE person (id integer)")
+    gen_setup.dst.execute("CREATE TABLE person (id serial)")
+
+    with pytest.raises(NotImplementedError, match="serial change"):
+        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
