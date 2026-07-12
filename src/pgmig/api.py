@@ -23,7 +23,7 @@ def generate(
                             Using CONCURRENTLY avoids blocking index read/write operations, but takes longer to execute
                             and cannot be run inside a transaction block.
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
-                            UPDATE TO is emitted for them. Empty (default) ignores none.
+                                  UPDATE TO is emitted for them. Empty (default) ignores none.
     """
     # Introspect both databases concurrently.
     with ThreadPoolExecutor(max_workers=2) as executor:

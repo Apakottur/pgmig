@@ -56,23 +56,22 @@ def generate(
             "the migration is still emitted so the drift is visible.",
         ),
     ] = False,
-    ignore_extension_version: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--ignore-extension-version",
-            help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
-        ),
-    ] = None,
     index_concurrently: Annotated[
         bool,
         typer.Option(
             "--index-concurrently",
-            "-C",
             help="Emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY, so "
             "index maintenance takes no blocking lock. These statements cannot run inside a "
             "transaction block -- apply them outside BEGIN/COMMIT.",
         ),
     ] = False,
+    ignore_extension_version: Annotated[
+        list[str],
+        typer.Option(
+            "--ignore-extension-version",
+            help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
+        ),
+    ] = [],
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
