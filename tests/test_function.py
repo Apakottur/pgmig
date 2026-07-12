@@ -1,3 +1,5 @@
+import pytest
+
 from tests.fixtures.generate_setup import GenerateSetup
 
 
@@ -114,3 +116,17 @@ def test_function_comment_added(gen_setup: GenerateSetup) -> None:
     gen_setup.dst.execute("COMMENT ON FUNCTION add(integer, integer) IS 'adds'")
 
     gen_setup.assert_migration_sql('COMMENT ON FUNCTION "public"."add"(a integer, b integer) IS \'adds\';')
+
+
+def test_function_drop_with_dependent_unsupported(gen_setup: GenerateSetup) -> None:
+    """
+    Dropping a function that a column default depends on is refused (dependency-aware
+    drop ordering is not implemented): raise NotImplementedError rather than emit an
+    invalid migration that DROP FUNCTION-before-DROP DEFAULT.
+    """
+    gen_setup.src.execute("CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$")
+    gen_setup.src.execute("CREATE TABLE t (x integer DEFAULT f())")
+    gen_setup.dst.execute("CREATE TABLE t (x integer)")
+
+    with pytest.raises(NotImplementedError):
+        gen_setup.assert_migration_sql("")

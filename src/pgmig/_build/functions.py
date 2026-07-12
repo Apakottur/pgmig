@@ -15,6 +15,7 @@ class _FunctionRow(BaseModel):
     func_rettype: str | None
     func_kind: str
     func_comment: str | None
+    func_has_dependents: bool
 
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
@@ -30,4 +31,5 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
             return_type=func_row.func_rettype,
             kind=func_row.func_kind,
             comment=func_row.func_comment,
+            has_dependents=func_row.func_has_dependents,
         )

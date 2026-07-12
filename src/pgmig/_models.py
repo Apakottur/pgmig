@@ -139,6 +139,11 @@ class Function:
     return_type: str | None  # format_type(prorettype); None for procedures
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
+    # Whether a non-trigger object (column default, check constraint, expression
+    # index, another routine, ...) depends on this routine. Such a dependent must be
+    # dropped before the routine, which the linear phase ordering can't guarantee, so
+    # dropping a routine with dependents is refused rather than mis-ordered.
+    has_dependents: bool
 
     @property
     def drop_keyword(self) -> str:

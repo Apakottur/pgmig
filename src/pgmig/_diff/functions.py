@@ -8,7 +8,18 @@ from pgmig._sql import comment_on, qualified
 def _drop_function_sql(schema_name: str, function: Function) -> str:
     """
     Render the DROP FUNCTION / DROP PROCEDURE statement for a routine (by signature).
+
+    Refuses a routine that other objects depend on (column default, check constraint,
+    expression index, another routine, ...): those dependents must be dropped first,
+    but they live in phases after FUNCTION_DROP, so the linear ordering would emit an
+    invalid migration. Fail loudly until per-statement dependency ordering lands.
     """
+    if function.has_dependents:
+        raise NotImplementedError(
+            f"Dropping {qualified(schema_name, function.name)}({function.identity_arguments}) is not supported: "
+            f"another object (column default, check constraint, expression index, or routine) depends on it, "
+            f"and dependency-aware drop ordering is not implemented yet."
+        )
     return f"DROP {function.drop_keyword} {qualified(schema_name, function.name)}({function.identity_arguments});"
 
 
