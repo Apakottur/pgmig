@@ -9,6 +9,7 @@ from pgmig._diff import (
     sequences,
     tables,
     triggers,
+    views,
 )
 from pgmig._diff._core import Context, Generator, Phase
 
@@ -26,6 +27,7 @@ _GENERATORS: tuple[Generator, ...] = (
     constraints.generate_foreign_keys,
     functions.generate,
     triggers.generate,
+    views.generate,
 )
 
 

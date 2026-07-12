@@ -126,6 +126,7 @@ initdb
 indisvalid
 deparsed
 excinfo
+viewdef
 typbasetype
 typtypmod
 typnotnull

@@ -4,14 +4,71 @@ from pgmig import PgmigError, generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
-def test_view_raises_not_supported(gen_setup: GenerateSetup) -> None:
+def test_view_create(gen_setup: GenerateSetup) -> None:
     """
-    A view (relkind 'v') is not modelled yet. Rather than diff only regular tables and
-    return "" (falsely claiming convergence), introspection must raise.
+    View present in target but missing in source -> CREATE VIEW.
     """
     gen_setup.dst.execute("CREATE VIEW active AS SELECT 1 AS x")
 
-    with pytest.raises(PgmigError, match=r"view .* is not supported"):
+    gen_setup.assert_migration_sql('CREATE VIEW "public"."active" AS SELECT 1 AS x;')
+
+
+def test_view_drop(gen_setup: GenerateSetup) -> None:
+    """
+    View present in source but missing in target -> DROP VIEW.
+    """
+    gen_setup.src.execute("CREATE VIEW active AS SELECT 1 AS x")
+
+    gen_setup.assert_migration_sql('DROP VIEW "public"."active";')
+
+
+def test_view_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical view on both sides -> no migration SQL.
+    """
+    gen_setup.execute_both("CREATE VIEW active AS SELECT 1 AS x")
+
+    gen_setup.assert_migration_sql("")
+
+
+def test_view_definition_change(gen_setup: GenerateSetup) -> None:
+    """
+    A changed view definition -> drop and recreate.
+    """
+    gen_setup.src.execute("CREATE VIEW active AS SELECT 1 AS x")
+    gen_setup.dst.execute("CREATE VIEW active AS SELECT 2 AS x")
+
+    gen_setup.assert_migration_sql(
+        [
+            'DROP VIEW "public"."active";',
+            'CREATE VIEW "public"."active" AS SELECT 2 AS x;',
+        ]
+    )
+
+
+def test_view_comment(gen_setup: GenerateSetup) -> None:
+    """
+    A view comment is synced with COMMENT ON VIEW.
+    """
+    gen_setup.dst.execute("CREATE VIEW active AS SELECT 1 AS x")
+    gen_setup.dst.execute("COMMENT ON VIEW active IS 'hi'")
+
+    gen_setup.assert_migration_sql(
+        [
+            'CREATE VIEW "public"."active" AS SELECT 1 AS x;',
+            'COMMENT ON VIEW "public"."active" IS \'hi\';',
+        ]
+    )
+
+
+def test_view_on_view_raises(gen_setup: GenerateSetup) -> None:
+    """
+    A view that selects from another view is not supported yet (dependency ordering).
+    """
+    gen_setup.dst.execute("CREATE VIEW base AS SELECT 1 AS x")
+    gen_setup.dst.execute("CREATE VIEW derived AS SELECT x FROM base")
+
+    with pytest.raises(PgmigError, match="view"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 

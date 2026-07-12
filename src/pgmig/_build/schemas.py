@@ -24,5 +24,6 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
             sequence_by_name={},
             function_by_signature={},
             enum_by_name={},
+            view_by_name={},
             domain_by_name={},
         )
