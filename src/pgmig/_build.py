@@ -1,4 +1,4 @@
-from importlib.resources import files
+from pathlib import Path
 from typing import Any, cast
 
 import psycopg
@@ -6,16 +6,13 @@ from typing_extensions import LiteralString
 
 from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table
 
-_QUERIES = files(__package__).joinpath("build_queries")
 
-
-def _run_build_query(conn: psycopg.Connection[tuple[Any, ...]], name: str) -> list[tuple[Any, ...]]:
+def _run_query(conn: psycopg.Connection[tuple[Any, ...]], file_name: str) -> list[tuple[Any, ...]]:
     """
     Load a bundled SQL query from the build_queries directory, run it, and return all rows.
     """
-    # The cast keeps ty happy (execute expects a LiteralString); mypy treats
-    # LiteralString as str and would call the cast redundant.
-    query = cast("LiteralString", _QUERIES.joinpath(name).read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
+    file_path = Path(__file__).parent.joinpath("build_queries").joinpath(file_name)
+    query = cast("LiteralString", file_path.read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
     return conn.execute(query).fetchall()
 
 
@@ -29,7 +26,7 @@ def build_db_info(dsn: str) -> DbInfo:
     # Construct database attributes.
     with psycopg.connect(dsn, options="-c default_transaction_read_only=on") as conn:
         # Schemas (user namespaces, excluding system and extension-owned ones).
-        for (schema_name,) in _run_build_query(conn, "schemas.sql"):
+        for (schema_name,) in _run_query(conn, "schemas.sql"):
             schema_by_name[schema_name] = Schema(
                 name=schema_name, table_by_name={}, sequence_by_name={}, function_by_signature={}
             )
@@ -46,7 +43,7 @@ def build_db_info(dsn: str) -> DbInfo:
             table_comment,
             column_identity,
             column_serial_sequence,
-        ) in _run_build_query(conn, "tables.sql"):
+        ) in _run_query(conn, "tables.sql"):
             if table_name not in schema_by_name[schema_name].table_by_name:
                 schema_by_name[schema_name].table_by_name[table_name] = Table(
                     name=table_name,
@@ -69,7 +66,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Indexes (standalone only; constraint-backed indexes are excluded).
-        for schema_name, table_name, index_name, index_def, index_canonical in _run_build_query(conn, "indexes.sql"):
+        for schema_name, table_name, index_name, index_def, index_canonical in _run_query(conn, "indexes.sql"):
             schema_by_name[schema_name].table_by_name[table_name].index_by_name[index_name] = Index(
                 name=index_name,
                 definition=index_def,
@@ -77,9 +74,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Constraints (primary key, unique, and check).
-        for schema_name, table_name, con_name, con_def, con_type, con_columns in _run_build_query(
-            conn, "constraints.sql"
-        ):
+        for schema_name, table_name, con_name, con_def, con_type, con_columns in _run_query(conn, "constraints.sql"):
             constraint = Constraint(
                 name=con_name,
                 definition=con_def,
@@ -103,7 +98,7 @@ def build_db_info(dsn: str) -> DbInfo:
             seq_max,
             seq_cache,
             seq_cycle,
-        ) in _run_build_query(conn, "sequences.sql"):
+        ) in _run_query(conn, "sequences.sql"):
             schema_by_name[schema_name].sequence_by_name[seq_name] = Sequence(
                 name=seq_name,
                 data_type=seq_type,
@@ -116,9 +111,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
-        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in _run_build_query(
-            conn, "functions.sql"
-        ):
+        for schema_name, func_name, func_args, func_def, func_rettype, func_kind in _run_query(conn, "functions.sql"):
             signature = f"{func_name}({func_args})"
             schema_by_name[schema_name].function_by_signature[signature] = Function(
                 name=func_name,
@@ -129,7 +122,7 @@ def build_db_info(dsn: str) -> DbInfo:
             )
 
         # Extensions (database-level).
-        for name, version, schema in _run_build_query(conn, "extensions.sql"):
+        for name, version, schema in _run_query(conn, "extensions.sql"):
             extension_by_name[name] = Extension(name=name, version=version, schema=schema)
 
     # Build and return the database info.
