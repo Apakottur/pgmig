@@ -28,6 +28,17 @@ WHERE
         WHERE
             d.objid = n.oid
             AND d.deptype = 'e')
+    -- Exclude tables an extension owns directly (e.g. PostGIS spatial_ref_sys in
+    -- public): CREATE EXTENSION already creates them, so re-emitting CREATE TABLE
+    -- would fail with "relation already exists".
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
+            AND d.deptype = 'e')
     AND a.attnum > 0
     AND NOT a.attisdropped
 ORDER BY
