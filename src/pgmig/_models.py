@@ -50,6 +50,18 @@ class Index:
 
 
 @dataclass(frozen=True)
+class Trigger:
+    """
+    A Postgres trigger, owned by a table.
+    """
+
+    name: str
+    definition: str  # pg_get_triggerdef output: a full CREATE TRIGGER ...
+    # `definition` with the trigger's own name stripped out, for rename detection.
+    canonical: str
+
+
+@dataclass(frozen=True)
 class Constraint:
     """
     A Postgres primary key, unique, check, or foreign key constraint, owned by a table.
@@ -82,6 +94,7 @@ class Table:
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
+    trigger_by_name: dict[str, Trigger]
 
     def get_primary_key_columns(self) -> set[str]:
         """

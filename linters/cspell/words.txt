@@ -102,3 +102,7 @@ rettype
 overloadable
 inplace
 renamable
+triggerdef
+tgname
+tgrelid
+tgisinternal
