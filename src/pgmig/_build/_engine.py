@@ -6,6 +6,7 @@ from pgmig._build import (
     extensions,
     functions,
     indexes,
+    invalid_indexes,
     schemas,
     sequences,
     tables,
@@ -18,11 +19,12 @@ from pgmig._models import DbInfo
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
 # the objects that attach to them (indexes, constraints, triggers). Extensions are
-# database-level and independent. The unsupported-relkind guard runs first so a
-# relation that is not modelled yet (view, materialized view, partitioned or foreign
-# table) raises before any partial introspection.
+# database-level and independent. The guards (unsupported relkind, invalid indexes)
+# run first so an object that cannot be diffed correctly raises before any partial
+# introspection.
 _LOADERS: tuple[Loader, ...] = (
     unsupported.load,
+    invalid_indexes.load,
     schemas.load,
     tables.load,
     indexes.load,
