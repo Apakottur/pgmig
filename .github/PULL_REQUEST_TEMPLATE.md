@@ -22,7 +22,3 @@ Anything a reviewer needs: ordering/phase decisions, scope boundaries,
 known limitations, or explicit out-of-scope behavior (e.g. what raises
 NotImplementedError). Delete if there's nothing to add.
 -->
-
-## Tests
-
-<!-- e.g. "Full suite: N passed, 100% coverage. ruff + mypy + ty + cspell + pg_format clean." -->
