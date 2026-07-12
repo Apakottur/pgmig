@@ -43,14 +43,15 @@ def generate(
     """
     Generate the migration SQL that turns the source database into the target database.
     """
-    # Diffing: a PgmigError is an expected failure (clean message); anything else is a
-    # bug in pgmig (full traceback plus an issue prompt).
     try:
+        # Generate the migration SQL.
         sql = generate_migration(source=source, target=target)
     except PgmigError as error:
+        # Known error - print message without traceback.
         typer.echo(error.message, err=True)
         raise typer.Exit(code=1) from error
     except Exception as error:
+        # Internal error - print traceback and issue prompt.
         typer.echo(traceback.format_exc(), err=True)
         typer.echo(
             "This is an internal error in pgmig. Please open an issue with the traceback above:\n"
@@ -59,19 +60,22 @@ def generate(
         )
         raise typer.Exit(code=1) from error
 
-    if sql:
-        if output is None:
-            typer.echo(sql)
-        else:
-            # Writing: an unwritable --output path is a clean error, not a traceback.
-            try:
-                output.write_text(f"{sql}\n", encoding="utf-8")
-            except OSError as error:
-                typer.echo(f"Could not write migration output: {error}", err=True)
-                raise typer.Exit(code=1) from error
+    # No diff - exit.
+    if not sql:
+        return
 
-    # Check mode: a non-empty diff means the source is out of date -> fail the gate.
-    if check and sql:
+    # Write the migration SQL to stdout or a file.
+    if output is None:
+        typer.echo(sql)
+    else:
+        try:
+            output.write_text(f"{sql}\n", encoding="utf-8")
+        except OSError as error:
+            typer.echo(f"Could not write migration output: {error}", err=True)
+            raise typer.Exit(code=1) from error
+
+    # Check mode: a non-empty diff means the source is out of date -> return non-zero exit code.
+    if check:
         typer.echo("Databases differ: a migration is required.", err=True)
         raise typer.Exit(code=1)
 

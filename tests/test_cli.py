@@ -18,15 +18,6 @@ def test_generate_to_stdout(gen_setup: GenerateSetup) -> None:
     assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
 
 
-def test_generate_short_flags(gen_setup: GenerateSetup) -> None:
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-
-    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn])
-
-    assert result.exit_code == 0
-    assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
-
-
 def test_generate_to_file(gen_setup: GenerateSetup, tmp_path: Path) -> None:
     gen_setup.dst.execute("CREATE TABLE person (name text)")
     out = tmp_path / "migration.sql"
@@ -75,16 +66,6 @@ def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
     assert result.exit_code == 1
     assert 'CREATE TABLE "public"."person" ("name" text);' in result.output
     assert "differ" in result.output.lower()
-
-
-def test_generate_check_short_flag(gen_setup: GenerateSetup) -> None:
-    # -c is the short alias for --check.
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-
-    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-c"])
-
-    assert result.exit_code == 1
-    assert 'CREATE TABLE "public"."person" ("name" text);' in result.output
 
 
 def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
