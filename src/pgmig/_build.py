@@ -4,7 +4,19 @@ from typing import Any, cast
 import psycopg
 from typing_extensions import LiteralString
 
-from pgmig._models import Column, Constraint, DbInfo, Extension, Function, Index, Schema, Sequence, Table, Trigger
+from pgmig._models import (
+    Column,
+    Constraint,
+    DbInfo,
+    EnumType,
+    Extension,
+    Function,
+    Index,
+    Schema,
+    Sequence,
+    Table,
+    Trigger,
+)
 
 
 def _run_query(conn: psycopg.Connection[tuple[Any, ...]], file_name: str) -> list[tuple[Any, ...]]:
@@ -33,6 +45,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 table_by_name={},
                 sequence_by_name={},
                 function_by_signature={},
+                enum_by_name={},
             )
 
         # Tables (and their columns, ordered by name).
@@ -144,6 +157,10 @@ def build_db_info(dsn: str) -> DbInfo:
                 kind=func_kind,
                 comment=func_comment,
             )
+
+        # Enum types (user enums only; extension-owned ones are excluded).
+        for schema_name, enum_name, enum_values in _run_query(conn, "enums.sql"):
+            schema_by_name[schema_name].enum_by_name[enum_name] = EnumType(name=enum_name, values=enum_values)
 
         # Extensions (database-level).
         for name, version, schema in _run_query(conn, "extensions.sql"):

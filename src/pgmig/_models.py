@@ -148,6 +148,16 @@ class Function:
         return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
+@dataclass(frozen=True)
+class EnumType:
+    """
+    A Postgres enum type, owned by a schema.
+    """
+
+    name: str
+    values: list[str]  # labels in enum sort order
+
+
 @dataclass
 class Schema:
     """
@@ -159,6 +169,7 @@ class Schema:
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]
+    enum_by_name: dict[str, EnumType]
 
 
 @dataclass(frozen=True)
