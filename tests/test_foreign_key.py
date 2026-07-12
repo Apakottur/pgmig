@@ -123,3 +123,24 @@ def test_foreign_key_drop_ordered_before_referenced_table(gen_setup: GenerateSet
             'DROP TABLE "public"."team";',
         ]
     )
+
+
+def test_foreign_key_dropped_with_its_own_table_before_referenced_table(gen_setup: GenerateSetup) -> None:
+    """
+    Both the referencing table and the referenced table are dropped: the FOREIGN KEY
+    must be dropped before either DROP TABLE, otherwise Postgres rejects dropping the
+    referenced table while the referencing table's constraint still depends on it.
+    """
+    gen_setup.src.execute("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
+    gen_setup.src.execute("CREATE TABLE person (team_id integer)")
+    gen_setup.src.execute(
+        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
+    )
+
+    gen_setup.assert_migration_sql(
+        [
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey";',
+            'DROP TABLE "public"."person";',
+            'DROP TABLE "public"."team";',
+        ]
+    )
