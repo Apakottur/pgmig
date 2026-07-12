@@ -70,6 +70,16 @@ def generate(
             help="Do not emit ALTER EXTENSION ... UPDATE TO for any extension's version mismatch.",
         ),
     ] = False,
+    index_concurrently: Annotated[
+        bool,
+        typer.Option(
+            "--index-concurrently",
+            "-C",
+            help="Emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY, so "
+            "index maintenance takes no blocking lock. These statements cannot run inside a "
+            "transaction block -- apply them outside BEGIN/COMMIT.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -83,7 +93,12 @@ def generate(
 
     try:
         # Generate the migration SQL.
-        sql = generate_migration(source=source, target=target, ignore_extension_version=ignore_versions)
+        sql = generate_migration(
+            source=source,
+            target=target,
+            index_concurrently=index_concurrently,
+            ignore_extension_version=ignore_versions,
+        )
     except PgmigError as error:
         # Known error - print message without traceback.
         typer.echo(error.message, err=True)

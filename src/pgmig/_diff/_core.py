@@ -93,15 +93,24 @@ class Statement:
 
 
 @dataclass(frozen=True)
-class Options:
+class Context:
     """
-    Tuning for what the diff emits. Threaded to every generator (most ignore it).
-
-    `ignore_extension_version`: suppress the ALTER EXTENSION ... UPDATE TO for a version
-    mismatch. True ignores every extension; a list ignores only the named ones; False
-    (default) ignores none.
+    Everything a generator needs: the two databases being diffed and the output configuration.
     """
 
+    # Databases.
+    source: DbInfo
+    target: DbInfo
+
+    # Output configuration.
+
+    # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
+    # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
+    # run inside a transaction block.
+    index_concurrently: bool = False
+
+    # Suppress the ALTER EXTENSION ... UPDATE TO for a version mismatch. True ignores every
+    # extension; a list ignores only the named ones; False (default) ignores none.
     ignore_extension_version: bool | list[str] = False
 
     def should_ignore_extension_version(self, name: str) -> bool:
@@ -112,12 +121,12 @@ class Options:
 
 class Generator(Protocol):
     """
-    The shared shape of every object-kind generator: keyword-only source, target, and
-    options, yielding phase-tagged statements. Annotating the registry with this enforces
-    one uniform signature (names included) across all generators.
+    The shared shape of every object-kind generator: take the diff Context and yield
+    phase-tagged statements. Annotating the registry with this enforces one uniform
+    signature across all generators.
     """
 
-    def __call__(self, *, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]: ...
+    def __call__(self, ctx: Context) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:

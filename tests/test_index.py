@@ -150,3 +150,58 @@ def test_index_comment_removed(gen_setup: GenerateSetup) -> None:
     gen_setup.src.execute("COMMENT ON INDEX person_name_idx IS 'by name'")
 
     gen_setup.assert_migration_sql('COMMENT ON INDEX "public"."person_name_idx" IS NULL;')
+
+
+def test_index_create_concurrently(gen_setup: GenerateSetup) -> None:
+    """
+    With index_concurrently, a created index carries CONCURRENTLY.
+    """
+    gen_setup.execute_both("CREATE TABLE person (name text)")
+    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
+
+    gen_setup.assert_migration_sql(
+        "CREATE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);",
+        index_concurrently=True,
+    )
+
+
+def test_index_create_unique_concurrently(gen_setup: GenerateSetup) -> None:
+    """
+    With index_concurrently, a created unique index carries CONCURRENTLY after UNIQUE.
+    """
+    gen_setup.execute_both("CREATE TABLE person (name text)")
+    gen_setup.dst.execute("CREATE UNIQUE INDEX person_name_idx ON person (name)")
+
+    gen_setup.assert_migration_sql(
+        "CREATE UNIQUE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);",
+        index_concurrently=True,
+    )
+
+
+def test_index_drop_concurrently(gen_setup: GenerateSetup) -> None:
+    """
+    With index_concurrently, a dropped index carries CONCURRENTLY.
+    """
+    gen_setup.src.execute("CREATE TABLE person (name text)")
+    gen_setup.src.execute("CREATE INDEX person_name_idx ON person (name)")
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+
+    gen_setup.assert_migration_sql(
+        'DROP INDEX CONCURRENTLY "public"."person_name_idx";',
+        index_concurrently=True,
+    )
+
+
+def test_index_rename_not_concurrent(gen_setup: GenerateSetup) -> None:
+    """
+    A rename is ALTER INDEX and cannot be CONCURRENTLY; the flag leaves it unchanged.
+    """
+    gen_setup.src.execute("CREATE TABLE person (name text)")
+    gen_setup.src.execute("CREATE INDEX person_name_old ON person (name)")
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    gen_setup.dst.execute("CREATE INDEX person_name_new ON person (name)")
+
+    gen_setup.assert_migration_sql(
+        'ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new";',
+        index_concurrently=True,
+    )
