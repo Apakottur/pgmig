@@ -1,12 +1,5 @@
 from dataclasses import dataclass
 
-# Maps a serial column's underlying integer type to its serial pseudo-type.
-_SERIAL_TYPE_BY_INT_TYPE = {
-    "smallint": "smallserial",
-    "integer": "serial",
-    "bigint": "bigserial",
-}
-
 
 @dataclass(frozen=True)
 class Column:
@@ -32,7 +25,15 @@ class Column:
         """
         if self.serial_sequence is None or self.identity != "":
             return None
-        return _SERIAL_TYPE_BY_INT_TYPE.get(self.type)
+        match self.type:
+            case "smallint":
+                return "smallserial"
+            case "integer":
+                return "serial"
+            case "bigint":
+                return "bigserial"
+            case _:
+                raise ValueError(f"Unknown integer type: {self.type}")
 
 
 @dataclass(frozen=True)
