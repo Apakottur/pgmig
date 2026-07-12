@@ -1,15 +1,16 @@
 from tests.fixtures.generate_setup import GenerateSetup
 
 
-def test_table_column_ordered_by_name(gen_setup: GenerateSetup) -> None:
+def test_table_column_physical_order_preserved(gen_setup: GenerateSetup) -> None:
     """
-    Table columns should be ordered by name.
+    CREATE TABLE emits columns in the target's physical (attnum) order, not
+    alphabetically. Names are deliberately out of alphabetical order so a sort-by-name
+    introspection would reorder them; positional INSERT / SELECT * / pg_dump all depend
+    on this order matching the target.
     """
-    # Create the table with columns not ordered by name.
-    gen_setup.dst.execute("CREATE TABLE person (name text, age integer)")
+    gen_setup.dst.execute("CREATE TABLE person (zebra text, apple text, mango text)")
 
-    # Verify the migration SQL orders the columns by name.
-    gen_setup.assert_migration_sql('CREATE TABLE "public"."person" ("age" integer, "name" text);')
+    gen_setup.assert_migration_sql('CREATE TABLE "public"."person" ("zebra" text, "apple" text, "mango" text);')
 
 
 def test_table_create_with_column_attributes(gen_setup: GenerateSetup) -> None:
