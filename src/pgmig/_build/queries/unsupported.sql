@@ -6,7 +6,7 @@
 SELECT
     n.nspname AS schema_name,
     c.relname AS rel_name,
-    c.relkind AS rel_kind
+    c.relkind::text AS rel_kind
 FROM
     pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace

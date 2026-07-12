@@ -5,7 +5,7 @@ SELECT
     pg_get_function_identity_arguments(p.oid) AS func_args,
     pg_get_functiondef(p.oid) AS func_def,
     format_type(p.prorettype, NULL) AS func_rettype,
-    p.prokind AS func_kind,
+    p.prokind::text AS func_kind,
     obj_description(p.oid, 'pg_proc') AS func_comment,
     EXISTS (
         SELECT

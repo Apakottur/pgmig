@@ -1,6 +1,5 @@
-from typing import Any
 
-import psycopg
+import asyncpg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
@@ -18,11 +17,11 @@ class _FunctionRow(BaseModel):
     func_has_dependents: bool
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: asyncpg.Connection, db_info: DbInfo) -> None:
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
-    for func_row in _run_query(conn, "functions.sql", _FunctionRow):
+    for func_row in await _run_query(conn, "functions.sql", _FunctionRow):
         signature = f"{func_row.func_name}({func_row.func_args})"
         db_info.schema_by_name[func_row.schema_name].function_by_signature[signature] = Function(
             name=func_row.func_name,

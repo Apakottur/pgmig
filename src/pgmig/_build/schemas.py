@@ -1,6 +1,5 @@
-from typing import Any
 
-import psycopg
+import asyncpg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
@@ -12,11 +11,11 @@ class _SchemaRow(BaseModel):
     schema_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: asyncpg.Connection, db_info: DbInfo) -> None:
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in _run_query(conn, "schemas.sql", _SchemaRow):
+    for schema_row in await _run_query(conn, "schemas.sql", _SchemaRow):
         db_info.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,

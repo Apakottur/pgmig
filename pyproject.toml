@@ -4,6 +4,7 @@ requires = ["hatchling", "hatch-vcs"]
 
 [dependency-groups]
 dev = [
+  "asyncpg-stubs>=0.31.3",
   "httpx==0.28.1",
   "mypy==2.2.0",
   "pre-commit==4.6.0",
@@ -41,6 +42,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+  "asyncpg>=0.31.0",
   #
   "psycopg[binary]>=3.3.4",
   "pydantic>=2",

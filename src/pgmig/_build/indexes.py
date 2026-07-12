@@ -1,6 +1,5 @@
-from typing import Any
 
-import psycopg
+import asyncpg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
@@ -16,11 +15,11 @@ class _IndexRow(BaseModel):
     index_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: asyncpg.Connection, db_info: DbInfo) -> None:
     """
     Indexes (standalone only; constraint-backed indexes are excluded).
     """
-    for index_row in _run_query(conn, "indexes.sql", _IndexRow):
+    for index_row in await _run_query(conn, "indexes.sql", _IndexRow):
         table = db_info.schema_by_name[index_row.schema_name].table_by_name[index_row.table_name]
         table.index_by_name[index_row.index_name] = Index(
             name=index_row.index_name,

@@ -8,7 +8,7 @@ SELECT
     pg_get_expr(ad.adbin, ad.adrelid) AS column_default,
     col_description(a.attrelid, a.attnum) AS column_comment,
     obj_description(c.oid, 'pg_class') AS table_comment,
-    a.attidentity AS column_identity,
+    a.attidentity::text AS column_identity,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence
 FROM
     pg_class c

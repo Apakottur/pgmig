@@ -1,6 +1,5 @@
-from typing import Any
 
-import psycopg
+import asyncpg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
@@ -20,11 +19,11 @@ class _TableRow(BaseModel):
     column_serial_sequence: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: asyncpg.Connection, db_info: DbInfo) -> None:
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in _run_query(conn, "tables.sql", _TableRow):
+    for table_row in await _run_query(conn, "tables.sql", _TableRow):
         schema = db_info.schema_by_name[table_row.schema_name]
         if table_row.table_name not in schema.table_by_name:
             schema.table_by_name[table_row.table_name] = Table(

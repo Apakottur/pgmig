@@ -1,6 +1,5 @@
-from typing import Any
 
-import psycopg
+import asyncpg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
@@ -21,14 +20,14 @@ class _UnsupportedRow(BaseModel):
     rel_kind: str
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: asyncpg.Connection, db_info: DbInfo) -> None:
     """
     Guard: reject relation kinds that are not modelled yet (views, materialized views,
     partitioned tables, foreign tables). Without this, generate() diffs only regular
     tables and returns "" for a database whose whole relations are missing on one side,
     falsely claiming convergence. Consistent with raising on unsupported column changes.
     """
-    rows = _run_query(conn, "unsupported.sql", _UnsupportedRow)
+    rows = await _run_query(conn, "unsupported.sql", _UnsupportedRow)
     if rows:
         row = rows[0]
         kind = _RELKIND_NAMES.get(row.rel_kind, row.rel_kind)

@@ -1,4 +1,6 @@
-import psycopg
+import asyncio
+
+import asyncpg
 
 from pgmig._build import (
     constraints,
@@ -35,18 +37,27 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
+async def _build_db_info(dsn: str) -> DbInfo:
+    """
+    Build the full structure of the given database (async core).
+    """
+    # Open the connection, surfacing connection failures as a clean PgmigError.
+    try:
+        conn = await asyncpg.connect(dsn, server_settings={"default_transaction_read_only": "on"})
+    except (OSError, asyncpg.PostgresError, asyncpg.InterfaceError) as error:
+        raise PgmigError(f"Could not connect to database: {error}") from error
+
+    db_info = DbInfo(schema_by_name={}, extension_by_name={})
+    try:
+        for load in _LOADERS:
+            await load(conn, db_info)
+    finally:
+        await conn.close()
+    return db_info
+
+
 def build_db_info(dsn: str) -> DbInfo:
     """
     Build the full structure of the given database.
     """
-    # Open the connection, surfacing connection failures as a clean PgmigError.
-    try:
-        conn = psycopg.connect(dsn, options="-c default_transaction_read_only=on")
-    except psycopg.Error as error:
-        raise PgmigError(f"Could not connect to database: {error}") from error
-
-    db_info = DbInfo(schema_by_name={}, extension_by_name={})
-    with conn:
-        for load in _LOADERS:
-            load(conn, db_info)
-    return db_info
+    return asyncio.run(_build_db_info(dsn))
