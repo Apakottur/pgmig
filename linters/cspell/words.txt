@@ -54,6 +54,7 @@ attrelid
 attnum
 attisdropped
 attnotnull
+attidentity
 attrdef
 adbin
 adrelid
@@ -87,6 +88,8 @@ seqstart
 seqtypid
 minvalue
 maxvalue
+smallserial
+bigserial
 worktree
 worktrees
 functiondef

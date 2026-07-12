@@ -48,7 +48,9 @@ def build_db_info(dsn: str) -> DbInfo:
                 a.attnotnull,
                 pg_get_expr(ad.adbin, ad.adrelid),
                 col_description(a.attrelid, a.attnum),
-                obj_description(c.oid, 'pg_class')
+                obj_description(c.oid, 'pg_class'),
+                a.attidentity,
+                pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname)
             FROM
                 pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -78,6 +80,8 @@ def build_db_info(dsn: str) -> DbInfo:
             column_default,
             column_comment,
             table_comment,
+            column_identity,
+            column_serial_sequence,
         ) in rows:
             if table_name not in schema_by_name[schema_name].table_by_name:
                 schema_by_name[schema_name].table_by_name[table_name] = Table(
@@ -95,6 +99,8 @@ def build_db_info(dsn: str) -> DbInfo:
                     not_null=column_not_null,
                     default=column_default,
                     comment=column_comment,
+                    identity=column_identity,
+                    serial_sequence=column_serial_sequence,
                 )
             )
 

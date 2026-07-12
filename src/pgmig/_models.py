@@ -12,6 +12,28 @@ class Column:
     not_null: bool
     default: str | None
     comment: str | None
+    identity: str  # pg_attribute.attidentity ('' for a non-identity column)
+    serial_sequence: str | None  # sequence owned via a nextval() default, else None
+
+    @property
+    def serial_type(self) -> str | None:
+        """
+        The serial pseudo-type to emit ("serial"/"bigserial"/"smallserial"), or None.
+
+        A serial column owns a sequence via its nextval() default and is not an
+        identity column; its integer type maps to the matching pseudo-type.
+        """
+        if self.serial_sequence is None or self.identity != "":
+            return None
+        match self.type:
+            case "smallint":
+                return "smallserial"
+            case "integer":
+                return "serial"
+            case "bigint":
+                return "bigserial"
+            case _:
+                raise NotImplementedError(f"Unknown integer type: {self.type}")
 
 
 @dataclass(frozen=True)

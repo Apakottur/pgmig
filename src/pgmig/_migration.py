@@ -55,6 +55,11 @@ def _column_def(column: Column) -> str:
     """
     Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
     """
+    # A serial column expands to its pseudo-type; the integer type, nextval()
+    # default and NOT NULL are all implied and must not be emitted alongside it.
+    if column.serial_type is not None:
+        return f'"{column.name}" {column.serial_type}'
+
     parts = [f'"{column.name}" {column.type}']
     if column.default is not None:
         parts.append(f"DEFAULT {column.default}")
