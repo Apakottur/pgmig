@@ -126,3 +126,8 @@ initdb
 indisvalid
 deparsed
 excinfo
+typbasetype
+typtypmod
+typnotnull
+typdefault
+contypid

@@ -2,7 +2,7 @@
 -- than let generate() return "" and falsely claim convergence.
 --   pg_class relkind:  view 'v', materialized view 'm', partitioned table 'p',
 --                      foreign table 'f', composite type 'c'.
---   pg_type typtype:   domain 'd', range 'r'.
+--   pg_type typtype:   range 'r'.
 -- Extension-owned objects are excluded (the extension recreates them). Drop a kind from
 -- a filter as its roadmap feature lands.
 SELECT
@@ -41,7 +41,7 @@ FROM
     pg_type t
     JOIN pg_namespace n ON n.oid = t.typnamespace
 WHERE
-    t.typtype IN ('d', 'r')
+    t.typtype = 'r'
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
     AND NOT EXISTS (
