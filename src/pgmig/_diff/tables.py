@@ -1,0 +1,146 @@
+from collections.abc import Iterator
+
+from pgmig._diff._core import Phase, Statement, _iter_table_pairs
+from pgmig._models import Column, DbInfo, Table
+from pgmig._sql import comment_on, ident, qualified
+
+
+def _column_def(column: Column) -> str:
+    """
+    Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
+    """
+    # A serial column expands to its pseudo-type; the integer type, nextval()
+    # default and NOT NULL are all implied and must not be emitted alongside it.
+    if column.serial_type is not None:
+        return f"{ident(column.name)} {column.serial_type}"
+
+    # An identity column has no GENERATED ... AS IDENTITY clause rendered here, so
+    # emitting it would create a plain column and silently drop the identity. Refuse
+    # loudly rather than produce a migration that never converges.
+    if column.identity != "":
+        raise NotImplementedError(f"Identity column is not supported: {ident(column.name)}")
+
+    parts = [f"{ident(column.name)} {column.type}"]
+    if column.default is not None:
+        parts.append(f"DEFAULT {column.default}")
+    if column.not_null:
+        parts.append("NOT NULL")
+    return " ".join(parts)
+
+
+def _create_table(schema_name: str, table: Table) -> list[str]:
+    """
+    Render the CREATE TABLE statement for a target-only table (columns inline).
+    """
+    columns = ", ".join(_column_def(column) for column in table.columns)
+    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns});"]
+
+
+def _alter_columns(
+    *, schema_name: str, table_name: str, src_table: Table, dst_table: Table, pk_columns: set[str]
+) -> list[str]:
+    """
+    Sync the columns of a table present on both sides: add/drop by name, and for a
+    shared column sync DEFAULT then NOT NULL. A type or identity change is unsupported
+    and raises rather than emitting a silently-empty (falsely converged) migration.
+
+    A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
+    ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. Passing the set in
+    keeps that cross-object coordination an explicit seam.
+    """
+    statements: list[str] = []
+    src_columns = {column.name: column for column in src_table.columns}
+    dst_columns = {column.name: column for column in dst_table.columns}
+
+    for column_name in sorted(src_columns.keys() | dst_columns.keys()):
+        if column_name not in src_columns:
+            column = dst_columns[column_name]
+            statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} ADD COLUMN {_column_def(column)};")
+        elif column_name not in dst_columns:
+            statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} DROP COLUMN {ident(column_name)};")
+        else:
+            src_column = src_columns[column_name]
+            dst_column = dst_columns[column_name]
+            # Type and identity changes are not yet modelled. Emitting nothing would be
+            # indistinguishable from "in sync", so fail loudly instead of lying.
+            if src_column.type != dst_column.type:
+                raise NotImplementedError(
+                    f"Column type change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
+                    f"{src_column.type} -> {dst_column.type}"
+                )
+            if src_column.identity != dst_column.identity:
+                raise NotImplementedError(
+                    f"Column identity change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)}"
+                )
+            prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
+            if src_column.default != dst_column.default:
+                if dst_column.default is None:
+                    statements.append(f"{prefix} DROP DEFAULT;")
+                else:
+                    statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
+            if src_column.not_null != dst_column.not_null:
+                if dst_column.not_null:
+                    # Skip if a target primary key already covers this column.
+                    if column_name not in pk_columns:
+                        statements.append(f"{prefix} SET NOT NULL;")
+                else:
+                    statements.append(f"{prefix} DROP NOT NULL;")
+    return statements
+
+
+def _table_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit COMMENT ON TABLE when the comment differs (absent source table = no comment).
+    """
+    src_comment = src_table.comment if src_table else None
+    dst_comment = dst_table.comment
+    if src_comment == dst_comment:
+        return []
+    return [comment_on("TABLE", qualified(schema_name, dst_table.name), dst_comment)]
+
+
+def _column_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit COMMENT ON COLUMN for every target column whose comment differs from the
+    source (absent source column = no comment). A separate statement; not inline.
+    """
+    src_columns = {column.name: column for column in src_table.columns} if src_table else {}
+    dst_columns = {column.name: column for column in dst_table.columns}
+
+    statements: list[str] = []
+    for column_name in sorted(dst_columns.keys()):
+        src_comment = src_columns[column_name].comment if column_name in src_columns else None
+        dst_comment = dst_columns[column_name].comment
+        if src_comment != dst_comment:
+            statements.append(comment_on("COLUMN", qualified(schema_name, dst_table.name, column_name), dst_comment))
+    return statements
+
+
+def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+    """
+    Generate the migration SQL of tables: drop, create, or alter columns, followed by
+    table and column comment sync.
+    """
+    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+        # Present in source only: drop it (attached objects are dropped with it).
+        if dst_table is None:
+            yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")
+            continue
+
+        if src_table is None:
+            rendered = _create_table(schema_name, dst_table)
+        else:
+            rendered = _alter_columns(
+                schema_name=schema_name,
+                table_name=table_name,
+                src_table=src_table,
+                dst_table=dst_table,
+                pk_columns=dst_table.get_primary_key_columns(),
+            )
+        rendered += _table_comment_statements(schema_name, src_table, dst_table)
+        rendered += _column_comment_statements(schema_name, src_table, dst_table)
+
+        for sql in rendered:
+            yield Statement(Phase.TABLE, sql)
