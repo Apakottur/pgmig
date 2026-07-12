@@ -24,6 +24,20 @@ WHERE
     p.prokind IN ('f', 'p')
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
+    -- Extension-ownership exclusion checklist (see the sibling queries: every query must
+    -- carry all applicable legs or the loader KeyErrors on an object left in the model
+    -- whose owner was dropped):
+    --   [x] namespace leg  -- function in an extension-owned schema (n.oid)
+    --   [x] self leg       -- the function itself is extension-owned (p.oid)
+    --   [ ] owning-table leg -- n/a, functions are not attached to a table
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = n.oid
+            AND d.deptype = 'e')
     AND NOT EXISTS (
         SELECT
             1

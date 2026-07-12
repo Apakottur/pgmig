@@ -17,6 +17,13 @@ FROM
 WHERE
     n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
+    -- Extension-ownership exclusion checklist (see the sibling queries: every query must
+    -- carry all applicable legs or the loader KeyErrors / re-emits an object whose
+    -- owner was dropped):
+    --   [x] namespace leg  -- sequence in an extension-owned schema (n.oid)
+    --   [x] self leg       -- the sequence itself is extension-owned (c.oid)
+    --   [ ] owning-table leg -- n/a; a sequence backing a serial/identity column is
+    --                           excluded separately below (deptype 'a'/'i')
     AND NOT EXISTS (
         SELECT
             1
@@ -24,6 +31,14 @@ WHERE
             pg_depend d
         WHERE
             d.objid = n.oid
+            AND d.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
             AND d.deptype = 'e')
     AND NOT EXISTS (
         SELECT

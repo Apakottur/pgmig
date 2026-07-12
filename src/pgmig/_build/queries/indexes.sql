@@ -16,6 +16,13 @@ WHERE
     c.relkind = 'r'
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
+    -- Extension-ownership exclusion checklist (see the sibling queries: every query must
+    -- carry all applicable legs or the loader KeyErrors on an object left in the model
+    -- whose owner was dropped):
+    --   [x] namespace leg    -- index in an extension-owned schema (n.oid)
+    --   [x] owning-table leg -- index on an extension-owned table (c.oid)
+    --   [-] self leg         -- an extension-owned index sits on an extension-owned
+    --                           table, so the owning-table leg already excludes it
     AND NOT EXISTS (
         SELECT
             1

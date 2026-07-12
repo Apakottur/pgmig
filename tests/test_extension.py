@@ -135,6 +135,90 @@ def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None:
+    """
+    A user trigger on a table an extension owns (as an audit trigger on PostGIS
+    spatial_ref_sys would be) must be excluded: the owning table is extension-managed
+    and dropped from the model, so triggers.sql needs the owning-table exclusion or the
+    loader raises KeyError on the missing table. Mirrors the index/constraint exclusion.
+
+    The trigger function is made an extension member too so only CREATE EXTENSION is
+    expected; the trigger itself stays user-owned and is the object exercising the bug.
+    """
+    ext_info = _get_installable_extension(gen_setup.dst)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+
+    gen_setup.dst.execute("CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY, name text)")
+    gen_setup.dst.execute("CREATE FUNCTION spatial_audit() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'")
+    gen_setup.dst.execute(
+        "CREATE TRIGGER spatial_audit_trg BEFORE INSERT ON spatial_ref_sys "
+        "FOR EACH ROW EXECUTE FUNCTION spatial_audit()"
+    )
+    ext = sql.Identifier(ext_info.name)
+    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD TABLE spatial_ref_sys").format(ext=ext))
+    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD FUNCTION spatial_audit()").format(ext=ext))
+
+    gen_setup.assert_migration_sql(
+        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+    )
+
+
+def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
+    """
+    A user function inside a schema an extension owns must be excluded: the schema is
+    extension-managed and dropped from the model, so functions.sql needs the
+    namespace-level exclusion or the loader raises KeyError on the missing schema.
+    """
+    ext_info = _get_installable_extension(gen_setup.dst)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+
+    gen_setup.dst.execute("CREATE SCHEMA ext_schema")
+    ext = sql.Identifier(ext_info.name)
+    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SCHEMA ext_schema").format(ext=ext))
+    gen_setup.dst.execute("CREATE FUNCTION ext_schema.helper() RETURNS integer LANGUAGE sql AS 'SELECT 1'")
+
+    gen_setup.assert_migration_sql(
+        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+    )
+
+
+def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
+    """
+    A user enum inside a schema an extension owns must be excluded: the schema is
+    extension-managed and dropped from the model, so enums.sql needs the namespace-level
+    exclusion or the loader raises KeyError on the missing schema.
+    """
+    ext_info = _get_installable_extension(gen_setup.dst)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+
+    gen_setup.dst.execute("CREATE SCHEMA ext_schema")
+    ext = sql.Identifier(ext_info.name)
+    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SCHEMA ext_schema").format(ext=ext))
+    gen_setup.dst.execute("CREATE TYPE ext_schema.mood AS ENUM ('happy', 'sad')")
+
+    gen_setup.assert_migration_sql(
+        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+    )
+
+
+def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> None:
+    """
+    A standalone sequence an extension owns directly must be excluded: CREATE EXTENSION
+    recreates it, so re-emitting CREATE SEQUENCE would fail. The sequence lives in a user
+    schema and is not column-owned, so only sequences.sql's self-leg exclusion can drop it.
+    """
+    ext_info = _get_installable_extension(gen_setup.dst)
+    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
+
+    gen_setup.dst.execute("CREATE SEQUENCE ext_seq")
+    ext = sql.Identifier(ext_info.name)
+    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SEQUENCE ext_seq").format(ext=ext))
+
+    gen_setup.assert_migration_sql(
+        f'CREATE EXTENSION "{ext_info.name}" VERSION \'{ext_info.version}\' SCHEMA "{ext_info.schema}";'
+    )
+
+
 def test_extension_drop(gen_setup: GenerateSetup) -> None:
     """
     Extension present in source but missing in target -> DROP EXTENSION.
