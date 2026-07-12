@@ -15,6 +15,14 @@ WHERE
     AND c.relkind = 'r'
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
+    -- Extension-ownership exclusion checklist (see the sibling queries: every query must
+    -- carry all applicable legs or the loader KeyErrors on an object left in the model
+    -- whose owner was dropped):
+    --   [x] namespace leg    -- trigger in an extension-owned schema (n.oid)
+    --   [x] owning-table leg -- trigger on an extension-owned table, e.g. a user audit
+    --                           trigger on PostGIS spatial_ref_sys (c.oid)
+    --   [-] self leg         -- an extension-owned trigger sits on an extension-owned
+    --                           table, so the owning-table leg already excludes it
     AND NOT EXISTS (
         SELECT
             1
@@ -22,6 +30,14 @@ WHERE
             pg_depend d
         WHERE
             d.objid = n.oid
+            AND d.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
             AND d.deptype = 'e')
 ORDER BY
     n.nspname,
