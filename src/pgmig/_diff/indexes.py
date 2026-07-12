@@ -1,7 +1,7 @@
 from collections.abc import Callable, Iterator
 
-from pgmig._diff._core import Options, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
-from pgmig._models import DbInfo, Index
+from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._models import Index
 from pgmig._sql import comment_on, ident, qualified
 
 
@@ -15,7 +15,11 @@ def _concurrently(definition: str) -> str:
 
 
 def _diff_indexes(
-    *, schema_name: str, src: dict[str, Index], dst: dict[str, Index], concurrently: bool
+    *,
+    schema_name: str,
+    src: dict[str, Index],
+    dst: dict[str, Index],
+    concurrently: bool,
 ) -> tuple[list[str], list[str], list[str], set[str]]:
     """
     Diff one table's standalone indexes into (drops, renames, creates), using each
@@ -39,7 +43,10 @@ def _diff_indexes(
 
 
 def _index_comment_statements(
-    schema_name: str, src: dict[str, Index], dst: dict[str, Index], recreated: set[str]
+    schema_name: str,
+    src: dict[str, Index],
+    dst: dict[str, Index],
+    recreated: set[str],
 ) -> list[str]:
     """
     Emit COMMENT ON INDEX for target indexes whose comment differs from source.
@@ -52,11 +59,11 @@ def _index_comment_statements(
     )
 
 
-def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]:
+def generate(ctx: Context) -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
     """
-    for schema_name, _table_name, src_table, dst_table in _iter_table_pairs(source, target):
+    for schema_name, _table_name, src_table, dst_table in _iter_table_pairs(ctx.source, ctx.target):
         # Table dropped: its indexes are dropped with it.
         if dst_table is None:
             continue
@@ -64,7 +71,10 @@ def generate(*, source: DbInfo, target: DbInfo, options: Options) -> Iterator[St
         src_indexes = src_table.index_by_name if src_table else {}
         dst_indexes = dst_table.index_by_name
         drops, renames, creates, recreated = _diff_indexes(
-            schema_name=schema_name, src=src_indexes, dst=dst_indexes, concurrently=options.index_concurrently
+            schema_name=schema_name,
+            src=src_indexes,
+            dst=dst_indexes,
+            concurrently=ctx.options.index_concurrently,
         )
         comments = _index_comment_statements(schema_name, src_indexes, dst_indexes, recreated)
         # Emit drops first (frees names), then renames, then creates, then comments.

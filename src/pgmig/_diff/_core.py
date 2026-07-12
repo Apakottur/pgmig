@@ -95,8 +95,8 @@ class Statement:
 @dataclass(frozen=True)
 class Options:
     """
-    Output options that tune how statements are rendered, threaded uniformly to every
-    generator (most ignore it; today only index generation reads a field).
+    Output options that tune how statements are rendered (most generators ignore these;
+    today only index generation reads a field).
 
     index_concurrently: emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with
         CONCURRENTLY so index maintenance does not take a blocking lock. The resulting
@@ -107,14 +107,27 @@ class Options:
     index_concurrently: bool = False
 
 
-class Generator(Protocol):
+@dataclass(frozen=True)
+class Context:
     """
-    The shared shape of every object-kind generator: keyword-only source, target and
-    options, yielding phase-tagged statements. Annotating the registry with this enforces
-    one uniform signature (names included) across all generators.
+    Everything a generator needs: the two databases being diffed and the output options.
+    Bundling them keeps every generator's signature uniform (`ctx`) without threading a
+    fixed list of parameters that most generators only partially use.
     """
 
-    def __call__(self, *, source: DbInfo, target: DbInfo, options: Options) -> Iterator[Statement]: ...
+    source: DbInfo
+    target: DbInfo
+    options: Options
+
+
+class Generator(Protocol):
+    """
+    The shared shape of every object-kind generator: take the diff Context and yield
+    phase-tagged statements. Annotating the registry with this enforces one uniform
+    signature across all generators.
+    """
+
+    def __call__(self, ctx: Context) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:

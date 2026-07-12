@@ -127,9 +127,6 @@ ban-relative-imports = "all"
   "FBT001", # Boolean-typed positional argument (typer option callbacks require it)
   "FBT002", # Boolean default positional argument (typer --version flag)
 ]
-"src/pgmig/_diff/*.py" = [
-  "ARG001", # generators share the uniform Generator signature; not every one uses `options`
-]
 "tests/*" = [
   "S101", # Use of `assert` detected
 ]
