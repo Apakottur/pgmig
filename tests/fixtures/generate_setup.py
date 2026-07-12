@@ -48,6 +48,6 @@ class GenerateSetup:
         # ";"-terminated and may themselves span multiple lines (e.g. functions),
         # so it must not be split on newlines.
         if apply and result:
-            self.src.execute(result)  # type: ignore[arg-type] # ty: ignore[invalid-argument-type]
+            self.src.execute(result)  # ty: ignore[invalid-argument-type]
             residual = generate(source=self.src.dsn, target=self.dst.dsn)
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
