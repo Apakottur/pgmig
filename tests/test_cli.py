@@ -141,15 +141,6 @@ def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp_path:
     assert "Traceback" not in result.output
 
 
-def test_ignore_all_extension_versions_flag_passes_true(mocker: MockerFixture) -> None:
-    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
-
-    result = _runner.invoke(app, ["generate", "-s", "src", "-t", "tgt", "--ignore-all-extension-versions"])
-
-    assert result.exit_code == 0
-    assert spy.call_args.kwargs["ignore_extension_version"] is True
-
-
 def test_ignore_extension_version_flags_pass_list(mocker: MockerFixture) -> None:
     spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
 

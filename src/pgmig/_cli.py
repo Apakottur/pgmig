@@ -63,13 +63,6 @@ def generate(
             help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
         ),
     ] = None,
-    ignore_all_extension_versions: Annotated[
-        bool,
-        typer.Option(
-            "--ignore-all-extension-versions",
-            help="Do not emit ALTER EXTENSION ... UPDATE TO for any extension's version mismatch.",
-        ),
-    ] = False,
     index_concurrently: Annotated[
         bool,
         typer.Option(
@@ -88,16 +81,13 @@ def generate(
     source = _require_dsn(source, flag="--source", env_var="PGMIG_SOURCE")
     target = _require_dsn(target, flag="--target", env_var="PGMIG_TARGET")
 
-    # --ignore-all-extension-versions wins over a per-extension list.
-    ignore_versions: bool | list[str] = ignore_all_extension_versions or (ignore_extension_version or [])
-
     try:
         # Generate the migration SQL.
         sql = generate_migration(
             source=source,
             target=target,
             index_concurrently=index_concurrently,
-            ignore_extension_version=ignore_versions,
+            ignore_extension_version=ignore_extension_version or [],
         )
     except PgmigError as error:
         # Known error - print message without traceback.

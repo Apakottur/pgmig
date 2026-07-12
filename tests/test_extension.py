@@ -248,20 +248,6 @@ def test_extension_version_update(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql(f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}';")
 
 
-def test_ignore_extension_version_true_suppresses_update(gen_setup: GenerateSetup) -> None:
-    """
-    ignore_extension_version=True drops the ALTER EXTENSION ... UPDATE TO for every
-    extension whose version differs.
-    """
-    ext_info = _pick_multi_version_extension(gen_setup.src)
-    _create_extension(gen_setup.src, ext_info.name, version=ext_info.min_version)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.max_version)
-
-    sql_out = generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=True)
-
-    assert sql_out == ""
-
-
 def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: GenerateSetup) -> None:
     """
     A list naming the extension suppresses only that extension's version update.

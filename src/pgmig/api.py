@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 from pgmig._build._engine import build_db_info
@@ -10,7 +11,7 @@ def generate(
     source: str,
     target: str,
     index_concurrently: bool = False,
-    ignore_extension_version: bool | list[str] = False,
+    ignore_extension_version: Sequence[str] = (),
 ) -> str:
     """
     Generate the migration SQL between the given source and target databases.
@@ -21,9 +22,8 @@ def generate(
         index_concurrently: Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
                             Using CONCURRENTLY avoids blocking index read/write operations, but takes longer to execute
                             and cannot be run inside a transaction block.
-        ignore_extension_version: Suppress the ALTER EXTENSION ... UPDATE TO emitted for an extension whose version
-                            differs between the databases. True ignores every extension, a list of names ignores only
-                            those, and False (default) ignores none.
+        ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
+                            UPDATE TO is emitted for them. Empty (default) ignores none.
     """
     # Introspect both databases concurrently.
     with ThreadPoolExecutor(max_workers=2) as executor:

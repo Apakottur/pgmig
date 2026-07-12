@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol, TypeVar
@@ -109,14 +109,9 @@ class Context:
     # run inside a transaction block.
     index_concurrently: bool = False
 
-    # Suppress the ALTER EXTENSION ... UPDATE TO for a version mismatch. True ignores every
-    # extension; a list ignores only the named ones; False (default) ignores none.
-    ignore_extension_version: bool | list[str] = False
-
-    def should_ignore_extension_version(self, name: str) -> bool:
-        if isinstance(self.ignore_extension_version, bool):
-            return self.ignore_extension_version
-        return name in self.ignore_extension_version
+    # Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ... UPDATE TO
+    # is emitted for them. Empty (default) ignores none.
+    ignore_extension_version: Sequence[str] = ()
 
 
 class Generator(Protocol):
