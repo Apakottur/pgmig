@@ -1,4 +1,4 @@
-from pgmig._diff import constraints, enums, extensions, functions, indexes, schemas, sequences, tables, triggers
+from pgmig._diff import constraints, enums, extensions, functions, indexes, schemas, sequences, tables, triggers, views
 from pgmig._diff._core import Context, Generator, Phase
 
 # Registration order is cosmetic — final ordering is decided by each statement's phase.
@@ -14,6 +14,7 @@ _GENERATORS: tuple[Generator, ...] = (
     constraints.generate_foreign_keys,
     functions.generate,
     triggers.generate,
+    views.generate,
 )
 
 

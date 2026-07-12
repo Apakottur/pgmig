@@ -12,6 +12,8 @@ from pgmig._build import (
     tables,
     triggers,
     unsupported,
+    view_dependencies,
+    views,
 )
 from pgmig._build._core import Guard, Loader
 from pgmig._errors import PgmigError
@@ -23,6 +25,7 @@ from pgmig._models import DbInfo
 _GUARDS: tuple[Guard, ...] = (
     unsupported.check,
     invalid_indexes.check,
+    view_dependencies.check,
 )
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
@@ -37,6 +40,7 @@ _LOADERS: tuple[Loader, ...] = (
     functions.load,
     triggers.load,
     enums.load,
+    views.load,
     extensions.load,
 )
 

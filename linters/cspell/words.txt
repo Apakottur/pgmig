@@ -126,3 +126,4 @@ initdb
 indisvalid
 deparsed
 excinfo
+viewdef

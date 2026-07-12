@@ -165,6 +165,17 @@ class EnumType:
     comment: str | None
 
 
+@dataclass(frozen=True)
+class View:
+    """
+    A Postgres view, owned by a schema.
+    """
+
+    name: str
+    definition: str  # pg_get_viewdef output: the SELECT the view wraps (no trailing semicolon)
+    comment: str | None
+
+
 @dataclass
 class Schema:
     """
@@ -177,6 +188,7 @@ class Schema:
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]
     enum_by_name: dict[str, EnumType]
+    view_by_name: dict[str, View]
 
 
 @dataclass(frozen=True)
