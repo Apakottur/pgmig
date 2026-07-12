@@ -1,4 +1,9 @@
-from pgmig._models import Column, Constraint, DbInfo, Sequence
+from collections.abc import Callable
+from typing import TypeVar
+
+from pgmig._models import Column, Constraint, DbInfo, Index, Sequence
+
+_Renamable = TypeVar("_Renamable")
 
 
 def _generate_schemas(*, source: DbInfo, target: DbInfo) -> tuple[list[str], list[str]]:
@@ -198,93 +203,102 @@ def _generate_indexes(*, source: DbInfo, target: DbInfo) -> list[str]:
             if table_name not in dst_tables:
                 continue
 
-            src_indexes = dict(src_tables[table_name].index_by_name) if table_name in src_tables else {}
-            dst_indexes = dict(dst_tables[table_name].index_by_name)
-
-            # Exact matches (same name and definition) are no-ops.
-            for name in sorted(src_indexes.keys() & dst_indexes.keys()):
-                if src_indexes[name].definition == dst_indexes[name].definition:
-                    del src_indexes[name]
-                    del dst_indexes[name]
-
-            # Renames: remaining indexes that share a canonical (name-independent) key.
-            src_by_canonical: dict[str, list[str]] = {}
-            for name, index in src_indexes.items():
-                src_by_canonical.setdefault(index.canonical, []).append(name)
-            dst_by_canonical: dict[str, list[str]] = {}
-            for name, index in dst_indexes.items():
-                dst_by_canonical.setdefault(index.canonical, []).append(name)
-
-            rename_pairs: list[tuple[str, str]] = []
-            for canonical in sorted(src_by_canonical.keys() & dst_by_canonical.keys()):
-                src_names = sorted(src_by_canonical[canonical])
-                dst_names = sorted(dst_by_canonical[canonical])
-                # A shared canonical key with an identical name implies an identical
-                # definition, which was already removed as an exact match above, so
-                # every pair here is a genuine rename. Counts may differ, so pair up
-                # to the shorter list.
-                for old_name, new_name in zip(src_names, dst_names, strict=False):
-                    rename_pairs.append((old_name, new_name))
-                    del src_indexes[old_name]
-                    del dst_indexes[new_name]
-
-            # Emit drops first (frees names), then renames, then creates.
-            statements.extend(f'DROP INDEX "{schema_name}"."{name}";' for name in sorted(src_indexes.keys()))
-            statements.extend(
-                f'ALTER INDEX "{schema_name}"."{old_name}" RENAME TO "{new_name}";'
-                for old_name, new_name in rename_pairs
+            src_indexes = src_tables[table_name].index_by_name if table_name in src_tables else {}
+            drops, renames, creates = _diff_indexes(
+                schema_name=schema_name, src=src_indexes, dst=dst_tables[table_name].index_by_name
             )
-            statements.extend(f"{dst_indexes[name].definition};" for name in sorted(dst_indexes.keys()))
+            # Emit drops first (frees names), then renames, then creates.
+            statements.extend(drops)
+            statements.extend(renames)
+            statements.extend(creates)
 
     return statements
+
+
+def _diff_renamable(
+    src: dict[str, _Renamable],
+    dst: dict[str, _Renamable],
+    *,
+    key: Callable[[_Renamable], str],
+    render_drop: Callable[[str], str],
+    render_rename: Callable[[str, str], str],
+    render_create: Callable[[str, _Renamable], str],
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Diff two name->object mappings whose objects carry a name-independent `key`,
+    detecting renames (same key, different name).
+
+    Returns:
+        A 3-tuple (drops, renames, creates) of rendered SQL statements. A shared
+        name is a no-op when the keys match; otherwise objects are dropped,
+        renamed (same key across a name change), or created.
+    """
+    src = dict(src)
+    dst = dict(dst)
+
+    # Same name + same key means no change.
+    for name in sorted(src.keys() & dst.keys()):
+        if key(src[name]) == key(dst[name]):
+            del src[name]
+            del dst[name]
+
+    # Renames: remaining objects that share a name-independent key.
+    src_by_key: dict[str, list[str]] = {}
+    for name, item in src.items():
+        src_by_key.setdefault(key(item), []).append(name)
+    dst_by_key: dict[str, list[str]] = {}
+    for name, item in dst.items():
+        dst_by_key.setdefault(key(item), []).append(name)
+
+    renames: list[str] = []
+    for shared_key in sorted(src_by_key.keys() & dst_by_key.keys()):
+        src_names = sorted(src_by_key[shared_key])
+        dst_names = sorted(dst_by_key[shared_key])
+        # A shared key with an identical name was removed as a no-op above, so every
+        # pair here is a genuine rename. Counts may differ, so pair up to the shorter.
+        for old_name, new_name in zip(src_names, dst_names, strict=False):
+            renames.append(render_rename(old_name, new_name))
+            del src[old_name]
+            del dst[new_name]
+
+    drops = [render_drop(name) for name in sorted(src.keys())]
+    creates = [render_create(name, dst[name]) for name in sorted(dst.keys())]
+    return drops, renames, creates
+
+
+def _diff_indexes(
+    *, schema_name: str, src: dict[str, Index], dst: dict[str, Index]
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Diff one table's standalone indexes into (drops, renames, creates), using each
+    index's name-independent canonical form as the rename key.
+    """
+    return _diff_renamable(
+        src,
+        dst,
+        key=lambda index: index.canonical,
+        render_drop=lambda name: f'DROP INDEX "{schema_name}"."{name}";',
+        render_rename=lambda old, new: f'ALTER INDEX "{schema_name}"."{old}" RENAME TO "{new}";',
+        render_create=lambda _name, index: f"{index.definition};",
+    )
 
 
 def _diff_constraints(
     *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
 ) -> tuple[list[str], list[str], list[str]]:
     """
-    Diff one table's constraints (of a single kind) by name and definition.
-
-    Returns:
-        A 3-tuple (drops, renames, adds) of ALTER TABLE statements.
+    Diff one table's constraints (of a single kind) into (drops, renames, adds).
+    The constraint definition (from pg_get_constraintdef) is already name-independent.
     """
-    src_constraints = dict(src)
-    dst_constraints = dict(dst)
-
-    # Exact matches (same name and definition) are no-ops.
-    for name in sorted(src_constraints.keys() & dst_constraints.keys()):
-        if src_constraints[name].definition == dst_constraints[name].definition:
-            del src_constraints[name]
-            del dst_constraints[name]
-
-    # Renames: remaining constraints that share a definition (name-independent).
-    src_by_def: dict[str, list[str]] = {}
-    for name, constraint in src_constraints.items():
-        src_by_def.setdefault(constraint.definition, []).append(name)
-    dst_by_def: dict[str, list[str]] = {}
-    for name, constraint in dst_constraints.items():
-        dst_by_def.setdefault(constraint.definition, []).append(name)
-
-    rename_pairs: list[tuple[str, str]] = []
-    for definition in sorted(src_by_def.keys() & dst_by_def.keys()):
-        src_names = sorted(src_by_def[definition])
-        dst_names = sorted(dst_by_def[definition])
-        # Same definition with an identical name was already removed as an exact
-        # match, so every pair here is a genuine rename. Counts may differ, so
-        # pair up to the shorter list.
-        for old_name, new_name in zip(src_names, dst_names, strict=False):
-            rename_pairs.append((old_name, new_name))
-            del src_constraints[old_name]
-            del dst_constraints[new_name]
-
     prefix = f'ALTER TABLE "{schema_name}"."{table_name}"'
-    drops = [f'{prefix} DROP CONSTRAINT "{name}";' for name in sorted(src_constraints.keys())]
-    renames = [f'{prefix} RENAME CONSTRAINT "{old}" TO "{new}";' for old, new in rename_pairs]
-    adds = [
-        f'{prefix} ADD CONSTRAINT "{name}" {dst_constraints[name].definition};'
-        for name in sorted(dst_constraints.keys())
-    ]
-    return drops, renames, adds
+    return _diff_renamable(
+        src,
+        dst,
+        key=lambda constraint: constraint.definition,
+        render_drop=lambda name: f'{prefix} DROP CONSTRAINT "{name}";',
+        render_rename=lambda old, new: f'{prefix} RENAME CONSTRAINT "{old}" TO "{new}";',
+        render_create=lambda name, constraint: f'{prefix} ADD CONSTRAINT "{name}" {constraint.definition};',
+    )
 
 
 def _generate_constraints(*, source: DbInfo, target: DbInfo) -> list[str]:

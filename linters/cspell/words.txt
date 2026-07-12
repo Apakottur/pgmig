@@ -99,3 +99,4 @@ pronamespace
 prorettype
 rettype
 overloadable
+renamable
