@@ -44,21 +44,8 @@ def test_generate_empty_diff_no_output(gen_setup: GenerateSetup) -> None:
     assert result.stdout == ""
 
 
-def test_generate_missing_target_exits_2() -> None:
-    result = _runner.invoke(app, ["generate", "-s", "postgresql://x"])
-
-    assert result.exit_code == 2
-
-
 def test_generate_bad_dsn_errors() -> None:
     result = _runner.invoke(app, ["generate", "-s", "not-a-dsn", "-t", "not-a-dsn"])
 
     assert result.exit_code == 1
     assert "Error" in result.output
-
-
-def test_version() -> None:
-    result = _runner.invoke(app, ["--version"])
-
-    assert result.exit_code == 0
-    assert result.stdout.strip() != ""

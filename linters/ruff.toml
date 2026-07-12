@@ -123,10 +123,10 @@ ban-relative-imports = "all"
 
 # Per file ignores.
 [lint.per-file-ignores]
-"src/pgmig/_cli.py" = [
-  "FBT001", # Boolean-typed positional argument (typer option callbacks require it)
-  "FBT002", # Boolean default positional argument (typer --version flag)
-]
+# "src/pgmig/_cli.py" = [
+#   "FBT001", # Boolean-typed positional argument (typer option callbacks require it)
+#   "FBT002", # Boolean default positional argument (typer --version flag)
+# ]
 "tests/*" = [
   "S101", # Use of `assert` detected
 ]
