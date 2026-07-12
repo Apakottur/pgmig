@@ -132,17 +132,76 @@ def _column_def(column: Column) -> str:
     return " ".join(parts)
 
 
-def _column_comment_statements(
-    *,
-    schema_name: str,
-    table_name: str,
-    src_columns: dict[str, Column],
-    dst_columns: dict[str, Column],
+def _create_table(schema_name: str, table: Table) -> list[str]:
+    """
+    Render the CREATE TABLE statement for a target-only table (columns inline).
+    """
+    columns = ", ".join(_column_def(column) for column in table.columns)
+    return [f'CREATE TABLE "{schema_name}"."{table.name}" ({columns});']
+
+
+def _alter_columns(
+    *, schema_name: str, table_name: str, src_table: Table, dst_table: Table, pk_columns: set[str]
 ) -> list[str]:
     """
-    Generate COMMENT ON COLUMN statements for every target column whose comment
-    differs from the source (absent source column is treated as no comment).
+    Sync the columns of a table present on both sides: add/drop by name, and for a
+    shared column sync DEFAULT then NOT NULL. Type changes are out of scope.
+
+    A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
+    ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. Passing the set in
+    keeps that cross-object coordination an explicit seam.
     """
+    statements: list[str] = []
+    src_columns = {column.name: column for column in src_table.columns}
+    dst_columns = {column.name: column for column in dst_table.columns}
+
+    for column_name in sorted(src_columns.keys() | dst_columns.keys()):
+        if column_name not in src_columns:
+            column = dst_columns[column_name]
+            statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN {_column_def(column)};')
+        elif column_name not in dst_columns:
+            statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
+        else:
+            src_column = src_columns[column_name]
+            dst_column = dst_columns[column_name]
+            prefix = f'ALTER TABLE "{schema_name}"."{table_name}" ALTER COLUMN "{column_name}"'
+            if src_column.default != dst_column.default:
+                if dst_column.default is None:
+                    statements.append(f"{prefix} DROP DEFAULT;")
+                else:
+                    statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
+            if src_column.not_null != dst_column.not_null:
+                if dst_column.not_null:
+                    # Skip if a target primary key already covers this column.
+                    if column_name not in pk_columns:
+                        statements.append(f"{prefix} SET NOT NULL;")
+                else:
+                    statements.append(f"{prefix} DROP NOT NULL;")
+    return statements
+
+
+def _table_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit COMMENT ON TABLE when the comment differs (absent source table = no comment).
+    """
+    src_comment = src_table.comment if src_table else None
+    dst_comment = dst_table.comment
+    if src_comment == dst_comment:
+        return []
+    if dst_comment is None:
+        return [f'COMMENT ON TABLE "{schema_name}"."{dst_table.name}" IS NULL;']
+    escaped = dst_comment.replace("'", "''")
+    return [f'COMMENT ON TABLE "{schema_name}"."{dst_table.name}" IS \'{escaped}\';']
+
+
+def _column_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit COMMENT ON COLUMN for every target column whose comment differs from the
+    source (absent source column = no comment). A separate statement; not inline.
+    """
+    src_columns = {column.name: column for column in src_table.columns} if src_table else {}
+    dst_columns = {column.name: column for column in dst_table.columns}
+
     statements: list[str] = []
     for column_name in sorted(dst_columns.keys()):
         src_comment = src_columns[column_name].comment if column_name in src_columns else None
@@ -153,13 +212,14 @@ def _column_comment_statements(
             else:
                 escaped = dst_comment.replace("'", "''")
                 target = f"'{escaped}'"
-            statements.append(f'COMMENT ON COLUMN "{schema_name}"."{table_name}"."{column_name}" IS {target};')
+            statements.append(f'COMMENT ON COLUMN "{schema_name}"."{dst_table.name}"."{column_name}" IS {target};')
     return statements
 
 
 def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
     """
-    Generate the migration SQL of tables (create/drop, columns, comments).
+    Generate the migration SQL of tables: drop, create, or alter columns, followed by
+    table and column comment sync.
     """
     statements: list[str] = []
 
@@ -169,68 +229,21 @@ def _generate_tables(*, source: DbInfo, target: DbInfo) -> list[Statement]:
             statements.append(f'DROP TABLE "{schema_name}"."{table_name}";')
             continue
 
-        # Columns covered by a target primary key are made NOT NULL by the
-        # ADD PRIMARY KEY, so their standalone SET NOT NULL is redundant.
-        dst_pk_columns = dst_table.get_primary_key_columns()
-
-        if src_table is not None:
-            # Table exists in source: get details.
-            src_comment = src_table.comment
-            src_columns = {column.name: column for column in src_table.columns}
-
-            # Sync columns (add/drop by name; type changes are out of scope).
-            dst_columns = {column.name: column for column in dst_table.columns}
-            for column_name in sorted(src_columns.keys() | dst_columns.keys()):
-                if column_name not in src_columns:
-                    column = dst_columns[column_name]
-                    statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" ADD COLUMN {_column_def(column)};')
-                elif column_name not in dst_columns:
-                    statements.append(f'ALTER TABLE "{schema_name}"."{table_name}" DROP COLUMN "{column_name}";')
-                else:
-                    # Column on both sides: sync DEFAULT then NOT NULL (type changes are out of scope).
-                    src_column = src_columns[column_name]
-                    dst_column = dst_columns[column_name]
-                    prefix = f'ALTER TABLE "{schema_name}"."{table_name}" ALTER COLUMN "{column_name}"'
-                    if src_column.default != dst_column.default:
-                        if dst_column.default is None:
-                            statements.append(f"{prefix} DROP DEFAULT;")
-                        else:
-                            statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
-                    if src_column.not_null != dst_column.not_null:
-                        if dst_column.not_null:
-                            # Skip if a target primary key already covers this column.
-                            if column_name not in dst_pk_columns:
-                                statements.append(f"{prefix} SET NOT NULL;")
-                        else:
-                            statements.append(f"{prefix} DROP NOT NULL;")
+        if src_table is None:
+            statements.extend(_create_table(schema_name, dst_table))
         else:
-            # Present in target only: default details.
-            src_comment = None
-            src_columns = {}
-
-            # Create the table.
-            dst_columns = {column.name: column for column in dst_table.columns}
-            columns = ", ".join(_column_def(column) for column in dst_table.columns)
-            statements.append(f'CREATE TABLE "{schema_name}"."{table_name}" ({columns});')
-
-        # Sync table comment.
-        dst_comment = dst_table.comment
-        if src_comment != dst_comment:
-            if dst_comment is None:
-                statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS NULL;')
-            else:
-                escaped = dst_comment.replace("'", "''")
-                statements.append(f'COMMENT ON TABLE "{schema_name}"."{table_name}" IS \'{escaped}\';')
-
-        # Sync column comments (a separate statement; cannot be inline).
-        statements.extend(
-            _column_comment_statements(
-                schema_name=schema_name,
-                table_name=table_name,
-                src_columns=src_columns,
-                dst_columns=dst_columns,
+            statements.extend(
+                _alter_columns(
+                    schema_name=schema_name,
+                    table_name=table_name,
+                    src_table=src_table,
+                    dst_table=dst_table,
+                    pk_columns=dst_table.get_primary_key_columns(),
+                )
             )
-        )
+
+        statements.extend(_table_comment_statements(schema_name, src_table, dst_table))
+        statements.extend(_column_comment_statements(schema_name, src_table, dst_table))
 
     return [Statement(Phase.TABLE, sql) for sql in statements]
 
