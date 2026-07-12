@@ -6,25 +6,17 @@ import typer
 
 from pgmig.api import generate as generate_migration
 
-app = typer.Typer(no_args_is_help=True, add_completion=False, help="Generate migrations between Postgres databases.")
+app = typer.Typer(
+    no_args_is_help=True,
+    add_completion=False,
+    help="Generate migrations between Postgres databases.",
+)
 
 
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(version("pgmig"))
         raise typer.Exit
-
-
-@app.callback()
-def main(
-    _version: Annotated[
-        bool,
-        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show the version and exit."),
-    ] = False,
-) -> None:
-    """
-    Generate migrations between Postgres databases.
-    """
 
 
 @app.command()
@@ -52,3 +44,19 @@ def generate(
         output.write_text(f"{sql}\n", encoding="utf-8")
     else:
         typer.echo(sql)
+
+
+@app.callback()
+def main(
+    _version: Annotated[
+        bool,
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show the version and exit."),
+    ] = False,
+) -> None:
+    """
+    Generate migrations between Postgres databases.
+    """
+
+
+if __name__ == "__main__":
+    app()
