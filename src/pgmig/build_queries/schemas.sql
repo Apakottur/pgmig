@@ -1,7 +1,7 @@
 -- Schemas (user namespaces, excluding system and extension-owned ones).
 SELECT
-    n.nspname,
-    obj_description(n.oid, 'pg_namespace')
+    n.nspname AS schema_name,
+    obj_description(n.oid, 'pg_namespace') AS schema_comment
 FROM
     pg_namespace n
 WHERE

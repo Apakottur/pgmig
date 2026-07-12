@@ -1,8 +1,8 @@
 -- Enum types (user enums only; extension-owned ones are excluded).
 SELECT
-    n.nspname,
-    t.typname,
-    array_agg(e.enumlabel ORDER BY e.enumsortorder)
+    n.nspname AS schema_name,
+    t.typname AS enum_name,
+    array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_values
 FROM
     pg_type t
     JOIN pg_namespace n ON n.oid = t.typnamespace
