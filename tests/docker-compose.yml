@@ -36,5 +36,9 @@ services:
     # (re)created container runs initdb for a fresh cluster; it's also faster than disk.
     tmpfs:
       - /pgdata
+    # 15432 sits below the kernel's ephemeral port range (32768-60999 by default),
+    # so it can never be grabbed as the source port of an outgoing connection.
+    # The previous 55432 was inside that range and lost that lottery in CI:
+    # docker-pull connections occasionally claimed it right before the bind.
     ports:
-      - "55432:5432"
+      - "15432:5432"
