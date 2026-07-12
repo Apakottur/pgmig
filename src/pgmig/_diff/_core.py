@@ -26,6 +26,7 @@ def _diff_comments(
     dst: Mapping[str, _CommentedT],
     *,
     render: Callable[[str, _CommentedT], str],
+    recreated: frozenset[str] | set[str] = frozenset(),
 ) -> list[str]:
     """
     Diff comments across two name->object mappings whose objects carry `.comment`.
@@ -35,11 +36,19 @@ def _diff_comments(
     comment). The sorted iteration makes the output deterministic regardless of the
     introspection row order, and gathering the pattern here removes the hand-copied
     "(src.comment if src else None) != dst.comment" checks scattered per object kind.
+
+    A name in `recreated` was dropped and recreated by the migration, which resets its
+    comment to NULL. Its source comment is therefore treated as None so the target
+    comment is always re-emitted; otherwise an unchanged comment would be silently lost
+    and leave a residual diff.
     """
     statements: list[str] = []
     for name in sorted(dst):
-        src_obj = src.get(name)
-        src_comment = src_obj.comment if src_obj is not None else None
+        if name in recreated:
+            src_comment = None
+        else:
+            src_obj = src.get(name)
+            src_comment = src_obj.comment if src_obj is not None else None
         if src_comment != dst[name].comment:
             statements.append(render(name, dst[name]))
     return statements
@@ -123,15 +132,17 @@ def _diff_renamable(
     render_drop: Callable[[str], str],
     render_rename: Callable[[str, str], str],
     render_create: Callable[[str, _Renamable], str],
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], set[str]]:
     """
     Diff two name->object mappings whose objects carry a name-independent `key`,
     detecting renames (same key, different name).
 
     Returns:
-        A 3-tuple (drops, renames, creates) of rendered SQL statements. A shared
-        name is a no-op when the keys match; otherwise objects are dropped,
-        renamed (same key across a name change), or created.
+        A 4-tuple (drops, renames, creates, recreated) of rendered SQL statements plus
+        the set of names that were both dropped and recreated (same name, changed
+        definition). A shared name is a no-op when the keys match; otherwise objects
+        are dropped, renamed (same key across a name change), or created. `recreated`
+        lets the comment diff force a re-emit, since a recreate resets the comment.
     """
     src = dict(src)
     dst = dict(dst)
@@ -161,6 +172,9 @@ def _diff_renamable(
             del src[old_name]
             del dst[new_name]
 
+    # After the no-op and rename passes, a name still in both sides is dropped and
+    # recreated (same name, changed definition).
+    recreated = src.keys() & dst.keys()
     drops = [render_drop(name) for name in sorted(src.keys())]
     creates = [render_create(name, dst[name]) for name in sorted(dst.keys())]
-    return drops, renames, creates
+    return drops, renames, creates, recreated
