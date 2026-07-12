@@ -120,3 +120,6 @@ libpq
 dbname
 deparse
 reemits
+pgdata
+tmpfs
+initdb
