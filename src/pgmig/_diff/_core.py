@@ -63,6 +63,7 @@ class Phase(Enum):
     TABLE = auto()
     INDEX = auto()
     CONSTRAINT = auto()
+    COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
