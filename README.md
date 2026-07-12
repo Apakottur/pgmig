@@ -92,6 +92,7 @@ print(sql)  # the migration SQL
 | `--source`, `-s` | DSN of the source (current) database. **Required.**     |
 | `--target`, `-t` | DSN of the target (desired) database. **Required.**     |
 | `--output`, `-o` | Write the migration SQL to this file instead of stdout. |
+| `--check`, `-c`  | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 
 Other commands:
 
