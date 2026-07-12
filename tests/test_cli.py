@@ -77,6 +77,16 @@ def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
     assert "differ" in result.output.lower()
 
 
+def test_generate_check_short_flag(gen_setup: GenerateSetup) -> None:
+    # -c is the short alias for --check.
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
+
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-c"])
+
+    assert result.exit_code == 1
+    assert 'CREATE TABLE "public"."person" ("name" text);' in result.output
+
+
 def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
     # No diff under --check is a clean pass: zero exit, nothing on stdout.
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--check"])

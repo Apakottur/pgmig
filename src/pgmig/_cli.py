@@ -34,6 +34,7 @@ def generate(
         bool,
         typer.Option(
             "--check",
+            "-c",
             help="Exit with a non-zero status if the databases differ. Useful as a CI gate; "
             "the migration is still emitted so the drift is visible.",
         ),
