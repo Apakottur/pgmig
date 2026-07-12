@@ -1,5 +1,5 @@
 from pgmig._build import build_db_info
-from pgmig._diff import generate_migration_sql
+from pgmig._diff._engine import generate_migration_sql
 
 
 def generate(*, source: str, target: str) -> str:
