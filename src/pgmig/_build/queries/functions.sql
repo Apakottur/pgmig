@@ -16,7 +16,36 @@ SELECT
             d.refclassid = 'pg_proc'::regclass
             AND d.refobjid = p.oid
             AND d.deptype IN ('n', 'a')
-            AND d.classid <> 'pg_trigger'::regclass) AS func_has_dependents
+            AND d.classid <> 'pg_trigger'::regclass) AS func_has_dependents,
+    -- Forward function -> function hard dependencies (deptype 'n'), as {schema_name, name,
+    -- args} objects; used to order drops so a routine is dropped before the ones it depends on.
+    COALESCE((
+        SELECT
+	    jsonb_agg(jsonb_build_object('schema_name', rn.nspname, 'name', rp.proname, 'args',
+		pg_get_function_identity_arguments(rp.oid)))
+        FROM pg_depend d
+        JOIN pg_proc rp ON rp.oid = d.refobjid
+        JOIN pg_namespace rn ON rn.oid = rp.pronamespace
+        WHERE
+            d.classid = 'pg_proc'::regclass
+            AND d.objid = p.oid
+            AND d.refclassid = 'pg_proc'::regclass
+            AND d.deptype = 'n'), '[]'::jsonb) AS func_depends_on_functions,
+    -- Forward function -> relation hard dependencies (deptype 'n'), as {schema_name, name}
+    -- objects; used to refuse a late drop that is circular with a relation dropped the same run.
+    COALESCE((
+        SELECT
+            jsonb_agg(jsonb_build_object('schema_name', rn.nspname, 'name', rc.relname))
+        FROM pg_depend d
+        JOIN pg_class rc ON rc.oid = d.refobjid
+        JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+        WHERE
+            d.classid = 'pg_proc'::regclass
+            AND d.objid = p.oid
+            AND d.refclassid = 'pg_class'::regclass
+            AND d.deptype = 'n'
+	    AND rc.relkind IN ('r', 'p', 'v', 'm')),
+		'[]'::jsonb) AS func_depends_on_relations
 FROM
     pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace

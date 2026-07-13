@@ -14,6 +14,26 @@ class ViewKey:
 
 
 @dataclass(frozen=True, order=True)
+class FunctionKey:
+    """
+    Full function identifier within a database (schema plus overload signature).
+    """
+
+    schema: str
+    signature: str  # "name(identity_arguments)"
+
+
+@dataclass(frozen=True, order=True)
+class RelationKey:
+    """
+    Full identifier of a table, view, or materialized view within a database.
+    """
+
+    schema: str
+    name: str
+
+
+@dataclass(frozen=True, order=True)
 class ColumnKey:
     """
     Full identifier of a table column within a database.
@@ -211,11 +231,17 @@ class Function:
     return_type: str  # format_type(prorettype); "void" for a procedure
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
-    # Whether a non-trigger object (column default, check constraint, expression
-    # index, another routine, ...) depends on this routine. Such a dependent must be
-    # dropped before the routine, which the linear phase ordering can't guarantee, so
-    # dropping a routine with dependents is refused rather than mis-ordered.
+    # Whether a non-trigger object (column default, check constraint, expression index,
+    # another routine, ...) depends on this routine. Drives drop phasing: a routine with
+    # dependents is dropped late (after those dependents), one without stays early.
     has_dependents: bool
+    # Forward hard dependencies of this routine (pg_depend deptype 'n'):
+    #   depends_on_functions -- routines this one depends on; when both are dropped, this
+    #     one drops first (topologically ordered in the late phase).
+    #   depends_on_relations -- tables/views/matviews the body reads; a late drop is refused
+    #     as circular if one of these is also dropped this run.
+    depends_on_functions: frozenset[FunctionKey]
+    depends_on_relations: frozenset[RelationKey]
 
     @property
     def drop_keyword(self) -> str:

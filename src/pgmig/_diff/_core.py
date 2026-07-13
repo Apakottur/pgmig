@@ -133,6 +133,8 @@ class Phase(Enum):
     INDEX = auto()
     CONSTRAINT = auto()
     COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
+    # After the column defaults / expression indexes / check constraints that depend on a routine.
+    FUNCTION_DROP_LATE = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
     VIEW_CREATE = auto()  # After the tables/functions a view/matview reads from exist.
     MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in VIEW_CREATE.
