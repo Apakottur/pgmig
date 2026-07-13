@@ -11,6 +11,17 @@ class ViewKey:
     name: str
 
 
+@dataclass(frozen=True, order=True)
+class ColumnKey:
+    """
+    Full identifier of a table column within a database.
+    """
+
+    schema: str
+    table: str
+    column: str
+
+
 @dataclass(frozen=True)
 class Column:
     """
@@ -274,3 +285,7 @@ class DbInfo:
 
     # Mapping from a view to the set of views it depends on.
     view_dependencies: dict[ViewKey, set[ViewKey]]
+
+    # Mapping from a view to the set of table columns it reads. Drives dropping and
+    # recreating a view around a change (type change, drop) to a column it depends on.
+    view_column_dependencies: dict[ViewKey, set[ColumnKey]]

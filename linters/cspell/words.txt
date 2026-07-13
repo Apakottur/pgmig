@@ -74,6 +74,7 @@ indrelid
 indexrelid
 refclassid
 refobjid
+refobjsubid
 regclass
 conkey
 conname
