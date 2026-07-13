@@ -17,9 +17,7 @@ class GenerateSetup:
     @property
     def pg_major(self) -> int:
         """
-        The Postgres major version of the server under test (e.g. 16). Tests that assert the
-        exact CREATE VIEW body need this: pg_get_viewdef qualified a view's columns with the
-        table name before PG16 (SELECT base.x) and stopped doing so from PG16 (SELECT x).
+        Get the Postgres major version of the server under test (e.g. 16).
         """
         (row,) = self.src.execute("SHOW server_version_num")
         return int(row[0]) // 10000

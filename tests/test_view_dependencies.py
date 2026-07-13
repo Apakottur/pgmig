@@ -1,15 +1,11 @@
 from tests.fixtures.generate_setup import GenerateSetup
 
 
-def _view_body(pg_major: int, table: str, from_ref: str) -> str:
-    r"""
-    The exact SELECT body pg_get_viewdef reconstructs for `SELECT x FROM <table>`, as it is
-    re-emitted in a CREATE VIEW. `table` is the source table's name, `from_ref` its
-    qualified reference in the FROM clause. Postgres qualified the selected column with the
-    table name before PG16 (SELECT base.x) and dropped the qualification from PG16 (SELECT
-    x); the "\n   FROM" whitespace is identical across all supported versions.
+def _view_body(gen_setup: GenerateSetup, table: str, from_ref: str) -> str:
     """
-    match pg_major:
+    Get the view body, depending on the Postgres major version.
+    """
+    match gen_setup.pg_major:
         case 14 | 15:
             column = f"{table}.x"
         case _:
@@ -27,7 +23,7 @@ def test_view_on_view_create_ordering(gen_setup: GenerateSetup) -> None:
     gen_setup.assert_migration_sql(
         [
             'CREATE VIEW "public"."base" AS SELECT 1 AS x;',
-            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup.pg_major, "base", "public.base")};',
+            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "base", "public.base")};',
         ]
     )
 
@@ -62,7 +58,7 @@ def test_view_on_view_definition_change_cascades(gen_setup: GenerateSetup) -> No
             'DROP VIEW "public"."derived";',
             'DROP VIEW "public"."base";',
             'CREATE VIEW "public"."base" AS SELECT 2 AS x;',
-            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup.pg_major, "base", "public.base")};',
+            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "base", "public.base")};',
         ]
     )
 
@@ -83,8 +79,8 @@ def test_view_on_view_transitive_cascade(gen_setup: GenerateSetup) -> None:
             'DROP VIEW "public"."b";',
             'DROP VIEW "public"."a";',
             'CREATE VIEW "public"."a" AS SELECT 2 AS x;',
-            f'CREATE VIEW "public"."b" AS {_view_body(gen_setup.pg_major, "a", "public.a")};',
-            f'CREATE VIEW "public"."c" AS {_view_body(gen_setup.pg_major, "b", "public.b")};',
+            f'CREATE VIEW "public"."b" AS {_view_body(gen_setup, "a", "public.a")};',
+            f'CREATE VIEW "public"."c" AS {_view_body(gen_setup, "b", "public.b")};',
         ]
     )
 
@@ -104,7 +100,7 @@ def test_view_on_view_cross_schema(gen_setup: GenerateSetup) -> None:
             'CREATE SCHEMA "a";',
             'CREATE SCHEMA "b";',
             'CREATE VIEW "a"."base" AS SELECT 1 AS x;',
-            f'CREATE VIEW "b"."derived" AS {_view_body(gen_setup.pg_major, "base", "a.base")};',
+            f'CREATE VIEW "b"."derived" AS {_view_body(gen_setup, "base", "a.base")};',
         ]
     )
 
