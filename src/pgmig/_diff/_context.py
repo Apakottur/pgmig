@@ -25,6 +25,9 @@ class _ContextData:
     # is emitted for them. Empty (default) ignores none.
     ignore_extension_version: Sequence[str]
 
+    # Suppress all ALTER ... OWNER TO statements.
+    ignore_owner: bool
+
 
 # Context of the current diff generation.
 _context: ContextVar[_ContextData] = ContextVar("pgmig_context")
@@ -44,6 +47,7 @@ class _Context:
         target: DbInfo,
         index_concurrently: bool,
         ignore_extension_version: Sequence[str],
+        ignore_owner: bool,
     ) -> Iterator[None]:
         token = _context.set(
             _ContextData(
@@ -51,6 +55,7 @@ class _Context:
                 target=target,
                 index_concurrently=index_concurrently,
                 ignore_extension_version=ignore_extension_version,
+                ignore_owner=ignore_owner,
             )
         )
         try:
@@ -73,6 +78,10 @@ class _Context:
     @property
     def ignore_extension_version(self) -> Sequence[str]:
         return _context.get().ignore_extension_version
+
+    @property
+    def ignore_owner(self) -> bool:
+        return _context.get().ignore_owner
 
 
 context = _Context()

@@ -12,6 +12,7 @@ def generate(
     target: str,
     index_concurrently: bool = False,
     ignore_extension_version: Sequence[str] = (),
+    ignore_owner: bool = False,
 ) -> str:
     """
     Generate the migration SQL between the given source and target databases.
@@ -24,6 +25,7 @@ def generate(
                             and cannot be run inside a transaction block.
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
+        ignore_owner: Suppress all ALTER ... OWNER TO statements.
     """
     # Introspect both databases concurrently.
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -38,5 +40,6 @@ def generate(
         target=target_db_info,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
+        ignore_owner=ignore_owner,
     ):
         return generate_migration_sql()
