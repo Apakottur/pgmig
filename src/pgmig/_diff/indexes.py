@@ -43,6 +43,22 @@ def _index_comment_statements(
     )
 
 
+def diff_index_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
+    """
+    Diff one relation's indexes into ordered migration SQL: drops first (frees names),
+    then renames, then creates, then comment syncs. Honors context.index_concurrently.
+    Shared by the table and materialized-view index generators.
+    """
+    drops, renames, creates, recreated = _diff_indexes(schema_name=schema_name, src=src, dst=dst)
+
+    if context.index_concurrently:
+        drops = [drop.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for drop in drops]
+        creates = [create.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for create in creates]
+
+    comments = _index_comment_statements(schema_name, src, dst, recreated)
+    return [*drops, *renames, *creates, *comments]
+
+
 def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
@@ -53,18 +69,5 @@ def generate() -> Iterator[Statement]:
             continue
 
         src_indexes = src_table.index_by_name if src_table else {}
-        dst_indexes = dst_table.index_by_name
-        drops, renames, creates, recreated = _diff_indexes(
-            schema_name=schema_name,
-            src=src_indexes,
-            dst=dst_indexes,
-        )
-
-        if context.index_concurrently:
-            drops = [drop.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for drop in drops]
-            creates = [create.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for create in creates]
-
-        comments = _index_comment_statements(schema_name, src_indexes, dst_indexes, recreated)
-        # Emit drops first (frees names), then renames, then creates, then comments.
-        for sql in (*drops, *renames, *creates, *comments):
+        for sql in diff_index_statements(schema_name, src_indexes, dst_table.index_by_name):
             yield Statement(Phase.INDEX, sql)
