@@ -8,6 +8,8 @@ from pgmig._build import (
     functions,
     indexes,
     invalid_indexes,
+    materialized_views,
+    matview_indexes,
     schemas,
     sequences,
     tables,
@@ -27,6 +29,7 @@ _GUARDS: tuple[Guard, ...] = (
     unsupported.check,
     invalid_indexes.check,
     view_dependencies.check,
+    matview_indexes.check,
 )
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
@@ -42,6 +45,7 @@ _LOADERS: tuple[Loader, ...] = (
     triggers.load,
     enums.load,
     views.load,
+    materialized_views.load,
     domains.load,
     extensions.load,
 )

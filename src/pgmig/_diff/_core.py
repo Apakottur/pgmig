@@ -63,7 +63,7 @@ class Phase(Enum):
     """
 
     FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
-    VIEW_DROP = auto()  # Before the tables/functions a view reads from are dropped.
+    VIEW_DROP = auto()  # Before the tables/functions a view/matview reads from are dropped.
     TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
@@ -75,7 +75,7 @@ class Phase(Enum):
     CONSTRAINT = auto()
     COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
-    VIEW_CREATE = auto()  # After the tables/functions a view reads from exist.
+    VIEW_CREATE = auto()  # After the tables/functions a view/matview reads from exist.
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.

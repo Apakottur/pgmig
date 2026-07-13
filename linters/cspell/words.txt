@@ -132,3 +132,8 @@ typtypmod
 typnotnull
 typdefault
 contypid
+matview
+matviews
+relkinds
+tablespace
+unscannable

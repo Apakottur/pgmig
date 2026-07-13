@@ -177,6 +177,17 @@ class View:
 
 
 @dataclass(frozen=True)
+class MaterializedView:
+    """
+    A Postgres materialized view, owned by a schema.
+    """
+
+    name: str
+    definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
+    comment: str | None
+
+
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -203,6 +214,7 @@ class Schema:
     function_by_signature: dict[str, Function]
     enum_by_name: dict[str, EnumType]
     view_by_name: dict[str, View]
+    materialized_view_by_name: dict[str, MaterializedView]
     domain_by_name: dict[str, Domain]
 
 
