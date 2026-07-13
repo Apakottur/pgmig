@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._models import EnumType
 from pgmig._sql import comment_on, literal, qualified
 
@@ -50,7 +49,7 @@ def generate() -> Iterator[Statement]:
     value additions are phased before tables (a column may be of the type); drops run
     after.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(context.source, context.target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_enums = src_schema.enum_by_name if src_schema else {}
         dst_enums = dst_schema.enum_by_name if dst_schema else {}
 

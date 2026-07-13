@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs, diff_renamable
 from pgmig._models import Domain
 from pgmig._sql import comment_on, ident, qualified
 
@@ -46,7 +45,7 @@ def _alter_domain(qualified_name: str, src: Domain, dst: Domain) -> list[str]:
 
     # CHECK constraints diff by name-independent definition, so a same-definition rename
     # is a RENAME rather than a drop + add.
-    drops, renames, adds, _recreated = _diff_renamable(
+    drops, renames, adds, _recreated = diff_renamable(
         src.check_by_name,
         dst.check_by_name,
         key=lambda definition: definition,
@@ -76,7 +75,7 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of domain types (create, drop, alter). Creates and alters
     are phased before tables (a column may be of the domain); drops run after.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(context.source, context.target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_domains = src_schema.domain_by_name if src_schema else {}
         dst_domains = dst_schema.domain_by_name if dst_schema else {}
 

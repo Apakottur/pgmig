@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs
 from pgmig._sql import comment_on, ident
 
 
@@ -9,7 +8,7 @@ def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of schemas.
     """
-    for name, src_schema, dst_schema in _iter_schema_pairs(context.source, context.target):
+    for name, src_schema, dst_schema in ctx_iter_schema_pairs():
         # Present in source only: drop it.
         if dst_schema is None:
             yield Statement(Phase.SCHEMA_DROP, f"DROP SCHEMA {ident(name)};")

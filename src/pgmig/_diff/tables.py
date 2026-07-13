@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs
 from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -163,7 +162,7 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of tables: drop, create, or alter columns, followed by
     table and column comment sync.
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(context.source, context.target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Present in source only: drop it (attached objects are dropped with it).
         if dst_table is None:
             yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")

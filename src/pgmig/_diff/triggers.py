@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
 from pgmig._models import Trigger
 from pgmig._sql import comment_on, ident, qualified
 
@@ -14,7 +13,7 @@ def _diff_triggers(
     name-independent canonical form as the rename key.
     """
     table = qualified(schema_name, table_name)
-    return _diff_renamable(
+    return diff_renamable(
         src,
         dst,
         key=lambda trigger: trigger.canonical,
@@ -44,7 +43,7 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of triggers. Drops are phased before the functions they
     call are dropped; creates (with renames) after those functions and tables exist.
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(context.source, context.target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its triggers are dropped with it.
         if dst_table is None:
             continue

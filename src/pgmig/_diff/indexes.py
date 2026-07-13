@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
 from pgmig._models import Index
 from pgmig._sql import comment_on, ident, qualified
 
@@ -16,7 +16,7 @@ def _diff_indexes(
     Diff one table's standalone indexes into (drops, renames, creates), using each
     index's name-independent canonical form as the rename key.
     """
-    return _diff_renamable(
+    return diff_renamable(
         src,
         dst,
         key=lambda index: index.canonical,
@@ -47,7 +47,7 @@ def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
     """
-    for schema_name, _table_name, src_table, dst_table in _iter_table_pairs(context.source, context.target):
+    for schema_name, _table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its indexes are dropped with it.
         if dst_table is None:
             continue

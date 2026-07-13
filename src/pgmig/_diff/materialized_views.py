@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._models import MaterializedView
 from pgmig._sql import comment_on, qualified
 
@@ -28,7 +27,7 @@ def generate() -> Iterator[Statement]:
     definition is a drop-and-recreate (there is no CREATE OR REPLACE MATERIALIZED VIEW). Creates
     use WITH NO DATA: the matview is created unpopulated and the user runs REFRESH themselves.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(context.source, context.target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_views = src_schema.materialized_view_by_name if src_schema else {}
         dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
 
