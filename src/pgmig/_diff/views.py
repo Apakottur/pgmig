@@ -97,8 +97,8 @@ def generate(ctx: Context) -> Iterator[Statement]:
     """
     src_views = _collect_views(ctx.source)
     dst_views = _collect_views(ctx.target)
-    src_edges = ctx.source.view_dependency_edges
-    dst_edges = ctx.target.view_dependency_edges
+    src_edges = ctx.source.view_dependencies
+    dst_edges = ctx.target.view_dependencies
 
     shared = src_views.keys() & dst_views.keys()
     changed = {key for key in shared if src_views[key].definition != dst_views[key].definition}

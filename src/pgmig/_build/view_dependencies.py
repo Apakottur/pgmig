@@ -23,4 +23,4 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     for row in _run_query(conn, "view_dependencies.sql", _ViewDependencyRow):
         dependent = ViewKey((row.dependent_schema, row.dependent_view))
         referenced = ViewKey((row.referenced_schema, row.referenced_view))
-        db_info.view_dependency_edges.setdefault(dependent, set()).add(referenced)
+        db_info.view_dependencies.setdefault(dependent, set()).add(referenced)
