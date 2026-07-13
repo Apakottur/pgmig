@@ -7,6 +7,9 @@ from pgmig._sql import comment_on, ident
 def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of schemas.
+
+    The schema name here is the object itself (CREATE/DROP/COMMENT ON SCHEMA), not a
+    qualifier prefix, so the omit-schema policy does not apply.
     """
     for name, src_schema, dst_schema in ctx_iter_schema_pairs():
         # Present in source only: drop it.

@@ -1,4 +1,5 @@
 import psycopg
+from psycopg import sql
 
 from pgmig._build import (
     composite_types,
@@ -54,9 +55,14 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-def build_db_info(dsn: str) -> DbInfo:
+def build_db_info(dsn: str, *, search_path_schema: str | None = None) -> DbInfo:
     """
     Build the full structure of the given database.
+
+    When `search_path_schema` is given, introspection runs with that schema on the
+    search_path so the deparse functions (pg_get_indexdef, ...) omit its qualifier;
+    the caller has asked for that schema to be unqualified in the output. When None,
+    an empty search_path keeps every name fully qualified (the default, portable form).
     """
     # Open the connection.
     try:
@@ -81,6 +87,12 @@ def build_db_info(dsn: str) -> DbInfo:
         raise PgmigError(f"Could not connect to database: {error}") from error
 
     with conn:
+        # Override the empty search_path set above so the deparse functions omit the
+        # requested schema's qualifier. Runs before the loaders, inside the same
+        # transaction, so every introspection query sees it.
+        if search_path_schema is not None:
+            conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(search_path_schema)))
+
         # Run every guard first and collect all findings, so a database with several
         # problems reports them together rather than one failure per re-run.
         problems = [finding for guard in _GUARDS for finding in guard(conn)]

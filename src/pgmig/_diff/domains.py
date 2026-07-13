@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs, diff_renamable
 from pgmig._models import Domain
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import comment_on, ident, schema_qualified
 
 
 def _create_domain(qualified_name: str, domain: Domain) -> list[str]:
@@ -66,7 +66,7 @@ def _domain_comment_statements(schema_name: str, src: dict[str, Domain], dst: di
     Emit COMMENT ON DOMAIN for target domains whose comment differs from source.
     """
     return _diff_comments(
-        src, dst, render=lambda name, domain: comment_on("DOMAIN", qualified(schema_name, name), domain.comment)
+        src, dst, render=lambda name, domain: comment_on("DOMAIN", schema_qualified(schema_name, name), domain.comment)
     )
 
 
@@ -82,7 +82,7 @@ def generate() -> Iterator[Statement]:
         for name in sorted(src_domains.keys() | dst_domains.keys()):
             src_domain = src_domains.get(name)
             dst_domain = dst_domains.get(name)
-            qualified_name = qualified(schema_name, name)
+            qualified_name = schema_qualified(schema_name, name)
 
             # Present in target only: create it.
             if src_domain is None:

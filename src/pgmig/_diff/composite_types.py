@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._models import CompositeType
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import comment_on, ident, schema_qualified
 
 
 def _composite_comment_statements(
@@ -12,7 +12,7 @@ def _composite_comment_statements(
     Emit COMMENT ON TYPE for target composite types whose comment differs from source.
     """
     return _diff_comments(
-        src, dst, render=lambda name, ct: comment_on("TYPE", qualified(schema_name, name), ct.comment)
+        src, dst, render=lambda name, ct: comment_on("TYPE", schema_qualified(schema_name, name), ct.comment)
     )
 
 
@@ -29,7 +29,7 @@ def generate() -> Iterator[Statement]:
         for name in sorted(src_types.keys() | dst_types.keys()):
             src_type = src_types.get(name)
             dst_type = dst_types.get(name)
-            qualified_name = qualified(schema_name, name)
+            qualified_name = schema_qualified(schema_name, name)
 
             # Present in target only: create it.
             if src_type is None:

@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
 from pgmig._models import Constraint
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import comment_on, ident, schema_qualified
 
 
 def _diff_constraints(
@@ -12,7 +12,7 @@ def _diff_constraints(
     Diff one table's constraints (of a single kind) into (drops, renames, adds).
     The constraint definition (from pg_get_constraintdef) is already name-independent.
     """
-    prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
+    prefix = f"ALTER TABLE {schema_qualified(schema_name, table_name)}"
     return diff_renamable(
         src,
         dst,
@@ -29,7 +29,7 @@ def _constraint_comment_statements(
     """
     Emit COMMENT ON CONSTRAINT for target constraints whose comment differs from source.
     """
-    table = qualified(schema_name, table_name)
+    table = schema_qualified(schema_name, table_name)
     return _diff_comments(
         src,
         dst,

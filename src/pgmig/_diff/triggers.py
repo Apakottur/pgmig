@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
 from pgmig._models import Trigger
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import comment_on, ident, schema_qualified, strip_on_clause_qualifier
 
 
 def _diff_triggers(
@@ -12,14 +12,16 @@ def _diff_triggers(
     Diff one table's triggers into (drops, renames, creates), using each trigger's
     name-independent canonical form as the rename key.
     """
-    table = qualified(schema_name, table_name)
+    table = schema_qualified(schema_name, table_name)
     return diff_renamable(
         src,
         dst,
         key=lambda trigger: trigger.canonical,
         render_drop=lambda name: f"DROP TRIGGER {ident(name)} ON {table};",
         render_rename=lambda old, new: f"ALTER TRIGGER {ident(old)} ON {table} RENAME TO {ident(new)};",
-        render_create=lambda _name, trigger: f"{trigger.definition};",
+        render_create=lambda _name, trigger: (
+            f"{strip_on_clause_qualifier(trigger.definition, schema_name, table_name)};"
+        ),
     )
 
 
@@ -29,7 +31,7 @@ def _trigger_comment_statements(
     """
     Emit COMMENT ON TRIGGER for target triggers whose comment differs from source.
     """
-    table = qualified(schema_name, table_name)
+    table = schema_qualified(schema_name, table_name)
     return _diff_comments(
         src,
         dst,

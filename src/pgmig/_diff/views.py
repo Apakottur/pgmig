@@ -4,7 +4,7 @@ from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo, View, ViewKey
-from pgmig._sql import comment_on, qualified
+from pgmig._sql import comment_on, qualified, schema_qualified
 
 _Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
 
@@ -61,7 +61,7 @@ def _comment_statements(schema_name: str, src: dict[str, View], dst: dict[str, V
     return _diff_comments(
         src,
         dst,
-        render=lambda name, view: comment_on("VIEW", qualified(schema_name, name), view.comment),
+        render=lambda name, view: comment_on("VIEW", schema_qualified(schema_name, name), view.comment),
         recreated=recreated,
     )
 
@@ -117,13 +117,13 @@ def generate() -> Iterator[Statement]:
     # Drops: dependent-first, so reverse the source graph's dependency-first order.
     drops = drop_only | recreate
     for key in reversed(_topological_order(drops, src_edges)):
-        yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(key.schema, key.name)};")
+        yield Statement(Phase.VIEW_DROP, f"DROP VIEW {schema_qualified(key.schema, key.name)};")
 
     # Creates: dependency-first over the target graph.
     creates = create_only | recreate
     for key in _topological_order(creates, dst_edges):
         yield Statement(
-            Phase.VIEW_CREATE, f"CREATE VIEW {qualified(key.schema, key.name)} AS {dst_views[key].definition};"
+            Phase.VIEW_CREATE, f"CREATE VIEW {schema_qualified(key.schema, key.name)} AS {dst_views[key].definition};"
         )
 
     # Comments, after the views they annotate exist. A recreated view re-emits its comment
