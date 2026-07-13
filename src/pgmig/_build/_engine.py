@@ -16,6 +16,7 @@ from pgmig._build import (
     tables,
     triggers,
     unsupported,
+    view_column_dependencies,
     view_dependencies,
     views,
 )
@@ -46,6 +47,7 @@ _LOADERS: tuple[Loader, ...] = (
     enums.load,
     views.load,
     view_dependencies.load,
+    view_column_dependencies.load,
     materialized_views.load,
     matview_indexes.load,
     domains.load,
@@ -89,7 +91,9 @@ def build_db_info(dsn: str) -> DbInfo:
                 "pgmig cannot process this database:\n" + "\n".join(f"  - {problem}" for problem in problems)
             )
 
-        db_info = DbInfo(schema_by_name={}, extension_by_name={}, view_dependencies={})
+        db_info = DbInfo(
+            schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}
+        )
         for load in _LOADERS:
             load(conn, db_info)
     return db_info

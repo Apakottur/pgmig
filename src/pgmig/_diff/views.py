@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs, retyped_column_refs
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo, View, ViewKey
 from pgmig._sql import comment_on, qualified
@@ -106,10 +106,17 @@ def generate() -> Iterator[Statement]:
 
     shared = src_views.keys() & dst_views.keys()
     changed = {key for key in shared if src_views[key].definition != dst_views[key].definition}
+    # A view reading a table column whose type changes must also be recreated: Postgres
+    # refuses ALTER COLUMN ... TYPE while a view reads the column, so the view is dropped in
+    # VIEW_DROP (before the TABLE-phase change) and recreated in VIEW_CREATE. A type change
+    # leaves the view's definition unchanged, so `changed` above never catches this.
+    # Source-side edges: the column and the view reading it both exist in the source.
+    retyped_columns = retyped_column_refs()
+    column_readers = {key for key, cols in source.view_column_dependencies.items() if cols & retyped_columns}
     # A recreate resets the view (and its comment); pull in every view that transitively
     # reads a changed one. Restrict to shared views -- a create-only view has nothing to
     # drop, and a drop-only view is already dropped below.
-    recreate = _dependents_closure(changed, src_edges) & shared
+    recreate = _dependents_closure(changed | column_readers, src_edges) & shared
 
     drop_only = src_views.keys() - dst_views.keys()
     create_only = dst_views.keys() - src_views.keys()

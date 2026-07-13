@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._models import Schema, Table
+from pgmig._models import ColumnKey, Schema, Table
 
 _Renamable = TypeVar("_Renamable")
 
@@ -129,6 +129,30 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
         dst_tables = dst_schema.table_by_name if dst_schema else {}
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
+
+
+def retyped_column_refs() -> set[ColumnKey]:
+    """
+    Columns of tables present on both sides whose type changes between source and target.
+    Postgres refuses ALTER COLUMN ... TYPE while a view reads the column, and -- unlike a
+    dropped column -- a type change leaves the reading view's definition text unchanged, so
+    the view-definition recreate path never catches it. The view diff intersects these with
+    its view-on-column edges to decide which views to drop and recreate around the change.
+
+    Source-side identity (a column read by a source view exists in the source). A serial
+    change keeps the integer `type`, so it does not surface here; that is intentional -- a
+    serial change is unsupported and raised by the table diff before applying.
+    """
+    refs: set[ColumnKey] = set()
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
+        if src_table is None or dst_table is None:
+            continue
+        dst_columns = {column.name: column for column in dst_table.columns}
+        for src_column in src_table.columns:
+            dst_column = dst_columns.get(src_column.name)
+            if dst_column is not None and src_column.type != dst_column.type:
+                refs.add(ColumnKey(schema_name, table_name, src_column.name))
+    return refs
 
 
 def diff_renamable(
