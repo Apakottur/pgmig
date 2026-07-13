@@ -19,8 +19,12 @@ SELECT
     JOIN pg_class c ON c.oid = con.conrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
-    c.relkind = 'r'
+    c.relkind IN ('r', 'p')
     AND con.contype IN ('p', 'u', 'c', 'f')
+    -- Exclude constraints inherited from a partitioned parent (conparentid <> 0): they are
+    -- (re)created by the parent's cascading ADD CONSTRAINT. A parent-level declaration and
+    -- a child's own local constraint both have conparentid = 0 and are kept.
+    AND con.conparentid = 0
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
     -- Extension-ownership exclusion checklist (see the sibling queries: every query must

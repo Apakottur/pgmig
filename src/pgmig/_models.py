@@ -122,10 +122,28 @@ class Table:
     columns: list[Column]
     comment: str | None
     owner: str  # the role that owns the table (pg_class.relowner); never null
+    # Declarative partitioning metadata.
+    # A partitioned parent has partition_strategy/partition_key set; a partition child has
+    # partition_bound/partition_parent set; a sub-partitioned table has all four. A plain
+    # table has all four None.
+    partition_strategy: str | None  # pg_partitioned_table.partstrat: 'r'/'l'/'h'; None if not a partitioned parent
+    partition_key: str | None  # pg_get_partkeydef(oid), e.g. "RANGE (id)"; None if not a partitioned parent
+    partition_bound: str | None  # pg_get_expr(relpartbound, oid): "FOR VALUES ..."/"DEFAULT"; None if not a partition
+    partition_parent: tuple[str, str] | None  # (schema, name) of the parent; None if not a partition
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
     trigger_by_name: dict[str, Trigger]
+
+    @property
+    def is_partitioned(self) -> bool:
+        """Whether this table is a partitioned parent (declared PARTITION BY ...)."""
+        return self.partition_strategy is not None
+
+    @property
+    def is_partition(self) -> bool:
+        """Whether this table is a partition of some parent."""
+        return self.partition_parent is not None
 
     def get_primary_key_columns(self) -> set[str]:
         """

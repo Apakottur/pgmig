@@ -140,3 +140,13 @@ matviews
 relkinds
 tablespace
 unscannable
+relispartition
+relpartbound
+partstrat
+partkeydef
+partrelid
+inhrelid
+inhparent
+conparentid
+subpartition
+deparses

@@ -48,10 +48,46 @@ def _column_def(column: Column) -> str:
 
 def _create_table(schema_name: str, table: Table) -> list[str]:
     """
-    Render the CREATE TABLE statement for a target-only table (columns inline).
+    Render the CREATE TABLE statement for a target-only table.
+
+    A partition is created with PARTITION OF (no column list -- columns are inherited from
+    the parent); a partitioned parent (or a sub-partitioned partition) carries a trailing
+    PARTITION BY clause.
     """
+    if table.partition_parent is not None:
+        parent_schema, parent_name = table.partition_parent
+        statement = (
+            f"CREATE TABLE {qualified(schema_name, table.name)} "
+            f"PARTITION OF {qualified(parent_schema, parent_name)} {table.partition_bound}"
+        )
+        if table.is_partitioned:
+            statement += f" PARTITION BY {table.partition_key}"
+        return [f"{statement};"]
+
     columns = ", ".join(_column_def(column) for column in table.columns)
-    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns});"]
+    partition_by = f" PARTITION BY {table.partition_key}" if table.is_partitioned else ""
+    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns}){partition_by};"]
+
+
+def _attach_partition(schema_name: str, table_name: str, parent: tuple[str, str], bound: str | None) -> str:
+    """
+    ALTER TABLE <parent> ATTACH PARTITION <child> <bound> -- make an existing standalone
+    table a partition.
+    """
+    parent_schema, parent_name = parent
+    return (
+        f"ALTER TABLE {qualified(parent_schema, parent_name)} "
+        f"ATTACH PARTITION {qualified(schema_name, table_name)} {bound};"
+    )
+
+
+def _detach_partition(schema_name: str, table_name: str, parent: tuple[str, str]) -> str:
+    """
+    ALTER TABLE <parent> DETACH PARTITION <child> -- turn a partition back into a
+    standalone table (the table itself survives).
+    """
+    parent_schema, parent_name = parent
+    return f"ALTER TABLE {qualified(parent_schema, parent_name)} DETACH PARTITION {qualified(schema_name, table_name)};"
 
 
 def _alter_columns(
@@ -160,22 +196,97 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     )
 
 
+def _partition_depth(key: tuple[str, str], table_map: dict[tuple[str, str], Table]) -> int:
+    """
+    Depth of a table in the partition hierarchy (0 = root / not a partition), walking the
+    partition_parent chain within `table_map`. Sorting creates by depth guarantees a
+    parent is created before its partitions (and sub-partitions).
+    """
+    depth = 0
+    seen: set[tuple[str, str]] = set()
+    table: Table | None = table_map.get(key)
+    while table is not None and table.partition_parent is not None and table.partition_parent not in seen:
+        seen.add(table.partition_parent)
+        depth += 1
+        table = table_map.get(table.partition_parent)
+    return depth
+
+
+def _membership_statements(schema_name: str, table_name: str, src_table: Table, dst_table: Table) -> list[str]:
+    """
+    Statements reconciling a table's partition membership across the diff: ATTACH a
+    standalone table, DETACH a partition, or re-parent (detach + attach). Changes Postgres
+    cannot make in place -- partition key/strategy, or a bound change on the same parent --
+    raise rather than emit a data-destructive DROP + CREATE.
+    """
+    if (src_table.is_partitioned or dst_table.is_partitioned) and (
+        src_table.partition_strategy != dst_table.partition_strategy
+        or src_table.partition_key != dst_table.partition_key
+    ):
+        raise NotImplementedError(
+            f"Partition key/strategy change is not supported: {qualified(schema_name, table_name)}"
+        )
+
+    src_parent = src_table.partition_parent
+    dst_parent = dst_table.partition_parent
+    if src_parent is not None and dst_parent is not None:
+        if src_parent != dst_parent:
+            # Re-parent: detach from the old parent, attach to the new one.
+            return [
+                _detach_partition(schema_name, table_name, src_parent),
+                _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
+            ]
+        if src_table.partition_bound != dst_table.partition_bound:
+            raise NotImplementedError(f"Partition bound change is not supported: {qualified(schema_name, table_name)}")
+        return []
+    if src_parent is not None:
+        return [_detach_partition(schema_name, table_name, src_parent)]
+    if dst_parent is not None:
+        return [_attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound)]
+    return []
+
+
 def generate() -> Iterator[Statement]:
     """
-    Generate the migration SQL of tables: drop, create, or alter columns, followed by
-    table and column comment sync.
-    """
-    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
-        # Present in source only: drop it (attached objects are dropped with it).
-        if dst_table is None:
-            yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")
-            continue
+    Generate the migration SQL of tables: create, alter, or drop, plus partition
+    attach/detach and table/column comment sync.
 
-        deferred_drop_not_null: list[str] = []
-        if src_table is None:
-            rendered = _create_table(schema_name, dst_table)
+    Emission order within the TABLE phase is create -> alter -> drop, and creates are
+    ordered parent-before-child, so a partition is always created after (or attached to) an
+    existing parent. Dropping a partitioned parent cascades to its partitions, so a
+    partition whose parent is also dropped is skipped.
+    """
+    pairs = list(ctx_iter_table_pairs())
+    src_map = {(schema, name): src for schema, name, src, _dst in pairs if src is not None}
+    dst_map = {(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
+
+    creates: list[tuple[str, str, Table]] = []
+    alters: list[tuple[str, str, Table, Table]] = []
+    drops: list[tuple[str, str]] = []
+    for schema_name, table_name, src_table, dst_table in pairs:
+        if dst_table is None:
+            drops.append((schema_name, table_name))
+        elif src_table is None:
+            creates.append((schema_name, table_name, dst_table))
         else:
-            rendered, deferred_drop_not_null = _alter_columns(
+            alters.append((schema_name, table_name, src_table, dst_table))
+
+    # Create: parent before child (and comments; a new table has no source owner to sync).
+    creates.sort(key=lambda item: (_partition_depth((item[0], item[1]), dst_map), item[0], item[1]))
+    for schema_name, _table_name, dst_table in creates:
+        rendered = _create_table(schema_name, dst_table)
+        rendered += _table_comment_statements(schema_name, None, dst_table)
+        rendered += _column_comment_statements(schema_name, None, dst_table)
+        for sql in rendered:
+            yield Statement(Phase.TABLE, sql)
+
+    # Alter: membership transitions, then columns (skipped for a partition child, whose
+    # columns are inherited), then owner and comments.
+    for schema_name, table_name, src_table, dst_table in alters:
+        rendered = _membership_statements(schema_name, table_name, src_table, dst_table)
+        deferred_drop_not_null: list[str] = []
+        if not dst_table.is_partition:
+            column_statements, deferred_drop_not_null = _alter_columns(
                 schema_name=schema_name,
                 table_name=table_name,
                 src_table=src_table,
@@ -183,13 +294,21 @@ def generate() -> Iterator[Statement]:
                 pk_columns=dst_table.get_primary_key_columns(),
                 src_pk_columns=src_table.get_primary_key_columns(),
             )
+            rendered += column_statements
         rendered += _table_owner_statements(schema_name, src_table, dst_table)
         rendered += _table_comment_statements(schema_name, src_table, dst_table)
         rendered += _column_comment_statements(schema_name, src_table, dst_table)
-
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
         # DROP NOT NULL for a column whose covering primary key drops this run must run
         # after the CONSTRAINT-phase DROP CONSTRAINT.
         for sql in deferred_drop_not_null:
             yield Statement(Phase.COLUMN_DROP_NOT_NULL, sql)
+
+    # Drop: skip a partition whose parent is also dropped (the parent's DROP TABLE
+    # cascades to it). Attached objects are dropped with the table.
+    for schema_name, table_name in drops:
+        parent = src_map[schema_name, table_name].partition_parent
+        if parent is not None and parent in src_map and parent not in dst_map:
+            continue
+        yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")
