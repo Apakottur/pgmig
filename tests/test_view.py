@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import PgmigError, generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
@@ -59,14 +56,3 @@ def test_view_comment(gen_setup: GenerateSetup) -> None:
             'COMMENT ON VIEW "public"."active" IS \'hi\';',
         ]
     )
-
-
-def test_view_on_view_raises(gen_setup: GenerateSetup) -> None:
-    """
-    A view that selects from another view is not supported yet (dependency ordering).
-    """
-    gen_setup.dst.execute("CREATE VIEW base AS SELECT 1 AS x")
-    gen_setup.dst.execute("CREATE VIEW derived AS SELECT x FROM base")
-
-    with pytest.raises(PgmigError, match="view"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)

@@ -1,6 +1,16 @@
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True, order=True)
+class ViewKey:
+    """
+    Full view identifier within a database.
+    """
+
+    schema: str
+    name: str
+
+
 @dataclass(frozen=True)
 class Column:
     """
@@ -261,3 +271,6 @@ class DbInfo:
 
     schema_by_name: dict[str, Schema]
     extension_by_name: dict[str, Extension]
+
+    # Mapping from a view to the set of views it depends on.
+    view_dependencies: dict[ViewKey, set[ViewKey]]

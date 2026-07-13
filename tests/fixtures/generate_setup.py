@@ -14,6 +14,14 @@ class GenerateSetup:
         self.src = src_conn
         self.dst = dst_conn
 
+    @property
+    def pg_major(self) -> int:
+        """
+        Get the Postgres major version of the server under test (e.g. 16).
+        """
+        (row,) = self.src.execute("SHOW server_version_num")
+        return int(row[0]) // 10000
+
     def execute_both(self, query: LiteralString | sql.Composed) -> None:
         """
         Run the same query on both the source and target databases.
