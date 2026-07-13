@@ -18,8 +18,10 @@ class _TableRow(BaseModel):
     column_type: str | None
     column_not_null: bool | None
     column_default: str | None
+    generation_expression: str | None
     column_comment: str | None
     column_identity: str | None
+    column_generated: str | None
     column_serial_sequence: str | None
     # Partitioning metadata (per table, repeated on every column row).
     partition_strategy: str | None
@@ -65,6 +67,7 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
             or table_row.column_type is None
             or table_row.column_not_null is None
             or table_row.column_identity is None
+            or table_row.column_generated is None
         ):
             continue
         table.columns.append(
@@ -76,5 +79,7 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
                 comment=table_row.column_comment,
                 identity=table_row.column_identity,
                 serial_sequence=table_row.column_serial_sequence,
+                generated=table_row.column_generated,
+                generation_expression=table_row.generation_expression,
             )
         )

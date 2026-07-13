@@ -35,6 +35,8 @@ class Column:
     comment: str | None
     identity: str  # pg_attribute.attidentity ('' for a non-identity column)
     serial_sequence: str | None  # sequence owned via a nextval() default, else None
+    generated: str  # pg_attribute.attgenerated ('' none, 's' stored, 'v' virtual)
+    generation_expression: str | None  # generation expression, kept separate from `default`
 
     @property
     def serial_type(self) -> str | None:

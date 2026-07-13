@@ -23,6 +23,31 @@ def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table
     return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
 
 
+def _parenthesize_generation(expression: str) -> str:
+    """
+    Wrap a generation expression in exactly one pair of outer parentheses, as the GENERATED
+    ALWAYS AS (...) STORED syntax requires. pg_get_expr parenthesizes inconsistently -- it
+    wraps a top-level operator expression ("(a * b)") but not a bare column ("b") or function
+    call ("upper(x)") -- so strip a redundant wrapping pair if one already spans the whole
+    expression, then add our own.
+    """
+    inner = expression
+    if inner.startswith("(") and inner.endswith(")"):
+        depth = 0
+        for index, char in enumerate(inner):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                # The opening paren closes before the end, so it does not wrap the whole
+                # expression (e.g. "(a) + (b)") -- leave it untouched.
+                if depth == 0 and index != len(inner) - 1:
+                    break
+        else:
+            inner = inner[1:-1]
+    return f"({inner})"
+
+
 def _column_def(column: Column) -> str:
     """
     Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
@@ -37,6 +62,16 @@ def _column_def(column: Column) -> str:
     # alongside it (mirrors the serial pseudo-type above).
     if column.identity_clause is not None:
         return f"{ident(column.name)} {column.type} {column.identity_clause}"
+
+    # A generated column carries its expression as a GENERATED ALWAYS AS (...) clause, not a
+    # DEFAULT. Virtual columns (PG18+) are unsupported. A stored generated column may still
+    # be NOT NULL, appended after the clause.
+    if column.generated == "v":
+        raise NotImplementedError(f"Virtual generated column is not supported: {ident(column.name)}")
+    if column.generated == "s":
+        expression = _parenthesize_generation(column.generation_expression or "")
+        clause = f"{ident(column.name)} {column.type} GENERATED ALWAYS AS {expression} STORED"
+        return f"{clause} NOT NULL" if column.not_null else clause
 
     parts = [f"{ident(column.name)} {column.type}"]
     if column.default is not None:
@@ -144,6 +179,17 @@ def _alter_columns(
                     f"Column serial change is not supported: "
                     f"{qualified(schema_name, table_name)}.{ident(column_name)} "
                     f"{src_column.serial_type} -> {dst_column.serial_type}"
+                )
+            # Generated columns cannot be altered in place: Postgres has no ADD GENERATED,
+            # and a generation-expression change has no in-place ALTER (pre-PG18). Raise on a
+            # generated-ness flip or an expression change rather than mis-diff. A generated
+            # column's `default` is None on both sides, so the DEFAULT sync below is inert.
+            if src_column.generated != dst_column.generated or (
+                src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
+            ):
+                raise NotImplementedError(
+                    f"Column generated change is not supported: "
+                    f"{qualified(schema_name, table_name)}.{ident(column_name)}"
                 )
             prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             # Type change first: a widened type must be in place before a dependent

@@ -6,11 +6,19 @@ SELECT
     a.attname AS column_name,
     format_type(a.atttypid, a.atttypmod) AS column_type,
     a.attnotnull AS column_not_null,
-    pg_get_expr(ad.adbin, ad.adrelid) AS column_default,
+    -- A generated column's expression lives in pg_attrdef too, so split by attgenerated:
+    -- a plain column's expression is a DEFAULT, a generated column's is its GENERATED clause.
+    CASE WHEN a.attgenerated = '' THEN
+        pg_get_expr(ad.adbin, ad.adrelid)
+    END AS column_default,
+    CASE WHEN a.attgenerated <> '' THEN
+        pg_get_expr(ad.adbin, ad.adrelid)
+    END AS generation_expression,
     col_description(a.attrelid, a.attnum) AS column_comment,
     obj_description(c.oid, 'pg_class') AS table_comment,
     pg_get_userbyid(c.relowner) AS table_owner,
     a.attidentity AS column_identity,
+    a.attgenerated AS column_generated,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,
     -- Partitioning metadata (per table, repeated on every column row; the loader reads
     -- it once when it first creates the table).
