@@ -11,7 +11,6 @@ from pgmig._sql import qualified
 _KIND_NAMES = {
     "p": "partitioned table",
     "f": "foreign table",
-    "c": "composite type",
     "r": "range type",
 }
 
@@ -25,9 +24,9 @@ class _UnsupportedRow(BaseModel):
 def check(conn: psycopg.Connection[Any]) -> list[str]:
     """
     Guard: report object kinds that are not modelled yet (partitioned tables, foreign
-    tables, composite types, range types). Without this, generate() diffs only the
-    supported kinds and returns "" for a database whose whole objects are missing on one
-    side, falsely claiming convergence.
+    tables, range types). Without this, generate() diffs only the supported kinds and
+    returns "" for a database whose whole objects are missing on one side, falsely claiming
+    convergence.
     """
     rows = _run_query(conn, "unsupported.sql", _UnsupportedRow)
     return [

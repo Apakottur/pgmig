@@ -27,4 +27,5 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
             view_by_name={},
             materialized_view_by_name={},
             domain_by_name={},
+            composite_type_by_name={},
         )
