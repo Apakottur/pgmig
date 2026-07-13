@@ -6,24 +6,66 @@ from tests.fixtures.generate_setup import GenerateSetup
 
 def test_table_column_type_widened(gen_setup: GenerateSetup) -> None:
     """
-    A shared column whose type differs -> ALTER COLUMN ... TYPE. integer -> bigint is an
-    implicit (assignment) cast, so no USING clause is needed and the migration converges.
+    A shared column whose type differs -> ALTER COLUMN ... TYPE ... USING col::newtype.
+    The explicit cast is a superset of the implicit (assignment) integer -> bigint cast,
+    so the migration still converges.
     """
     gen_setup.src.execute("CREATE TABLE person (id integer)")
     gen_setup.dst.execute("CREATE TABLE person (id bigint)")
 
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "id" TYPE bigint;')
+    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "id" TYPE bigint USING "id"::bigint;')
 
 
 def test_table_column_type_varchar_widened(gen_setup: GenerateSetup) -> None:
     """
     A varchar length increase renders with the canonical format_type spelling
-    (character varying(N)); the wider length is an implicit cast, so it converges.
+    (character varying(N)), carried through the USING cast expression too.
     """
     gen_setup.src.execute("CREATE TABLE person (name varchar(50))")
     gen_setup.dst.execute("CREATE TABLE person (name varchar(100))")
 
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "name" TYPE character varying(100);')
+    gen_setup.assert_migration_sql(
+        'ALTER TABLE "public"."person" ALTER COLUMN "name" '
+        'TYPE character varying(100) USING "name"::character varying(100);'
+    )
+
+
+def test_table_column_type_text_to_integer(gen_setup: GenerateSetup) -> None:
+    """
+    Text -> integer needs an explicit cast; USING col::integer makes it converge (the
+    common manual-migration chore this feature unlocks).
+    """
+    gen_setup.src.execute("CREATE TABLE person (id text)")
+    gen_setup.dst.execute("CREATE TABLE person (id integer)")
+
+    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "id" TYPE integer USING "id"::integer;')
+
+
+def test_table_column_type_varchar_to_enum(gen_setup: GenerateSetup) -> None:
+    """
+    Varchar -> enum casts via USING col::enumtype; the enum type is fully qualified by the
+    empty-search_path introspection.
+    """
+    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
+    gen_setup.src.execute("CREATE TABLE person (m varchar)")
+    gen_setup.dst.execute("CREATE TABLE person (m mood)")
+
+    gen_setup.assert_migration_sql(
+        'ALTER TABLE "public"."person" ALTER COLUMN "m" TYPE public.mood USING "m"::public.mood;'
+    )
+
+
+def test_table_column_type_timestamp_to_timestamptz(gen_setup: GenerateSetup) -> None:
+    """
+    Timestamp -> timestamptz (a common timezone migration) casts via USING col::newtype.
+    """
+    gen_setup.src.execute("CREATE TABLE event (ts timestamp)")
+    gen_setup.dst.execute("CREATE TABLE event (ts timestamptz)")
+
+    gen_setup.assert_migration_sql(
+        'ALTER TABLE "public"."event" ALTER COLUMN "ts" '
+        'TYPE timestamp with time zone USING "ts"::timestamp with time zone;'
+    )
 
 
 def test_table_column_type_unchanged_no_statement(gen_setup: GenerateSetup) -> None:

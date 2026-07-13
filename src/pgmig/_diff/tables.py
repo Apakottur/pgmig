@@ -147,11 +147,13 @@ def _alter_columns(
                 )
             prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             # Type change first: a widened type must be in place before a dependent
-            # default or NOT NULL is (re)applied. No USING clause is emitted, so this
-            # relies on Postgres's implicit assignment cast; a cast that needs USING
-            # (e.g. text -> integer) fails at apply time and is a separate feature.
+            # default or NOT NULL is (re)applied. A USING col::newtype cast is emitted so
+            # conversions needing an explicit cast (text -> integer, varchar -> enum,
+            # timezone changes) converge; the explicit cast is a superset of the implicit
+            # assignment cast, so it never regresses. A pair with no cast at all fails
+            # loudly at apply -- a visible error, not a silent divergence.
             if src_column.type != dst_column.type:
-                statements.append(f"{prefix} TYPE {dst_column.type};")
+                statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
             if src_column.default != dst_column.default:
                 if dst_column.default is None:
                     statements.append(f"{prefix} DROP DEFAULT;")
