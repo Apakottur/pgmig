@@ -129,14 +129,33 @@ class Table:
     A Postgres table. Owned by the schema that holds it.
     """
 
+    # Core
     name: str
     columns: list[Column]
     comment: str | None
-    owner: str  # the role that owns the table (pg_class.relowner); never null
+    owner: str
+
+    # Declarative partitioning metadata.
+    partition_strategy: str | None
+    partition_key: str | None
+    partition_bound: str | None
+    partition_parent: tuple[str, str] | None
+
+    # Relations.
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
     trigger_by_name: dict[str, Trigger]
+
+    @property
+    def is_partitioned(self) -> bool:
+        """Whether this table is a partitioned parent (declared PARTITION BY ...)."""
+        return self.partition_strategy is not None
+
+    @property
+    def is_partition(self) -> bool:
+        """Whether this table is a partition of some parent."""
+        return self.partition_parent is not None
 
     def get_primary_key_columns(self) -> set[str]:
         """

@@ -3,9 +3,11 @@ SELECT
     n.nspname AS schema_name,
     c.relname AS table_name,
     ic.relname AS index_name,
-    pg_get_indexdef(i.indexrelid) AS index_def,
-    replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ')
-	AS index_canonical,
+    -- A partitioned-parent index deparses as "... ON ONLY parent ..."; strip ONLY so the
+    -- emitted CREATE INDEX cascades to (and stays valid across) all partitions.
+    replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON ') AS index_def,
+    replace(replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON '), 'INDEX ' ||
+	quote_ident(ic.relname) || ' ON ', 'INDEX ON ') AS index_canonical,
     obj_description(i.indexrelid, 'pg_class') AS index_comment
 FROM
     pg_index i
@@ -13,9 +15,19 @@ FROM
     JOIN pg_class c ON c.oid = i.indrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
-    c.relkind = 'r'
+    c.relkind IN ('r', 'p')
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
+    -- Exclude the auto-created child mirror indexes of a partitioned-parent index: they
+    -- are (re)created by the parent's cascading CREATE INDEX, so emitting them too would
+    -- duplicate and never converge. A child's own local index has no pg_inherits row.
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_inherits ii
+        WHERE
+            ii.inhrelid = i.indexrelid)
     -- Extension-ownership exclusion checklist (see the sibling queries: every query must
     -- carry all applicable legs or the loader KeyErrors on an object left in the model
     -- whose owner was dropped):

@@ -21,6 +21,12 @@ class _TableRow(BaseModel):
     column_comment: str | None
     column_identity: str | None
     column_serial_sequence: str | None
+    # Partitioning metadata (per table, repeated on every column row).
+    partition_strategy: str | None
+    partition_key: str | None
+    partition_bound: str | None
+    partition_parent_schema: str | None
+    partition_parent_name: str | None
 
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
@@ -31,11 +37,21 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
         schema = db_info.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:
+            # A partition has both a parent schema and name (the query sets them together).
+            partition_parent = (
+                (table_row.partition_parent_schema, table_row.partition_parent_name)
+                if table_row.partition_parent_schema is not None and table_row.partition_parent_name is not None
+                else None
+            )
             table = Table(
                 name=table_row.table_name,
                 columns=[],
                 comment=table_row.table_comment,
                 owner=table_row.table_owner,
+                partition_strategy=table_row.partition_strategy,
+                partition_key=table_row.partition_key,
+                partition_bound=table_row.partition_bound,
+                partition_parent=partition_parent,
                 index_by_name={},
                 constraint_by_name={},
                 foreign_key_by_name={},
