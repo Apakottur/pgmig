@@ -4,17 +4,35 @@ from pgmig import generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
-def test_table_column_type_change_raises(gen_setup: GenerateSetup) -> None:
+def test_table_column_type_widened(gen_setup: GenerateSetup) -> None:
     """
-    A shared column whose type differs between source and target is an unsupported
-    ALTER; the tool must fail loudly rather than emit an empty (silently converged)
-    migration.
+    A shared column whose type differs -> ALTER COLUMN ... TYPE. integer -> bigint is an
+    implicit (assignment) cast, so no USING clause is needed and the migration converges.
     """
     gen_setup.src.execute("CREATE TABLE person (id integer)")
     gen_setup.dst.execute("CREATE TABLE person (id bigint)")
 
-    with pytest.raises(NotImplementedError, match="type change"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "id" TYPE bigint;')
+
+
+def test_table_column_type_varchar_widened(gen_setup: GenerateSetup) -> None:
+    """
+    A varchar length increase renders with the canonical format_type spelling
+    (character varying(N)); the wider length is an implicit cast, so it converges.
+    """
+    gen_setup.src.execute("CREATE TABLE person (name varchar(50))")
+    gen_setup.dst.execute("CREATE TABLE person (name varchar(100))")
+
+    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ALTER COLUMN "name" TYPE character varying(100);')
+
+
+def test_table_column_type_unchanged_no_statement(gen_setup: GenerateSetup) -> None:
+    """
+    A column with the same type on both sides emits nothing.
+    """
+    gen_setup.execute_both("CREATE TABLE person (id integer)")
+
+    gen_setup.assert_migration_sql("")
 
 
 def test_table_column_identity_change_raises(gen_setup: GenerateSetup) -> None:
