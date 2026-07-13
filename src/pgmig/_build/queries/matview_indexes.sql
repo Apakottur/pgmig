@@ -1,11 +1,16 @@
--- Indexes on a materialized view. The basic materialized-view cut does not model matview
--- indexes, and a definition change drops and recreates the matview (which would silently
--- lose them), so their presence must raise rather than be discarded. Extension-owned
--- indexes/matviews are excluded (the extension recreates them).
+-- Indexes on materialized views. A matview index is dropped and recreated with its
+-- matview on a definition change, so it must be modelled to be re-emitted. Matviews carry
+-- no primary keys or constraints, so (unlike indexes.sql) there is no indisprimary or
+-- constraint-backed leg to exclude. Extension-owned indexes/matviews are excluded (the
+-- extension recreates them).
 SELECT
     n.nspname AS schema_name,
     c.relname AS view_name,
-    ic.relname AS index_name
+    ic.relname AS index_name,
+    pg_get_indexdef(i.indexrelid) AS index_def,
+    replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ')
+	AS index_canonical,
+    obj_description(i.indexrelid, 'pg_class') AS index_comment
 FROM
     pg_index i
     JOIN pg_class ic ON ic.oid = i.indexrelid

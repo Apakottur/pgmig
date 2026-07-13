@@ -71,15 +71,3 @@ def test_materialized_view_on_materialized_view_raises(gen_setup: GenerateSetup)
 
     with pytest.raises(PgmigError, match="materialized view"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
-
-
-def test_index_on_materialized_view_raises(gen_setup: GenerateSetup) -> None:
-    """
-    A materialized view carrying an index is not supported yet: the basic cut does not
-    model matview indexes, so a drop-and-recreate would silently lose them.
-    """
-    gen_setup.dst.execute("CREATE MATERIALIZED VIEW report AS SELECT 1 AS x")
-    gen_setup.dst.execute("CREATE INDEX report_x_idx ON report (x)")
-
-    with pytest.raises(PgmigError, match=r"index .* on materialized view .* is not supported"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)

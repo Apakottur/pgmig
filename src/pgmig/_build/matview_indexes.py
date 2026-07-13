@@ -4,25 +4,28 @@ import psycopg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
-from pgmig._sql import qualified
+from pgmig._models import DbInfo, Index
 
 
 class _MatviewIndexRow(BaseModel):
     schema_name: str
     view_name: str
     index_name: str
+    index_def: str
+    index_canonical: str
+    index_comment: str | None
 
 
-def check(conn: psycopg.Connection[Any]) -> list[str]:
+def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     """
-    Guard: report an index on a materialized view. The basic matview cut does not model
-    such indexes, and a definition change drops and recreates the matview, which would
-    silently lose them, so they are reported rather than discarded.
+    Indexes on materialized views (standalone; matviews carry no constraint-backed indexes).
+    Must run after materialized_views.load so the owning matview exists in the model.
     """
-    findings: list[str] = []
     for row in _run_query(conn, "matview_indexes.sql", _MatviewIndexRow):
-        matview = qualified(row.schema_name, row.view_name)
-        findings.append(
-            f"index {row.index_name} on materialized view {matview} is not supported yet"
+        matview = db_info.schema_by_name[row.schema_name].materialized_view_by_name[row.view_name]
+        matview.index_by_name[row.index_name] = Index(
+            name=row.index_name,
+            definition=row.index_def,
+            canonical=row.index_canonical,
+            comment=row.index_comment,
         )
-    return findings

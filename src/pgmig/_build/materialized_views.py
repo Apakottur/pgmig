@@ -23,5 +23,5 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = view_row.view_definition.strip().rstrip(";").strip()
         db_info.schema_by_name[view_row.schema_name].materialized_view_by_name[view_row.view_name] = MaterializedView(
-            name=view_row.view_name, definition=definition, comment=view_row.view_comment
+            name=view_row.view_name, definition=definition, comment=view_row.view_comment, index_by_name={}
         )

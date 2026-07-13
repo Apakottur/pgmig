@@ -196,6 +196,7 @@ class MaterializedView:
     name: str
     definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
     comment: str | None
+    index_by_name: dict[str, Index]
 
 
 @dataclass(frozen=True)

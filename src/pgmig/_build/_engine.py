@@ -30,7 +30,6 @@ _GUARDS: tuple[Guard, ...] = (
     unsupported.check,
     invalid_indexes.check,
     view_dependencies.check,
-    matview_indexes.check,
 )
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
@@ -48,6 +47,7 @@ _LOADERS: tuple[Loader, ...] = (
     views.load,
     view_dependencies.load,
     materialized_views.load,
+    matview_indexes.load,
     domains.load,
     composite_types.load,
     extensions.load,
