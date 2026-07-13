@@ -14,6 +14,16 @@ class GenerateSetup:
         self.src = src_conn
         self.dst = dst_conn
 
+    @property
+    def pg_major(self) -> int:
+        """
+        The Postgres major version of the server under test (e.g. 16). Tests that assert the
+        exact CREATE VIEW body need this: pg_get_viewdef qualified a view's columns with the
+        table name before PG16 (SELECT base.x) and stopped doing so from PG16 (SELECT x).
+        """
+        (row,) = self.src.execute("SHOW server_version_num")
+        return int(row[0]) // 10000
+
     def execute_both(self, query: LiteralString | sql.Composed) -> None:
         """
         Run the same query on both the source and target databases.
