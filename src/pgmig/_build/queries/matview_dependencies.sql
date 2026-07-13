@@ -21,7 +21,8 @@ FROM
 WHERE
     dependent.relkind IN ('v', 'm')
     AND referenced.relkind IN ('v', 'm')
-    AND (dependent.relkind = 'm' OR referenced.relkind = 'm')
+    AND (dependent.relkind = 'm'
+        OR referenced.relkind = 'm')
     AND dependent.oid <> referenced.oid
     AND dependent_ns.nspname NOT LIKE 'pg_%'
     AND dependent_ns.nspname <> 'information_schema'
