@@ -2,26 +2,25 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._errors import PgmigError
-from pgmig._models import DbInfo, View
+from pgmig._models import DbInfo, View, ViewKey
 from pgmig._sql import comment_on, qualified
 
-_ViewKey = tuple[str, str]  # (schema, view)
-_Edges = dict[_ViewKey, set[_ViewKey]]  # key -> the views it reads from
+_Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
 
 
-def _collect_views(db_info: DbInfo) -> dict[_ViewKey, View]:
+def _collect_views(db_info: DbInfo) -> dict[ViewKey, View]:
     """
     Flatten every schema's views into one (schema, name) -> View map. View-on-view
     ordering is global because a dependency can cross schemas.
     """
-    views: dict[_ViewKey, View] = {}
+    views: dict[ViewKey, View] = {}
     for schema_name, schema in db_info.schema_by_name.items():
         for name, view in schema.view_by_name.items():
-            views[(schema_name, name)] = view
+            views[ViewKey((schema_name, name))] = view
     return views
 
 
-def _topological_order(nodes: set[_ViewKey], edges: _Edges) -> list[_ViewKey]:
+def _topological_order(nodes: set[ViewKey], edges: _Edges) -> list[ViewKey]:
     """
     Order `nodes` dependencies-first: a view appears after every view it reads that is
     also in `nodes` (edges to views outside the set are ignored). Ties break by sorted
@@ -29,13 +28,13 @@ def _topological_order(nodes: set[_ViewKey], edges: _Edges) -> list[_ViewKey]:
     views -- raises rather than silently dropping nodes.
     """
     deps = {node: {dep for dep in edges.get(node, set()) if dep in nodes} for node in nodes}
-    dependents: dict[_ViewKey, set[_ViewKey]] = {node: set() for node in nodes}
+    dependents: dict[ViewKey, set[ViewKey]] = {node: set() for node in nodes}
     for node, node_deps in deps.items():
         for dep in node_deps:
             dependents[dep].add(node)
 
     ready = sorted(node for node, node_deps in deps.items() if not node_deps)
-    order: list[_ViewKey] = []
+    order: list[ViewKey] = []
     while ready:
         node = ready.pop(0)
         order.append(node)
@@ -64,7 +63,7 @@ def _comment_statements(schema_name: str, src: dict[str, View], dst: dict[str, V
     )
 
 
-def _dependents_closure(seeds: set[_ViewKey], edges: _Edges) -> set[_ViewKey]:
+def _dependents_closure(seeds: set[ViewKey], edges: _Edges) -> set[ViewKey]:
     """
     Every view that transitively reads any view in `seeds`, plus the seeds themselves.
     Used for the recreate cascade: dropping and recreating a view forces every view that

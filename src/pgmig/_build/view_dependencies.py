@@ -4,7 +4,7 @@ import psycopg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
-from pgmig._models import DbInfo
+from pgmig._models import DbInfo, ViewKey
 
 
 class _ViewDependencyRow(BaseModel):
@@ -21,6 +21,6 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     first) and DROP (dependents first) within the view phases.
     """
     for row in _run_query(conn, "view_dependencies.sql", _ViewDependencyRow):
-        dependent = (row.dependent_schema, row.dependent_view)
-        referenced = (row.referenced_schema, row.referenced_view)
+        dependent = ViewKey((row.dependent_schema, row.dependent_view))
+        referenced = ViewKey((row.referenced_schema, row.referenced_view))
         db_info.view_dependency_edges.setdefault(dependent, set()).add(referenced)
