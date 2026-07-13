@@ -140,3 +140,5 @@ matviews
 relkinds
 tablespace
 unscannable
+userinfo
+secretpw
