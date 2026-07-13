@@ -11,6 +11,7 @@ class _TableRow(BaseModel):
     schema_name: str
     table_name: str
     table_comment: str | None
+    table_owner: str
     # Column fields are all NULL together for the single phantom row a zero-column table
     # yields through the LEFT JOIN (see tables.sql); a real column row has them all set.
     column_name: str | None
@@ -34,6 +35,7 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
                 name=table_row.table_name,
                 columns=[],
                 comment=table_row.table_comment,
+                owner=table_row.table_owner,
                 index_by_name={},
                 constraint_by_name={},
                 foreign_key_by_name={},

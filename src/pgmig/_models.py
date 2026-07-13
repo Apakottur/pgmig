@@ -94,6 +94,7 @@ class Table:
     name: str
     columns: list[Column]
     comment: str | None
+    owner: str  # the role that owns the table (pg_class.relowner); never null
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]

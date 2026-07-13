@@ -63,6 +63,8 @@ adnum
 relkind
 relname
 relnamespace
+relowner
+userbyid
 deptype
 objid
 classid
