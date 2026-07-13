@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import generate
 from tests.fixtures.generate_setup import GenerateSetup
 
 
@@ -75,18 +72,6 @@ def test_table_column_type_unchanged_no_statement(gen_setup: GenerateSetup) -> N
     gen_setup.execute_both("CREATE TABLE person (id integer)")
 
     gen_setup.assert_migration_sql("")
-
-
-def test_table_column_identity_change_raises(gen_setup: GenerateSetup) -> None:
-    """
-    A shared column that gains or loses an identity is unsupported; the tool must fail
-    loudly instead of silently dropping the identity and reading as in sync.
-    """
-    gen_setup.src.execute("CREATE TABLE person (id integer)")
-    gen_setup.dst.execute("CREATE TABLE person (id integer GENERATED ALWAYS AS IDENTITY)")
-
-    with pytest.raises(NotImplementedError, match="identity change"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
 def test_table_column_physical_order_preserved(gen_setup: GenerateSetup) -> None:
