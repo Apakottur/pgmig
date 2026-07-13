@@ -1,8 +1,15 @@
 from dataclasses import dataclass
-from typing import NewType
 
-# View identifier - schema name and view name.
-ViewKey = NewType("ViewKey", tuple[str, str])
+
+@dataclass(frozen=True, order=True)
+class ViewKey:
+    """
+    A view identifier - schema name and view name. Ordered so sets of keys sort
+    deterministically (by schema, then name) when building migration output.
+    """
+
+    schema: str
+    name: str
 
 
 @dataclass(frozen=True)

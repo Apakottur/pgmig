@@ -16,7 +16,7 @@ def _collect_views(db_info: DbInfo) -> dict[ViewKey, View]:
     views: dict[ViewKey, View] = {}
     for schema_name, schema in db_info.schema_by_name.items():
         for name, view in schema.view_by_name.items():
-            views[ViewKey((schema_name, name))] = view
+            views[ViewKey(schema_name, name)] = view
     return views
 
 
@@ -46,7 +46,9 @@ def _topological_order(nodes: set[ViewKey], edges: _Edges) -> list[ViewKey]:
 
     if len(order) != len(nodes):
         cyclic = sorted(node for node in nodes if node not in set(order))
-        raise PgmigError(f"view dependency cycle detected among: {', '.join(qualified(*node) for node in cyclic)}")
+        raise PgmigError(
+            f"view dependency cycle detected among: {', '.join(qualified(node.schema, node.name) for node in cyclic)}"
+        )
     return order
 
 
@@ -113,18 +115,20 @@ def generate(ctx: Context) -> Iterator[Statement]:
     # Drops: dependent-first, so reverse the source graph's dependency-first order.
     drops = drop_only | recreate
     for key in reversed(_topological_order(drops, src_edges)):
-        yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(*key)};")
+        yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(key.schema, key.name)};")
 
     # Creates: dependency-first over the target graph.
     creates = create_only | recreate
     for key in _topological_order(creates, dst_edges):
-        yield Statement(Phase.VIEW_CREATE, f"CREATE VIEW {qualified(*key)} AS {dst_views[key].definition};")
+        yield Statement(
+            Phase.VIEW_CREATE, f"CREATE VIEW {qualified(key.schema, key.name)} AS {dst_views[key].definition};"
+        )
 
     # Comments, after the views they annotate exist. A recreated view re-emits its comment
     # (the drop reset it), so pass the recreated names per schema.
     for schema_name, src_schema, dst_schema in _iter_schema_pairs(ctx.source, ctx.target):
         src_schema_views = src_schema.view_by_name if src_schema else {}
         dst_schema_views = dst_schema.view_by_name if dst_schema else {}
-        recreated_names = {name for (schema, name) in recreate if schema == schema_name}
+        recreated_names = {key.name for key in recreate if key.schema == schema_name}
         for sql in _comment_statements(schema_name, src_schema_views, dst_schema_views, recreated_names):
             yield Statement(Phase.VIEW_CREATE, sql)

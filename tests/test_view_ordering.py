@@ -8,10 +8,11 @@ import pytest
 
 from pgmig import PgmigError
 from pgmig._diff.views import _dependents_closure, _topological_order
+from pgmig._models import ViewKey
 
-A = ("public", "a")
-B = ("public", "b")
-C = ("public", "c")
+A = ViewKey("public", "a")
+B = ViewKey("public", "b")
+C = ViewKey("public", "c")
 
 
 def test_topological_order_dependencies_first() -> None:
@@ -29,7 +30,7 @@ def test_topological_order_ignores_edges_outside_node_set() -> None:
 def test_topological_order_diamond() -> None:
     # b and c both read a; d reads both b and c. d is emitted only after both of its
     # dependencies are, so discarding one dependency leaves d not-yet-ready.
-    d = ("public", "d")
+    d = ViewKey("public", "d")
     order = _topological_order({A, B, C, d}, {B: {A}, C: {A}, d: {B, C}})
     assert order[0] == A
     assert order[-1] == d
