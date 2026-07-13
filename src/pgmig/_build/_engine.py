@@ -1,6 +1,7 @@
 import psycopg
 
 from pgmig._build import (
+    composite_types,
     constraints,
     domains,
     enums,
@@ -8,6 +9,8 @@ from pgmig._build import (
     functions,
     indexes,
     invalid_indexes,
+    materialized_views,
+    matview_indexes,
     schemas,
     sequences,
     tables,
@@ -26,6 +29,8 @@ from pgmig._models import DbInfo
 _GUARDS: tuple[Guard, ...] = (
     unsupported.check,
     invalid_indexes.check,
+    view_dependencies.check,
+    matview_indexes.check,
 )
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
@@ -42,7 +47,9 @@ _LOADERS: tuple[Loader, ...] = (
     enums.load,
     views.load,
     view_dependencies.load,
+    materialized_views.load,
     domains.load,
+    composite_types.load,
     extensions.load,
 )
 

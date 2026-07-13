@@ -1,9 +1,9 @@
--- Dependencies among (materialized) views: a user view or matview whose definition reads
--- from another view or matview. A view's rewrite rule (pg_rewrite) depends (pg_depend) on
--- the relations it reads; a dependency on another view/matview means ordering the
--- create/drop needs a topological sort within the shared view phases, which is not
--- implemented yet, so such a pair must be reported rather than mis-ordered. A dependency
--- on a plain table is fine (tables are created before, and dropped after, the view phases).
+-- Dependencies involving a materialized view: a view or matview whose definition reads
+-- from another view or matview, where at least one side is a materialized view. Plain
+-- view-on-view dependencies are ordered by a topological sort (view_dependencies.sql);
+-- matviews are not folded into that sort yet, so a matview-involving pair is reported
+-- rather than emitted in a possibly-wrong order. A dependency on a plain table is fine
+-- (tables are created before, and dropped after, the view phases).
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,
     dependent.relname AS dependent_view,
@@ -21,6 +21,7 @@ FROM
 WHERE
     dependent.relkind IN ('v', 'm')
     AND referenced.relkind IN ('v', 'm')
+    AND (dependent.relkind = 'm' OR referenced.relkind = 'm')
     AND dependent.oid <> referenced.oid
     AND dependent_ns.nspname NOT LIKE 'pg_%'
     AND dependent_ns.nspname <> 'information_schema'

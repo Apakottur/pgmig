@@ -104,6 +104,7 @@ class Table:
     name: str
     columns: list[Column]
     comment: str | None
+    owner: str  # the role that owns the table (pg_class.relowner); never null
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
@@ -187,6 +188,38 @@ class View:
 
 
 @dataclass(frozen=True)
+class MaterializedView:
+    """
+    A Postgres materialized view, owned by a schema.
+    """
+
+    name: str
+    definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
+    comment: str | None
+
+
+@dataclass(frozen=True)
+class CompositeField:
+    """
+    One attribute of a composite type.
+    """
+
+    name: str
+    type: str  # format_type(atttypid, atttypmod)
+
+
+@dataclass(frozen=True)
+class CompositeType:
+    """
+    A Postgres standalone composite type (CREATE TYPE ... AS (...)), owned by a schema.
+    """
+
+    name: str
+    fields: list[CompositeField]  # attributes in attribute (attnum) order
+    comment: str | None
+
+
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -213,7 +246,9 @@ class Schema:
     function_by_signature: dict[str, Function]
     enum_by_name: dict[str, EnumType]
     view_by_name: dict[str, View]
+    materialized_view_by_name: dict[str, MaterializedView]
     domain_by_name: dict[str, Domain]
+    composite_type_by_name: dict[str, CompositeType]
 
 
 @dataclass(frozen=True)

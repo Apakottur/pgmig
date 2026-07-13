@@ -1,10 +1,12 @@
 from pgmig._diff import (
+    composite_types,
     constraints,
     domains,
     enums,
     extensions,
     functions,
     indexes,
+    materialized_views,
     schemas,
     sequences,
     tables,
@@ -20,6 +22,7 @@ _GENERATORS: tuple[Generator, ...] = (
     extensions.generate,
     enums.generate,
     domains.generate,
+    composite_types.generate,
     sequences.generate,
     tables.generate,
     indexes.generate,
@@ -28,6 +31,7 @@ _GENERATORS: tuple[Generator, ...] = (
     functions.generate,
     triggers.generate,
     views.generate,
+    materialized_views.generate,
 )
 
 
