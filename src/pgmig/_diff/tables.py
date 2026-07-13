@@ -32,11 +32,11 @@ def _column_def(column: Column) -> str:
     if column.serial_type is not None:
         return f"{ident(column.name)} {column.serial_type}"
 
-    # An identity column has no GENERATED ... AS IDENTITY clause rendered here, so
-    # emitting it would create a plain column and silently drop the identity. Refuse
-    # loudly rather than produce a migration that never converges.
-    if column.identity != "":
-        raise NotImplementedError(f"Identity column is not supported: {ident(column.name)}")
+    # An identity column expands to its GENERATED ... AS IDENTITY clause; the identity
+    # implies NOT NULL and owns its backing sequence, both of which must not be emitted
+    # alongside it (mirrors the serial pseudo-type above).
+    if column.identity_clause is not None:
+        return f"{ident(column.name)} {column.type} {column.identity_clause}"
 
     parts = [f"{ident(column.name)} {column.type}"]
     if column.default is not None:
