@@ -286,6 +286,5 @@ class DbInfo:
     # Mapping from a view to the set of views it depends on.
     view_dependencies: dict[ViewKey, set[ViewKey]]
 
-    # Mapping from a view to the set of table columns it reads. Drives dropping and
-    # recreating a view around a change (type change, drop) to a column it depends on.
+    # Mapping from a view to the set of table columns it reads.
     view_column_dependencies: dict[ViewKey, set[ColumnKey]]
