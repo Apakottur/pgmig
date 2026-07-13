@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 from pgmig._build._engine import build_db_info
-from pgmig._diff._core import Context
+from pgmig._diff._context import context
 from pgmig._diff._engine import generate_migration_sql
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo
@@ -62,12 +62,13 @@ def generate(
 
     # Generate migration SQL, with the omit-schema rendering policy active for the
     # duration of this call (see _sql.py; diffing runs on this thread only).
-    with omit_schema_context(omit_schema):
-        return generate_migration_sql(
-            ctx=Context(
-                source=source_db_info,
-                target=target_db_info,
-                index_concurrently=index_concurrently,
-                ignore_extension_version=ignore_extension_version,
-            )
-        )
+    with (
+        omit_schema_context(omit_schema),
+        context.context_scope(
+            source=source_db_info,
+            target=target_db_info,
+            index_concurrently=index_concurrently,
+            ignore_extension_version=ignore_extension_version,
+        ),
+    ):
+        return generate_migration_sql()

@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._models import Sequence
 from pgmig._sql import comment_on, schema_qualified
 
@@ -33,12 +33,12 @@ def _sequence_comment_statements(schema_name: str, src: dict[str, Sequence], dst
     )
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone sequences. Creates and alters are phased
     before tables (a column default may reference a sequence); drops run after.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(ctx.source, ctx.target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_sequences = src_schema.sequence_by_name if src_schema else {}
         dst_sequences = dst_schema.sequence_by_name if dst_schema else {}
 

@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._models import CompositeType
 from pgmig._sql import comment_on, ident, schema_qualified
 
@@ -16,13 +16,13 @@ def _composite_comment_statements(
     )
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of composite types (create, drop). Creates are phased before
     tables (a column may be of the type); drops run after. A field-level change on a type
     present in both sides is not supported yet (ALTER TYPE deferred) and raises.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(ctx.source, ctx.target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_types = src_schema.composite_type_by_name if src_schema else {}
         dst_types = dst_schema.composite_type_by_name if dst_schema else {}
 

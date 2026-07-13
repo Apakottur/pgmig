@@ -83,7 +83,7 @@ jobs:
       - name: Run unit tests
         env:
           PGMIG_TEST_PG_VERSION: ${{ matrix.pg-version }}
-        run: pytest --showlocals -c tests/pytest.ini tests
+        run: pytest --showlocals -c tests/pytest.ini
 
   check:
     name: Check All

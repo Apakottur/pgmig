@@ -1,17 +1,18 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement
 from pgmig._sql import comment_on, ident, literal
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of extensions.
 
     An extension's `SCHEMA x` is a DDL clause naming its install target, not a qualifier
     prefix on an object path, so the omit-schema policy does not apply.
     """
-    source, target = ctx.source, ctx.target
+    source, target = context.source, context.target
     for name in sorted(source.extension_by_name.keys() | target.extension_by_name.keys()):
         # Present in target only: create it.
         if name not in source.extension_by_name:
@@ -35,7 +36,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
         else:
             src_ext = source.extension_by_name[name]
             dst_ext = target.extension_by_name[name]
-            if src_ext.version != dst_ext.version and name not in ctx.ignore_extension_version:
+            if src_ext.version != dst_ext.version and name not in context.ignore_extension_version:
                 yield Statement(
                     Phase.EXTENSION_CREATE,
                     f"ALTER EXTENSION {ident(dst_ext.name)} UPDATE TO {literal(dst_ext.version)};",

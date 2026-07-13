@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
 from pgmig._models import Index
 from pgmig._sql import comment_on, ident, schema_qualified, strip_on_clause_qualifier
 
@@ -20,7 +21,7 @@ def _diff_indexes(
     qualified regardless of search_path, so the omit-schema policy is applied to that
     one spot textually.
     """
-    return _diff_renamable(
+    return diff_renamable(
         src,
         dst,
         key=lambda index: index.canonical,
@@ -47,11 +48,11 @@ def _index_comment_statements(
     )
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(ctx.source, ctx.target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its indexes are dropped with it.
         if dst_table is None:
             continue
@@ -65,7 +66,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
             dst=dst_indexes,
         )
 
-        if ctx.index_concurrently:
+        if context.index_concurrently:
             drops = [drop.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for drop in drops]
             creates = [create.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for create in creates]
 
