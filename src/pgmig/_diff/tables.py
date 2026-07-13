@@ -47,8 +47,9 @@ def _alter_columns(
 ) -> tuple[list[str], list[str]]:
     """
     Sync the columns of a table present on both sides: add/drop by name, and for a
-    shared column sync DEFAULT then NOT NULL. A type or identity change is unsupported
-    and raises rather than emitting a silently-empty (falsely converged) migration.
+    shared column sync TYPE, then DEFAULT, then NOT NULL. An identity or serial change is
+    unsupported and raises rather than emitting a silently-empty (falsely converged)
+    migration.
 
     Returns (statements, deferred_drop_not_null). The first run in the TABLE phase; the
     second must run after the CONSTRAINT phase (see below).
@@ -74,14 +75,6 @@ def _alter_columns(
         else:
             src_column = src_columns[column_name]
             dst_column = dst_columns[column_name]
-            # Type and identity changes are not yet modelled. Emitting nothing would be
-            # indistinguishable from "in sync", so fail loudly instead of lying.
-            if src_column.type != dst_column.type:
-                raise NotImplementedError(
-                    f"Column type change is not supported: "
-                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
-                    f"{src_column.type} -> {dst_column.type}"
-                )
             if src_column.identity != dst_column.identity:
                 raise NotImplementedError(
                     f"Column identity change is not supported: "
@@ -99,6 +92,12 @@ def _alter_columns(
                     f"{src_column.serial_type} -> {dst_column.serial_type}"
                 )
             prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
+            # Type change first: a widened type must be in place before a dependent
+            # default or NOT NULL is (re)applied. No USING clause is emitted, so this
+            # relies on Postgres's implicit assignment cast; a cast that needs USING
+            # (e.g. text -> integer) fails at apply time and is a separate feature.
+            if src_column.type != dst_column.type:
+                statements.append(f"{prefix} TYPE {dst_column.type};")
             if src_column.default != dst_column.default:
                 if dst_column.default is None:
                     statements.append(f"{prefix} DROP DEFAULT;")
