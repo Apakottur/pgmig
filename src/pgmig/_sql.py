@@ -1,33 +1,13 @@
 """
 Primitives for rendering safe SQL: identifier quoting and string literal escaping.
 
-Also holds the omit-schema rendering policy: a ContextVar, set for the duration of one
-`generate` call, naming a schema whose qualifier is dropped from rendered object paths.
-A ContextVar (rather than threading a parameter through every diff helper) because the
-policy is one global fact per generate call, consumed at dozens of leaf render sites;
-`omit_schema_context` guarantees it cannot leak across calls or tests.
+The schema-aware helpers (`schema_qualified` and the two strip helpers) honor the
+omit-schema policy of the current diff generation, read from the diff context
+(`context.omit_schema`): outside a diff, or when no schema is omitted, every path
+stays fully qualified.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-from contextvars import ContextVar
-
-# The schema whose qualifier is omitted from rendered paths. None (the default) keeps
-# every path fully qualified. Set only via `omit_schema_context`.
-_OMIT_SCHEMA: ContextVar[str | None] = ContextVar("pgmig_omit_schema", default=None)
-
-
-@contextmanager
-def omit_schema_context(name: str | None) -> Iterator[None]:
-    """
-    Set the omitted schema for the duration of the block, restoring the previous value
-    on exit (also on exception), so the policy can never leak across generate calls.
-    """
-    token = _OMIT_SCHEMA.set(name)
-    try:
-        yield
-    finally:
-        _OMIT_SCHEMA.reset(token)
+from pgmig._diff._context import context
 
 
 def ident(name: str) -> str:
@@ -51,7 +31,7 @@ def qualified(*parts: str) -> str:
 def schema_qualified(schema: str, *rest: str) -> str:
     """
     Quote a schema-qualified object path, dropping the schema segment when it equals
-    the active omitted schema (see `omit_schema_context`).
+    the active omitted schema (see `context.omit_schema`).
 
     Used for object paths pgmig builds itself (e.g. schema.table, schema.table.column).
     Server-generated definition strings do not pass through here; their qualifier is
@@ -59,7 +39,7 @@ def schema_qualified(schema: str, *rest: str) -> str:
     `_build/_engine.py`), plus the two textual helpers below for the spots deparse
     always qualifies.
     """
-    if schema == _OMIT_SCHEMA.get():
+    if schema == context.omit_schema:
         return qualified(*rest)
     return qualified(schema, *rest)
 
@@ -77,7 +57,7 @@ def strip_on_clause_qualifier(definition: str, schema: str, table: str) -> str:
     form; when no form matches the definition is returned unchanged (still valid SQL,
     just qualified) rather than risking a wrong edit.
     """
-    omit_schema = _OMIT_SCHEMA.get()
+    omit_schema = context.omit_schema
     if omit_schema is None or schema != omit_schema:
         return definition
     for schema_form in (schema, ident(schema)):
@@ -99,7 +79,7 @@ def strip_routine_name_qualifier(definition: str, schema: str, name: str) -> str
     trying each identifier in its unquoted and quoted deparse form; when no form
     matches the definition is returned unchanged rather than risking a wrong edit.
     """
-    omit_schema = _OMIT_SCHEMA.get()
+    omit_schema = context.omit_schema
     if omit_schema is None or schema != omit_schema:
         return definition
     for keyword in ("FUNCTION", "PROCEDURE"):

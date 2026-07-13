@@ -6,7 +6,6 @@ from pgmig._diff._context import context
 from pgmig._diff._engine import generate_migration_sql
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo
-from pgmig._sql import omit_schema_context
 
 
 def _validate_omit_schema(omit_schema: str, source: DbInfo, target: DbInfo) -> None:
@@ -60,15 +59,12 @@ def generate(
     if omit_schema is not None:
         _validate_omit_schema(omit_schema, source_db_info, target_db_info)
 
-    # Generate migration SQL, with the omit-schema rendering policy active for the
-    # duration of this call (see _sql.py; diffing runs on this thread only).
-    with (
-        omit_schema_context(omit_schema),
-        context.context_scope(
-            source=source_db_info,
-            target=target_db_info,
-            index_concurrently=index_concurrently,
-            ignore_extension_version=ignore_extension_version,
-        ),
+    # Generate migration SQL.
+    with context.context_scope(
+        source=source_db_info,
+        target=target_db_info,
+        index_concurrently=index_concurrently,
+        ignore_extension_version=ignore_extension_version,
+        omit_schema=omit_schema,
     ):
         return generate_migration_sql()

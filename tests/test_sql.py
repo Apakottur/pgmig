@@ -1,15 +1,31 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import pytest
 
+from pgmig._diff._context import context
+from pgmig._models import DbInfo
 from pgmig._sql import (
     comment_on,
     ident,
     literal,
-    omit_schema_context,
     qualified,
     schema_qualified,
     strip_on_clause_qualifier,
     strip_routine_name_qualifier,
 )
+
+
+@contextmanager
+def omit_schema_context(name: str | None) -> Iterator[None]:
+    """
+    Enter a diff context whose only relevant field is the omitted schema.
+    """
+    empty = DbInfo(schema_by_name={}, extension_by_name={}, view_dependencies={})
+    with context.context_scope(
+        source=empty, target=empty, index_concurrently=False, ignore_extension_version=(), omit_schema=name
+    ):
+        yield
 
 
 def test_ident() -> None:
