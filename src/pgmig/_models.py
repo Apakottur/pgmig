@@ -189,6 +189,27 @@ class MaterializedView:
 
 
 @dataclass(frozen=True)
+class CompositeField:
+    """
+    One attribute of a composite type.
+    """
+
+    name: str
+    type: str  # format_type(atttypid, atttypmod)
+
+
+@dataclass(frozen=True)
+class CompositeType:
+    """
+    A Postgres standalone composite type (CREATE TYPE ... AS (...)), owned by a schema.
+    """
+
+    name: str
+    fields: list[CompositeField]  # attributes in attribute (attnum) order
+    comment: str | None
+
+
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -217,6 +238,7 @@ class Schema:
     view_by_name: dict[str, View]
     materialized_view_by_name: dict[str, MaterializedView]
     domain_by_name: dict[str, Domain]
+    composite_type_by_name: dict[str, CompositeType]
 
 
 @dataclass(frozen=True)

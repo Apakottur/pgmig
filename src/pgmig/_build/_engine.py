@@ -1,6 +1,7 @@
 import psycopg
 
 from pgmig._build import (
+    composite_types,
     constraints,
     domains,
     enums,
@@ -47,6 +48,7 @@ _LOADERS: tuple[Loader, ...] = (
     views.load,
     materialized_views.load,
     domains.load,
+    composite_types.load,
     extensions.load,
 )
 

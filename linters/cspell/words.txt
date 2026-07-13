@@ -133,6 +133,7 @@ typbasetype
 typtypmod
 typnotnull
 typdefault
+typrelid
 contypid
 matview
 matviews

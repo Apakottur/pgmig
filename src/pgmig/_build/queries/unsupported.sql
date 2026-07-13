@@ -1,6 +1,6 @@
 -- Unsupported object kinds. None are modelled yet, so their presence must raise rather
 -- than let generate() return "" and falsely claim convergence.
---   pg_class relkind:  partitioned table 'p', foreign table 'f', composite type 'c'.
+--   pg_class relkind:  partitioned table 'p', foreign table 'f'.
 --   pg_type typtype:   range 'r'.
 -- Extension-owned objects are excluded (the extension recreates them). Drop a kind from
 -- a filter as its roadmap feature lands.
@@ -12,7 +12,7 @@ FROM
     pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
-    c.relkind IN ('p', 'f', 'c')
+    c.relkind IN ('p', 'f')
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
     AND NOT EXISTS (

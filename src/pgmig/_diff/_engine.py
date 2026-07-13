@@ -1,4 +1,5 @@
 from pgmig._diff import (
+    composite_types,
     constraints,
     domains,
     enums,
@@ -21,6 +22,7 @@ _GENERATORS: tuple[Generator, ...] = (
     extensions.generate,
     enums.generate,
     domains.generate,
+    composite_types.generate,
     sequences.generate,
     tables.generate,
     indexes.generate,
