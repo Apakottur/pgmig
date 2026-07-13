@@ -4,8 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, order=True)
 class ViewKey:
     """
-    A view identifier - schema name and view name. Ordered so sets of keys sort
-    deterministically (by schema, then name) when building migration output.
+    Full view identifier within a database.
     """
 
     schema: str

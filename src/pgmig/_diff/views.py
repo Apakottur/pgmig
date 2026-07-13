@@ -38,7 +38,7 @@ def _topological_order(nodes: set[ViewKey], edges: _Edges) -> list[ViewKey]:
     while ready:
         node = ready.pop(0)
         order.append(node)
-        for dependent in sorted(dependents[node]):
+        for dependent in dependents[node]:
             deps[dependent].discard(node)
             if not deps[dependent]:
                 ready.append(dependent)
