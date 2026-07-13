@@ -5,6 +5,21 @@ from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
 
 
+def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different
+    owner than the target.
+
+    Ownership of a newly created table (absent source) is not managed: it is left owned
+    by the role running the migration, so nothing is emitted here. Such a table only
+    reconciles to the target owner on a later run, once it exists on both sides and this
+    same-owner comparison applies.
+    """
+    if src_table is None or src_table.owner == dst_table.owner:
+        return []
+    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
+
+
 def _column_def(column: Column) -> str:
     """
     Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
@@ -166,6 +181,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
                 pk_columns=dst_table.get_primary_key_columns(),
                 src_pk_columns=src_table.get_primary_key_columns(),
             )
+        rendered += _table_owner_statements(schema_name, src_table, dst_table)
         rendered += _table_comment_statements(schema_name, src_table, dst_table)
         rendered += _column_comment_statements(schema_name, src_table, dst_table)
 
