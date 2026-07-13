@@ -5,6 +5,7 @@ from pgmig._diff import (
     extensions,
     functions,
     indexes,
+    materialized_views,
     schemas,
     sequences,
     tables,
@@ -28,6 +29,7 @@ _GENERATORS: tuple[Generator, ...] = (
     functions.generate,
     triggers.generate,
     views.generate,
+    materialized_views.generate,
 )
 
 
