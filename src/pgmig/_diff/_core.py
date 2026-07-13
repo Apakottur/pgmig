@@ -1,9 +1,10 @@
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol, TypeVar
 
-from pgmig._models import DbInfo, Schema, Table
+from pgmig._diff._context import context
+from pgmig._models import Schema, Table
 
 _Renamable = TypeVar("_Renamable")
 
@@ -94,61 +95,43 @@ class Statement:
     sql: str
 
 
-@dataclass(frozen=True)
-class Context:
-    """
-    Everything a generator needs: the two databases being diffed and the output configuration.
-    """
-
-    # Databases.
-    source: DbInfo
-    target: DbInfo
-
-    # Output configuration.
-
-    # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
-    # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
-    # run inside a transaction block.
-    index_concurrently: bool = False
-
-    # Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ... UPDATE TO
-    # is emitted for them. Empty (default) ignores none.
-    ignore_extension_version: Sequence[str] = ()
-
-
 class Generator(Protocol):
     """
-    The shared shape of every object-kind generator: take the diff Context and yield
+    The shared shape of every object-kind generator: read the diff `context` and yield
     phase-tagged statements. Annotating the registry with this enforces one uniform
     signature across all generators.
     """
 
-    def __call__(self, ctx: Context) -> Iterator[Statement]: ...
+    def __call__(self) -> Iterator[Statement]: ...
 
 
-def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:
+def ctx_iter_schema_pairs() -> Iterator[tuple[str, Schema | None, Schema | None]]:
     """
     Yield (schema_name, source_schema, target_schema) for every schema across both
     databases, sorted by name. Either schema is None when absent on that side.
     """
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        yield schema_name, source.schema_by_name.get(schema_name), target.schema_by_name.get(schema_name)
+    for schema_name in sorted(context.source.schema_by_name.keys() | context.target.schema_by_name.keys()):
+        yield (
+            schema_name,
+            context.source.schema_by_name.get(schema_name),
+            context.target.schema_by_name.get(schema_name),
+        )
 
 
-def _iter_table_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, str, Table | None, Table | None]]:
+def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | None]]:
     """
     Yield (schema_name, table_name, source_table, target_table) for every table across
     both databases, sorted by schema then table. Either table is None when absent on
     that side.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_tables = src_schema.table_by_name if src_schema else {}
         dst_tables = dst_schema.table_by_name if dst_schema else {}
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
 
 
-def _diff_renamable(
+def diff_renamable(
     src: dict[str, _Renamable],
     dst: dict[str, _Renamable],
     *,

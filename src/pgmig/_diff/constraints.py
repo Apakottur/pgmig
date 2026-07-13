@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
 from pgmig._models import Constraint
 from pgmig._sql import comment_on, ident, qualified
 
@@ -13,7 +13,7 @@ def _diff_constraints(
     The constraint definition (from pg_get_constraintdef) is already name-independent.
     """
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
-    return _diff_renamable(
+    return diff_renamable(
         src,
         dst,
         key=lambda constraint: constraint.definition,
@@ -38,11 +38,11 @@ def _constraint_comment_statements(
     )
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(ctx.source, ctx.target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its constraints are dropped with it.
         if dst_table is None:
             continue
@@ -61,13 +61,13 @@ def generate(ctx: Context) -> Iterator[Statement]:
             yield Statement(Phase.CONSTRAINT, sql)
 
 
-def generate_foreign_keys(ctx: Context) -> Iterator[Statement]:
+def generate_foreign_keys() -> Iterator[Statement]:
     """
     Generate the migration SQL of foreign key constraints. Drops are phased before
     referenced objects are dropped; adds (with renames) after referenced tables and
     their keys exist.
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(ctx.source, ctx.target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         src_fks = src_table.foreign_key_by_name if src_table else {}
         # Table dropped: its foreign keys must still be dropped explicitly, in the
         # FOREIGN_KEY_DROP phase (before any DROP TABLE), so a referenced table can be

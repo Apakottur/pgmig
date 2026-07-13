@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo, View, ViewKey
 from pgmig._sql import comment_on, qualified
@@ -87,7 +88,7 @@ def _dependents_closure(seeds: set[ViewKey], edges: _Edges) -> set[ViewKey]:
     return result
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of views, ordered by their view-on-view dependencies.
 
@@ -97,10 +98,11 @@ def generate(ctx: Context) -> Iterator[Statement]:
     recreated view is dragged into the recreate set, since Postgres refuses to drop a view
     another view still reads and the dependents must be rebuilt afterwards.
     """
-    src_views = _collect_views(ctx.source)
-    dst_views = _collect_views(ctx.target)
-    src_edges = ctx.source.view_dependencies
-    dst_edges = ctx.target.view_dependencies
+    source, target = context.source, context.target
+    src_views = _collect_views(source)
+    dst_views = _collect_views(target)
+    src_edges = source.view_dependencies
+    dst_edges = target.view_dependencies
 
     shared = src_views.keys() & dst_views.keys()
     changed = {key for key in shared if src_views[key].definition != dst_views[key].definition}
@@ -126,7 +128,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
 
     # Comments, after the views they annotate exist. A recreated view re-emits its comment
     # (the drop reset it), so pass the recreated names per schema.
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(ctx.source, ctx.target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_schema_views = src_schema.view_by_name if src_schema else {}
         dst_schema_views = dst_schema.view_by_name if dst_schema else {}
         recreated_names = {key.name for key in recreate if key.schema == schema_name}
