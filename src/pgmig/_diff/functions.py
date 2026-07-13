@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import Function
-from pgmig._sql import comment_on, qualified
+from pgmig._sql import comment_on, schema_qualified, strip_routine_name_qualifier
 
 
 def _drop_function_sql(schema_name: str, function: Function) -> str:
@@ -16,11 +16,13 @@ def _drop_function_sql(schema_name: str, function: Function) -> str:
     """
     if function.has_dependents:
         raise NotImplementedError(
-            f"Dropping {qualified(schema_name, function.name)}({function.identity_arguments}) is not supported: "
+            f"Dropping {schema_qualified(schema_name, function.name)}({function.identity_arguments}) is not supported: "
             f"another object (column default, check constraint, expression index, or routine) depends on it, "
             f"and dependency-aware drop ordering is not implemented yet."
         )
-    return f"DROP {function.drop_keyword} {qualified(schema_name, function.name)}({function.identity_arguments});"
+    return (
+        f"DROP {function.drop_keyword} {schema_qualified(schema_name, function.name)}({function.identity_arguments});"
+    )
 
 
 def _function_comment_statements(
@@ -35,7 +37,7 @@ def _function_comment_statements(
         dst,
         render=lambda _signature, func: comment_on(
             func.drop_keyword,
-            f"{qualified(schema_name, func.name)}({func.identity_arguments})",
+            f"{schema_qualified(schema_name, func.name)}({func.identity_arguments})",
             func.comment,
         ),
         recreated=recreated,
@@ -61,8 +63,13 @@ def generate(ctx: Context) -> Iterator[Statement]:
 
             # Present in target only: create it.
             if src_func is None:
-                # pg_get_functiondef has no trailing semicolon; add one to terminate the statement.
-                yield Statement(Phase.FUNCTION_CREATE, f"{dst_functions[signature].definition};")
+                # pg_get_functiondef has no trailing semicolon; add one to terminate the
+                # statement. The routine's own name in the header stays qualified
+                # regardless of search_path, so the omit-schema policy is applied there
+                # textually.
+                dst_func = dst_functions[signature]
+                definition = strip_routine_name_qualifier(dst_func.definition, schema_name, dst_func.name)
+                yield Statement(Phase.FUNCTION_CREATE, f"{definition};")
             # Present in source only: drop it.
             elif dst_func is None:
                 yield Statement(Phase.FUNCTION_DROP, _drop_function_sql(schema_name, src_func))
@@ -72,7 +79,8 @@ def generate(ctx: Context) -> Iterator[Statement]:
                 if src_func.return_type != dst_func.return_type:
                     yield Statement(Phase.FUNCTION_DROP, _drop_function_sql(schema_name, src_func))
                     recreated.add(signature)
-                yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
+                definition = strip_routine_name_qualifier(dst_func.definition, schema_name, dst_func.name)
+                yield Statement(Phase.FUNCTION_CREATE, f"{definition};")
 
         # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
         # the routines they annotate have been created above.

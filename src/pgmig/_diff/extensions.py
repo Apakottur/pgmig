@@ -7,6 +7,9 @@ from pgmig._sql import comment_on, ident, literal
 def generate(ctx: Context) -> Iterator[Statement]:
     """
     Generate the migration SQL of extensions.
+
+    An extension's `SCHEMA x` is a DDL clause naming its install target, not a qualifier
+    prefix on an object path, so the omit-schema policy does not apply.
     """
     source, target = ctx.source, ctx.target
     for name in sorted(source.extension_by_name.keys() | target.extension_by_name.keys()):

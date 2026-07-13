@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import MaterializedView
-from pgmig._sql import comment_on, qualified
+from pgmig._sql import comment_on, schema_qualified
 
 
 def _materialized_view_comment_statements(
@@ -15,7 +15,7 @@ def _materialized_view_comment_statements(
     return _diff_comments(
         src,
         dst,
-        render=lambda name, view: comment_on("MATERIALIZED VIEW", qualified(schema_name, name), view.comment),
+        render=lambda name, view: comment_on("MATERIALIZED VIEW", schema_qualified(schema_name, name), view.comment),
         recreated=recreated,
     )
 
@@ -37,7 +37,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
         for name in sorted(src_views.keys() | dst_views.keys()):
             src_view = src_views.get(name)
             dst_view = dst_views.get(name)
-            qualified_name = qualified(schema_name, name)
+            qualified_name = schema_qualified(schema_name, name)
 
             # Present in target only: create it.
             if src_view is None:

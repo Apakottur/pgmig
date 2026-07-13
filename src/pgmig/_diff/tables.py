@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_table_pairs
 from pgmig._models import Column, Table
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import comment_on, ident, schema_qualified
 
 
 def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -17,7 +17,7 @@ def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table
     """
     if src_table is None or src_table.owner == dst_table.owner:
         return []
-    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
+    return [f"ALTER TABLE {schema_qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
 
 
 def _column_def(column: Column) -> str:
@@ -48,7 +48,7 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
     Render the CREATE TABLE statement for a target-only table (columns inline).
     """
     columns = ", ".join(_column_def(column) for column in table.columns)
-    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns});"]
+    return [f"CREATE TABLE {schema_qualified(schema_name, table.name)} ({columns});"]
 
 
 def _alter_columns(
@@ -84,16 +84,20 @@ def _alter_columns(
     for column_name in sorted(src_columns.keys() | dst_columns.keys()):
         if column_name not in src_columns:
             column = dst_columns[column_name]
-            statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} ADD COLUMN {_column_def(column)};")
+            statements.append(
+                f"ALTER TABLE {schema_qualified(schema_name, table_name)} ADD COLUMN {_column_def(column)};"
+            )
         elif column_name not in dst_columns:
-            statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} DROP COLUMN {ident(column_name)};")
+            statements.append(
+                f"ALTER TABLE {schema_qualified(schema_name, table_name)} DROP COLUMN {ident(column_name)};"
+            )
         else:
             src_column = src_columns[column_name]
             dst_column = dst_columns[column_name]
             if src_column.identity != dst_column.identity:
                 raise NotImplementedError(
                     f"Column identity change is not supported: "
-                    f"{qualified(schema_name, table_name)}.{ident(column_name)}"
+                    f"{schema_qualified(schema_name, table_name)}.{ident(column_name)}"
                 )
             # A serial change keeps the integer type, so the type guard above does not
             # fire. Its owned sequence is excluded from introspection, so emitting the
@@ -103,10 +107,10 @@ def _alter_columns(
             if src_column.serial_type != dst_column.serial_type:
                 raise NotImplementedError(
                     f"Column serial change is not supported: "
-                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
+                    f"{schema_qualified(schema_name, table_name)}.{ident(column_name)} "
                     f"{src_column.serial_type} -> {dst_column.serial_type}"
                 )
-            prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
+            prefix = f"ALTER TABLE {schema_qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
             # Type change first: a widened type must be in place before a dependent
             # default or NOT NULL is (re)applied. No USING clause is emitted, so this
             # relies on Postgres's implicit assignment cast; a cast that needs USING
@@ -139,7 +143,7 @@ def _table_comment_statements(schema_name: str, src_table: Table | None, dst_tab
     dst_comment = dst_table.comment
     if src_comment == dst_comment:
         return []
-    return [comment_on("TABLE", qualified(schema_name, dst_table.name), dst_comment)]
+    return [comment_on("TABLE", schema_qualified(schema_name, dst_table.name), dst_comment)]
 
 
 def _column_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -153,7 +157,9 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     return _diff_comments(
         src_columns,
         dst_columns,
-        render=lambda name, column: comment_on("COLUMN", qualified(schema_name, dst_table.name, name), column.comment),
+        render=lambda name, column: comment_on(
+            "COLUMN", schema_qualified(schema_name, dst_table.name, name), column.comment
+        ),
     )
 
 
@@ -165,7 +171,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
     for schema_name, table_name, src_table, dst_table in _iter_table_pairs(ctx.source, ctx.target):
         # Present in source only: drop it (attached objects are dropped with it).
         if dst_table is None:
-            yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")
+            yield Statement(Phase.TABLE, f"DROP TABLE {schema_qualified(schema_name, table_name)};")
             continue
 
         deferred_drop_not_null: list[str] = []

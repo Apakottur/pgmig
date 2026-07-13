@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import EnumType
-from pgmig._sql import comment_on, literal, qualified
+from pgmig._sql import comment_on, literal, schema_qualified
 
 
 def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_values: list[str]) -> list[str]:
@@ -39,7 +39,7 @@ def _enum_comment_statements(schema_name: str, src: dict[str, EnumType], dst: di
     Emit COMMENT ON TYPE for target enums whose comment differs from source.
     """
     return _diff_comments(
-        src, dst, render=lambda name, enum: comment_on("TYPE", qualified(schema_name, name), enum.comment)
+        src, dst, render=lambda name, enum: comment_on("TYPE", schema_qualified(schema_name, name), enum.comment)
     )
 
 
@@ -56,7 +56,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
         for name in sorted(src_enums.keys() | dst_enums.keys()):
             src_enum = src_enums.get(name)
             dst_enum = dst_enums.get(name)
-            qualified_name = qualified(schema_name, name)
+            qualified_name = schema_qualified(schema_name, name)
 
             # Present in target only: create it.
             if src_enum is None:

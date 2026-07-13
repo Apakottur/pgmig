@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _iter_schema_pairs
 from pgmig._models import Sequence
-from pgmig._sql import comment_on, qualified
+from pgmig._sql import comment_on, schema_qualified
 
 
 def _sequence_tail(sequence: Sequence) -> str:
@@ -27,7 +27,9 @@ def _sequence_comment_statements(schema_name: str, src: dict[str, Sequence], dst
     Emit COMMENT ON SEQUENCE for target sequences whose comment differs from source.
     """
     return _diff_comments(
-        src, dst, render=lambda name, sequence: comment_on("SEQUENCE", qualified(schema_name, name), sequence.comment)
+        src,
+        dst,
+        render=lambda name, sequence: comment_on("SEQUENCE", schema_qualified(schema_name, name), sequence.comment),
     )
 
 
@@ -41,7 +43,7 @@ def generate(ctx: Context) -> Iterator[Statement]:
         dst_sequences = dst_schema.sequence_by_name if dst_schema else {}
 
         for name in sorted(src_sequences.keys() | dst_sequences.keys()):
-            qualified_name = qualified(schema_name, name)
+            qualified_name = schema_qualified(schema_name, name)
             # Present in target only: create it.
             if name not in src_sequences:
                 yield Statement(
