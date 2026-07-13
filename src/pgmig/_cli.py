@@ -76,8 +76,7 @@ def generate(
         bool,
         typer.Option(
             "--ignore-owner",
-            help="Do not emit any ALTER ... OWNER TO. Use when the source and target run under different "
-            "admin/role names, which would otherwise make every object diff on ownership.",
+            help="Suppress all ALTER ... OWNER TO statements.",
         ),
     ] = False,
 ) -> None:

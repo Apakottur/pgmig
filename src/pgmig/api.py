@@ -25,8 +25,7 @@ def generate(
                             and cannot be run inside a transaction block.
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
-        ignore_owner: Suppress all ALTER ... OWNER TO statements. Useful when source and target run under
-                      different admin/role names, which would otherwise make every object diff on ownership.
+        ignore_owner: Suppress all ALTER ... OWNER TO statements.
     """
     # Introspect both databases concurrently.
     with ThreadPoolExecutor(max_workers=2) as executor:

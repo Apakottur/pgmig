@@ -25,9 +25,7 @@ class _ContextData:
     # is emitted for them. Empty (default) ignores none.
     ignore_extension_version: Sequence[str]
 
-    # Whether to suppress all ALTER ... OWNER TO statements. Ownership differs wholesale when
-    # the source and target clusters use different admin/role names, so every object would
-    # diff; this skips owner reconciliation entirely rather than per-object.
+    # Suppress all ALTER ... OWNER TO statements.
     ignore_owner: bool
 
 
