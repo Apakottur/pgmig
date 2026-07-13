@@ -26,7 +26,6 @@ from pgmig._models import DbInfo
 _GUARDS: tuple[Guard, ...] = (
     unsupported.check,
     invalid_indexes.check,
-    view_dependencies.check,
 )
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
@@ -42,6 +41,7 @@ _LOADERS: tuple[Loader, ...] = (
     triggers.load,
     enums.load,
     views.load,
+    view_dependencies.load,
     domains.load,
     extensions.load,
 )
@@ -82,7 +82,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 "pgmig cannot process this database:\n" + "\n".join(f"  - {problem}" for problem in problems)
             )
 
-        db_info = DbInfo(schema_by_name={}, extension_by_name={})
+        db_info = DbInfo(schema_by_name={}, extension_by_name={}, view_dependency_edges={})
         for load in _LOADERS:
             load(conn, db_info)
     return db_info

@@ -226,3 +226,7 @@ class DbInfo:
 
     schema_by_name: dict[str, Schema]
     extension_by_name: dict[str, Extension]
+    # View-on-view edges: (schema, view) -> the set of (schema, view) it reads from.
+    # Db-level because a view can read a view in another schema; the view diff uses it
+    # to topologically order CREATE/DROP within the view phases.
+    view_dependency_edges: dict[tuple[str, str], set[tuple[str, str]]]

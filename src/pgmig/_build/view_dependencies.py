@@ -4,7 +4,7 @@ import psycopg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
-from pgmig._sql import qualified
+from pgmig._models import DbInfo
 
 
 class _ViewDependencyRow(BaseModel):
@@ -14,17 +14,13 @@ class _ViewDependencyRow(BaseModel):
     referenced_view: str
 
 
-def check(conn: psycopg.Connection[Any]) -> list[str]:
+def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     """
-    Guard: report a view that reads from another view. Ordering create/drop across such a
-    dependency needs a topological sort within the view phases, which is not implemented
-    yet, so the pair is reported rather than emitted in a possibly-wrong order.
+    View-on-view edges: record, for each view that reads another view, the set of views
+    it reads from. The view diff uses these to topologically order CREATE (dependencies
+    first) and DROP (dependents first) within the view phases.
     """
-    findings: list[str] = []
     for row in _run_query(conn, "view_dependencies.sql", _ViewDependencyRow):
-        dependent = qualified(row.dependent_schema, row.dependent_view)
-        referenced = qualified(row.referenced_schema, row.referenced_view)
-        findings.append(
-            f"view {dependent} reads from view {referenced}: view-on-view dependencies are not supported yet"
-        )
-    return findings
+        dependent = (row.dependent_schema, row.dependent_view)
+        referenced = (row.referenced_schema, row.referenced_view)
+        db_info.view_dependency_edges.setdefault(dependent, set()).add(referenced)
