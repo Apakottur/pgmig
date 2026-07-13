@@ -21,6 +21,7 @@ from pgmig._build import (
 )
 from pgmig._build._core import Guard, Loader
 from pgmig._errors import PgmigError
+from pgmig._redact import redact_dsn_secrets
 from pgmig._models import DbInfo
 
 # Preconditions run before any loader. Each guard reports every object it finds that
@@ -53,9 +54,10 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-def build_db_info(dsn: str) -> DbInfo:
+def build_db_info(dsn: str, label: str) -> DbInfo:
     """
-    Build the full structure of the given database.
+    Build the full structure of the given database. `label` names the database's role
+    in the diff ("source" or "target") for error messages.
     """
     # Open the connection.
     try:
@@ -77,7 +79,9 @@ def build_db_info(dsn: str) -> DbInfo:
             ),
         )
     except psycopg.Error as error:
-        raise PgmigError(f"Could not connect to database: {error}") from error
+        # The libpq message can echo the raw DSN (password included); scrub it.
+        message = redact_dsn_secrets(str(error), dsn)
+        raise PgmigError(f"Could not connect to {label} database: {message}") from error
 
     with conn:
         # Run every guard first and collect all findings, so a database with several

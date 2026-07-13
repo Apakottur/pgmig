@@ -27,8 +27,8 @@ def generate(
     """
     # Introspect both databases concurrently.
     with ThreadPoolExecutor(max_workers=2) as executor:
-        source_future = executor.submit(build_db_info, source)
-        target_future = executor.submit(build_db_info, target)
+        source_future = executor.submit(build_db_info, source, "source")
+        target_future = executor.submit(build_db_info, target, "target")
         source_db_info = source_future.result()
         target_db_info = target_future.result()
 
