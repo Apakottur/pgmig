@@ -118,18 +118,19 @@ class Table:
     A Postgres table. Owned by the schema that holds it.
     """
 
+    # Core
     name: str
     columns: list[Column]
     comment: str | None
-    owner: str  # the role that owns the table (pg_class.relowner); never null
+    owner: str
+
     # Declarative partitioning metadata.
-    # A partitioned parent has partition_strategy/partition_key set; a partition child has
-    # partition_bound/partition_parent set; a sub-partitioned table has all four. A plain
-    # table has all four None.
-    partition_strategy: str | None  # pg_partitioned_table.partstrat: 'r'/'l'/'h'; None if not a partitioned parent
-    partition_key: str | None  # pg_get_partkeydef(oid), e.g. "RANGE (id)"; None if not a partitioned parent
-    partition_bound: str | None  # pg_get_expr(relpartbound, oid): "FOR VALUES ..."/"DEFAULT"; None if not a partition
-    partition_parent: tuple[str, str] | None  # (schema, name) of the parent; None if not a partition
+    partition_strategy: str | None
+    partition_key: str | None
+    partition_bound: str | None
+    partition_parent: tuple[str, str] | None
+
+    # Relations.
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
