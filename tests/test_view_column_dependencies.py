@@ -29,7 +29,7 @@ def test_view_over_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None
     gen_setup.assert_migration_sql(
         [
             'DROP VIEW "public"."v";',
-            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint;',
+            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;',
             f'CREATE VIEW "public"."v" AS {_view_body(gen_setup, "val", "t", "public.t")};',
         ]
     )
@@ -51,7 +51,7 @@ def test_view_on_view_over_retyped_column_cascades(gen_setup: GenerateSetup) -> 
         [
             'DROP VIEW "public"."derived";',
             'DROP VIEW "public"."base";',
-            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint;',
+            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;',
             f'CREATE VIEW "public"."base" AS {_view_body(gen_setup, "val", "t", "public.t")};',
             f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "val", "base", "public.base")};',
         ]
@@ -69,7 +69,7 @@ def test_view_over_unchanged_column_not_recreated(gen_setup: GenerateSetup) -> N
     gen_setup.dst.execute("CREATE TABLE t (keep int, val bigint)")
     gen_setup.dst.execute("CREATE VIEW v AS SELECT keep FROM t")
 
-    gen_setup.assert_migration_sql(['ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint;'])
+    gen_setup.assert_migration_sql(['ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;'])
 
 
 def test_view_over_retyped_column_cross_schema(gen_setup: GenerateSetup) -> None:
@@ -87,7 +87,7 @@ def test_view_over_retyped_column_cross_schema(gen_setup: GenerateSetup) -> None
     gen_setup.assert_migration_sql(
         [
             'DROP VIEW "api"."v";',
-            'ALTER TABLE "data"."t" ALTER COLUMN "val" TYPE bigint;',
+            'ALTER TABLE "data"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;',
             f'CREATE VIEW "api"."v" AS {_view_body(gen_setup, "val", "t", "data.t")};',
         ]
     )
