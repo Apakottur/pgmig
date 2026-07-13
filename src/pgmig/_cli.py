@@ -72,6 +72,14 @@ def generate(
             help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
         ),
     ] = None,
+    ignore_owner: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-owner",
+            help="Do not emit any ALTER ... OWNER TO. Use when the source and target run under different "
+            "admin/role names, which would otherwise make every object diff on ownership.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -87,6 +95,7 @@ def generate(
             target=target,
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version or [],
+            ignore_owner=ignore_owner,
         )
     except PgmigError as error:
         # Known error - print message without traceback.
