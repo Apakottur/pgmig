@@ -37,12 +37,15 @@ _GENERATORS: tuple[Generator, ...] = (
 
 def generate_migration_sql() -> str:
     """
-    Get the migration SQL for the current diff context (see `use_context`).
+    Get the migration SQL for the current diff context.
     """
-    # Collect statements by phase, then join in phase declaration order.
+    # Initialize the dictionary with all phases.
     statements_by_phase: dict[Phase, list[str]] = {phase: [] for phase in Phase}
+
+    # Collect all statements by phase.
     for generate in _GENERATORS:
         for statement in generate():
             statements_by_phase[statement.phase].append(statement.sql)
 
+    # Join all statements in phase declaration order.
     return "\n".join(sql for phase in Phase for sql in statements_by_phase[phase])
