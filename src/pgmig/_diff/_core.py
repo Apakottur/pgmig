@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol, TypeVar
@@ -94,36 +94,14 @@ class Statement:
     sql: str
 
 
-@dataclass(frozen=True)
-class Context:
-    """
-    Everything a generator needs: the two databases being diffed and the output configuration.
-    """
-
-    # Databases.
-    source: DbInfo
-    target: DbInfo
-
-    # Output configuration.
-
-    # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
-    # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
-    # run inside a transaction block.
-    index_concurrently: bool = False
-
-    # Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ... UPDATE TO
-    # is emitted for them. Empty (default) ignores none.
-    ignore_extension_version: Sequence[str] = ()
-
-
 class Generator(Protocol):
     """
-    The shared shape of every object-kind generator: take the diff Context and yield
+    The shared shape of every object-kind generator: read the diff `context` and yield
     phase-tagged statements. Annotating the registry with this enforces one uniform
     signature across all generators.
     """
 
-    def __call__(self, ctx: Context) -> Iterator[Statement]: ...
+    def __call__(self) -> Iterator[Statement]: ...
 
 
 def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:

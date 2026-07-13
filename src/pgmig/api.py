@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 from pgmig._build._engine import build_db_info
-from pgmig._diff._core import Context
+from pgmig._diff._context import _ContextData, use_context
 from pgmig._diff._engine import generate_migration_sql
 
 
@@ -32,12 +32,13 @@ def generate(
         source_db_info = source_future.result()
         target_db_info = target_future.result()
 
-    # Generate migration SQL.
-    return generate_migration_sql(
-        ctx=Context(
+    # Generate migration SQL under the diff context.
+    with use_context(
+        _ContextData(
             source=source_db_info,
             target=target_db_info,
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version,
         )
-    )
+    ):
+        return generate_migration_sql()

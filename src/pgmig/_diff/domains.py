@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Context, Phase, Statement, _diff_comments, _diff_renamable, _iter_schema_pairs
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_schema_pairs
 from pgmig._models import Domain
 from pgmig._sql import comment_on, ident, qualified
 
@@ -70,12 +71,12 @@ def _domain_comment_statements(schema_name: str, src: dict[str, Domain], dst: di
     )
 
 
-def generate(ctx: Context) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of domain types (create, drop, alter). Creates and alters
     are phased before tables (a column may be of the domain); drops run after.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(ctx.source, ctx.target):
+    for schema_name, src_schema, dst_schema in _iter_schema_pairs(context.source, context.target):
         src_domains = src_schema.domain_by_name if src_schema else {}
         dst_domains = dst_schema.domain_by_name if dst_schema else {}
 
