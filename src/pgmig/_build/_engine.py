@@ -60,24 +60,21 @@ _LOADERS: tuple[Loader, ...] = (
 
 def _connect(dsn: str) -> psycopg.Connection[Any]:
     """
-    Open the introspection connection and configure the session at the transaction level,
-    never via server-side startup options (-c ...): pgbouncer rejects unknown startup
+    Open the introspection connection and configure the session at the transaction level.
+
+    We should never use server-side startup options (-c ...): pgbouncer rejects unknown startup
     parameters ("unsupported startup parameter in options: ...") and would block every
     connection made through it.
-
-      read-only:       the databases are only introspected, never written.
-      REPEATABLE READ: one catalog snapshot is taken at the first query and held for the
-                       whole transaction, so all loaders see a single frozen instant.
-                       Without it each statement gets its own snapshot (READ COMMITTED) and
-                       concurrent DDL between loaders could produce a torn view (e.g. a
-                       constraint row for a table tables.load never saw).
     """
     try:
         conn = psycopg.connect(dsn)
     except psycopg.Error as error:
         raise PgmigError(f"Could not connect to database: {error}") from error
 
+    # Force all subsequent transactions to be read-only.
     conn.read_only = True
+
+    # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
     conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
     return conn
 
@@ -89,13 +86,7 @@ def build_db_info(dsn: str) -> DbInfo:
     conn = _connect(dsn)
 
     with conn:
-        # An empty search_path makes introspection independent of the database's own
-        # search_path and forces the deparse functions (format_type, pg_get_expr,
-        # pg_get_constraintdef, pg_get_indexdef, ...) to fully qualify every name, so the
-        # emitted SQL is deterministic and portable regardless of the runner's search_path.
-        # SET LOCAL keeps it scoped to this transaction, so it is safe under pgbouncer's
-        # transaction pooling (a plain SET would leak onto the next client on the shared
-        # server connection).
+        # Use an empty search path to make introspection independent of the database's own search path.
         conn.execute("SET LOCAL search_path = ''")
 
         # Run every guard first and collect all findings, so a database with several

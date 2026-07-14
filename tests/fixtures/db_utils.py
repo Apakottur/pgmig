@@ -9,7 +9,6 @@ from psycopg import sql
 from typing_extensions import LiteralString
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
-# Same cluster reached through the pgbouncer service (tests/docker-compose.yml).
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 _ADMIN_DB_NAME = "postgres"
 
@@ -63,7 +62,6 @@ class DbConnection:
         # Database name and DSN.
         self._db_name = db_name
         self.dsn = f"{_DSN_PREFIX}/{db_name}"
-        # Same database reached through pgbouncer (wildcard-routed).
         self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
 
         # Admin connection.
