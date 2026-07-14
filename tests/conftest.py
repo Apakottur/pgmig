@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import shpyx
 
-from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import DST_DB, SRC_DB, DbConnection
+from tests.api.generate_setup import GenerateSetup
+from tests.fixtures.db_utils import DST_DB, SRC_DB, DbConnection
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -32,7 +32,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
