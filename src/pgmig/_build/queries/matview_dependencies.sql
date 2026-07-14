@@ -24,13 +24,50 @@ WHERE
     AND (dependent.relkind = 'm'
         OR referenced.relkind = 'm')
     AND dependent.oid <> referenced.oid
+    -- Both endpoints must be objects pgmig manages, or this guard falsely refuses a database
+    -- over a dependency on something it never diffs. A monitoring matview over pg_stat_activity
+    -- (system schema) or over pg_stat_statements (extension-owned view, in the user's own
+    -- public schema) is the common trigger. Exclude, on each side, what views.sql /
+    -- materialized_views.sql exclude from the model:
+    --   [x] system-schema leg -- pg_catalog / information_schema (nspname)
+    --   [x] namespace leg     -- object in an extension-owned schema (*_ns.oid)
+    --   [x] self leg          -- the object itself is extension-owned (dependent/referenced.oid)
     AND dependent_ns.nspname NOT LIKE 'pg_%'
     AND dependent_ns.nspname <> 'information_schema'
-    -- A dependency on a system view/matview (e.g. a monitoring matview over pg_stat_activity)
-    -- is not a matview-on-managed-object edge: system schemas are not diffed, so the referenced
-    -- side always exists and needs no ordering. Excluding it prevents a false refusal.
     AND referenced_ns.nspname NOT LIKE 'pg_%'
     AND referenced_ns.nspname <> 'information_schema'
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = dependent_ns.oid
+            AND ed.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = dependent.oid
+            AND ed.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = referenced_ns.oid
+            AND ed.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = referenced.oid
+            AND ed.deptype = 'e')
 ORDER BY
     dependent_schema,
     dependent_view,

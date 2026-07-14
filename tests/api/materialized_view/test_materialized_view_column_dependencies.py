@@ -14,6 +14,25 @@ def _matview_body(gen_setup: GenerateSetup, column: str, table: str, from_ref: s
     return f"SELECT {rendered}\n   FROM {from_ref}"
 
 
+def test_materialized_view_over_whole_row_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None:
+    """
+    A materialized view reading a whole-row reference (SELECT t FROM t) physically stores the
+    table's composite row type, so a type change to ANY column of the table blocks the ALTER
+    ("cannot alter table because column m.t uses its row type"). The whole-row dependency is
+    recorded as refobjsubid = 0, which expands to every column of the table, so the matview is
+    dropped before the ALTER and recreated after.
+    """
+    gen_setup.assert_diff(
+        src=["CREATE TABLE t (id int, val integer)", "CREATE MATERIALIZED VIEW m AS SELECT t FROM t"],
+        dst=["CREATE TABLE t (id int, val bigint)", "CREATE MATERIALIZED VIEW m AS SELECT t FROM t"],
+        diff=[
+            'DROP MATERIALIZED VIEW "public"."m"',
+            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
+            'CREATE MATERIALIZED VIEW "public"."m" AS SELECT t.*::public.t AS t\n   FROM public.t WITH NO DATA',
+        ],
+    )
+
+
 def test_materialized_view_over_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None:
     """
     A materialized view reading a column whose type changes is dropped before the ALTER COLUMN

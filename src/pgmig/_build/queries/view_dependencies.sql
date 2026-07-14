@@ -22,8 +22,49 @@ WHERE
     dependent.relkind IN ('v', 'm')
     AND referenced.relkind IN ('v', 'm')
     AND dependent.oid <> referenced.oid
+    -- Only edges among managed objects belong here: an edge to a view pgmig does not model
+    -- (a system view, or an extension-owned one in a user schema) is bogus state that would
+    -- mislead the ordering and recreate logic. Exclude, on each side, what views.sql /
+    -- materialized_views.sql exclude from the model:
+    --   [x] system-schema leg -- pg_catalog / information_schema (nspname)
+    --   [x] namespace leg     -- object in an extension-owned schema (*_ns.oid)
+    --   [x] self leg          -- the object itself is extension-owned (dependent/referenced.oid)
     AND dependent_ns.nspname NOT LIKE 'pg_%'
     AND dependent_ns.nspname <> 'information_schema'
+    AND referenced_ns.nspname NOT LIKE 'pg_%'
+    AND referenced_ns.nspname <> 'information_schema'
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = dependent_ns.oid
+            AND ed.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = dependent.oid
+            AND ed.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = referenced_ns.oid
+            AND ed.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend ed
+        WHERE
+            ed.objid = referenced.oid
+            AND ed.deptype = 'e')
 ORDER BY
     dependent_schema,
     dependent_view,
