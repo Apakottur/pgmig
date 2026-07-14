@@ -127,16 +127,12 @@ e.g. `postgresql://user:pass@host:5432/dbname`.
 
 ## FAQ
 
-### How do I install pgmig with the Postgres client library (libpq) bundled?
+### Do I need libpq installed?
 
-pgmig depends on bare [`psycopg`](https://www.psycopg.org/psycopg3/), so when embedded as a
-library your application picks the psycopg build (`psycopg[binary]`, `psycopg[c]`, or a
-system libpq). For standalone / CLI use where no system libpq is available, install the
-`binary` extra to pull in the self-contained wheel:
+By default, yes — pgmig requires the Postgres client library (libpq) on the machine. For
+standalone / CLI use you can skip that by installing the `binary` extra, which bundles it:
 
 ```shell
-uvx 'pgmig[binary]' generate ...   # One-off run.
-uv tool install 'pgmig[binary]'    # Global install.
 pip install 'pgmig[binary]'
 ```
 
