@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from psycopg import sql
 
 from pgmig import generate
-from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import DbConnection
+from tests.api.generate_setup import GenerateSetup
+from tests.fixtures.db_utils import DbConnection
 
 
 def _create_extension(

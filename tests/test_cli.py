@@ -4,7 +4,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 from pgmig._cli import app
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
 

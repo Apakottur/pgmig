@@ -1,4 +1,4 @@
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def _view_body(gen_setup: GenerateSetup, table: str, from_ref: str) -> str:

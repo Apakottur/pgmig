@@ -1,4 +1,4 @@
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def _setup_tables(gen_setup: GenerateSetup) -> None:

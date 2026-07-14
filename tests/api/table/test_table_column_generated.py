@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig import generate
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def test_stored_generated_column_emitted(gen_setup: GenerateSetup) -> None:

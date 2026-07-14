@@ -1,4 +1,4 @@
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def test_index_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) -> None:

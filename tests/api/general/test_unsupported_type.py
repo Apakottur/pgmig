@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig import PgmigError, generate
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None:

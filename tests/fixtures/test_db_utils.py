@@ -1,4 +1,4 @@
-from tests.utils.db_utils import get_unique_db_name
+from tests.fixtures.db_utils import get_unique_db_name
 
 _MAX_IDENTIFIER_LEN = 63
 

@@ -1,7 +1,7 @@
 from psycopg import sql
 
-from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import SRC_DB
+from tests.api.generate_setup import GenerateSetup
+from tests.fixtures.db_utils import SRC_DB
 
 
 def test_identical_dbs_with_source_search_path_setting(gen_setup: GenerateSetup) -> None:

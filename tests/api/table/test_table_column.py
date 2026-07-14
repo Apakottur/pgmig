@@ -1,4 +1,4 @@
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def test_table_column_type_widened(gen_setup: GenerateSetup) -> None:

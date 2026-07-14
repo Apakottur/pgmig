@@ -1,4 +1,4 @@
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:

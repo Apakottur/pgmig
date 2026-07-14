@@ -2,7 +2,7 @@ from psycopg import sql
 from typing_extensions import LiteralString
 
 from pgmig import generate
-from tests.utils.db_utils import DbConnection
+from tests.fixtures.db_utils import DbConnection
 
 
 class GenerateSetup:

@@ -2,7 +2,7 @@ import psycopg
 import pytest
 
 from pgmig import PgmigError, generate
-from tests.fixtures.generate_setup import GenerateSetup
+from tests.api.generate_setup import GenerateSetup
 
 
 def test_invalid_index_is_rejected(gen_setup: GenerateSetup) -> None:

@@ -1,7 +1,7 @@
 from psycopg import sql
 
-from tests.fixtures.generate_setup import GenerateSetup
-from tests.utils.db_utils import _KEY, get_unique_db_name
+from tests.api.generate_setup import GenerateSetup
+from tests.fixtures.db_utils import _KEY, get_unique_db_name
 
 
 def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
