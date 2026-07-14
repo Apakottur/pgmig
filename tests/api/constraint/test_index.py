@@ -50,16 +50,19 @@ def test_index_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP INDEX then CREATE INDEX.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text, age integer)")
-    gen_setup.src.execute("CREATE INDEX person_idx ON person (name)")
-    gen_setup.dst.execute("CREATE TABLE person (name text, age integer)")
-    gen_setup.dst.execute("CREATE INDEX person_idx ON person (age)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP INDEX "public"."person_idx";',
-            "CREATE INDEX person_idx ON public.person USING btree (age);",
-        ]
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text, age integer)",
+            "CREATE INDEX person_idx ON person (name)",
+        ],
+        dst=[
+            "CREATE TABLE person (name text, age integer)",
+            "CREATE INDEX person_idx ON person (age)",
+        ],
+        diff=[
+            'DROP INDEX "public"."person_idx"',
+            "CREATE INDEX person_idx ON public.person USING btree (age)",
+        ],
     )
 
 
