@@ -110,22 +110,20 @@ def generate(
         )
         raise typer.Exit(code=1) from error
 
-    # No diff - exit.
-    if not sql:
-        return
-
-    # Write the migration SQL to stdout or a file.
-    if output is None:
-        typer.echo(sql)
-    else:
+    # Emit the migration. With --output, always (re)write the file -- even for an empty diff
+    # -- so it reflects this run rather than leaving a stale migration from a previous run on
+    # disk. Without --output, only a non-empty diff is written, to stdout.
+    if output is not None:
         try:
-            output.write_text(f"{sql}\n", encoding="utf-8")
+            output.write_text(f"{sql}\n" if sql else "", encoding="utf-8")
         except OSError as error:
             typer.echo(f"Could not write migration output: {error}", err=True)
             raise typer.Exit(code=1) from error
+    elif sql:
+        typer.echo(sql)
 
     # Check mode: a non-empty diff means the source is out of date -> return non-zero exit code.
-    if check:
+    if check and sql:
         typer.echo("Databases differ: a migration is required.", err=True)
         raise typer.Exit(code=1)
 

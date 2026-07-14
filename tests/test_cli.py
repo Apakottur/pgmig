@@ -36,6 +36,18 @@ def test_generate_empty_diff_no_output(gen_setup: GenerateSetup) -> None:
     assert result.stdout == ""
 
 
+def test_generate_empty_diff_truncates_stale_output(gen_setup: GenerateSetup, tmp_path: Path) -> None:
+    # An empty diff must overwrite the --output file so it reflects the current run, not
+    # leave a stale migration from a previous run on disk.
+    out = tmp_path / "migration.sql"
+    out.write_text("CREATE TABLE stale (x int);\n", encoding="utf-8")
+
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-o", str(out)])
+
+    assert result.exit_code == 0
+    assert out.read_text() == ""
+
+
 def test_generate_connection_error_is_clean() -> None:
     # A bad connection string is a known (PgmigError) failure: clean message, no traceback.
     result = _runner.invoke(app, ["generate", "-s", "not-a-dsn", "-t", "not-a-dsn"])
