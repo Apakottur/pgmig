@@ -159,3 +159,6 @@ sfunc
 stype
 initcond
 pgbouncer
+pooler
+edoburu
+userlist
