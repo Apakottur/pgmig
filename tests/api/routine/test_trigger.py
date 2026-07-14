@@ -153,6 +153,46 @@ def test_trigger_comment_removed(gen_setup: GenerateSetup) -> None:
     )
 
 
+def _partition_setup_cmds() -> list[str]:
+    """
+    The trigger function plus a range-partitioned parent and one partition, on both sides.
+    """
+    return [
+        "CREATE FUNCTION log_change() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END;$$",
+        "CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)",
+        "CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)",
+    ]
+
+
+def test_trigger_on_partitioned_parent_create(gen_setup: GenerateSetup) -> None:
+    """
+    A trigger declared on a partitioned parent is emitted once against the parent, not
+    once per partition clone: Postgres cascades the parent declaration to every partition.
+    """
+    gen_setup.assert_diff(
+        both=_partition_setup_cmds(),
+        src=[],
+        dst=["CREATE TRIGGER events_audit AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION log_change()"],
+        diff=[
+            "CREATE TRIGGER events_audit AFTER INSERT ON public.events "
+            "FOR EACH ROW EXECUTE FUNCTION public.log_change()"
+        ],
+    )
+
+
+def test_trigger_on_partitioned_parent_drop(gen_setup: GenerateSetup) -> None:
+    """
+    Dropping a partitioned parent's trigger emits a single DROP against the parent. The
+    per-partition clones must not be diffed: Postgres refuses to drop them directly.
+    """
+    gen_setup.assert_diff(
+        both=_partition_setup_cmds(),
+        src=["CREATE TRIGGER events_audit AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION log_change()"],
+        dst=[],
+        diff=['DROP TRIGGER "events_audit" ON "public"."events"'],
+    )
+
+
 def test_trigger_comment_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same trigger and same comment on both sides -> no migration SQL.

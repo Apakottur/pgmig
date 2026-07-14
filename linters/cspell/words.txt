@@ -114,6 +114,7 @@ triggerdef
 tgname
 tgrelid
 tgisinternal
+tgparentid
 typname
 typnamespace
 typtype

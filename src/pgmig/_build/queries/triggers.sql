@@ -12,7 +12,14 @@ FROM
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
     NOT t.tgisinternal
-    AND c.relkind = 'r'
+    -- Ordinary tables ('r') and partitioned parents ('p'). Views ('v', INSTEAD OF triggers)
+    -- are not modelled yet, so they stay excluded.
+    AND c.relkind IN ('r', 'p')
+    -- Exclude triggers cloned onto partitions from a partitioned parent (tgparentid <> 0):
+    -- they are (re)created by the parent's cascading CREATE TRIGGER, and Postgres refuses a
+    -- direct DROP on them. A parent-level trigger and a table's own local trigger both have
+    -- tgparentid = 0 and are kept. Mirrors constraints.sql's conparentid = 0 leg.
+    AND t.tgparentid = 0
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
     -- Extension-ownership exclusion checklist (see the sibling queries: every query must
