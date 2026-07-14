@@ -23,8 +23,9 @@ This project is currently in active development, see [Roadmap](https://github.co
 
 1. [Getting Started](#getting-started)
 2. [Configuration](#configuration)
-3. [Contributing](#contributing)
-4. [License](#license)
+3. [FAQ](#faq)
+4. [Contributing](#contributing)
+5. [License](#license)
 
 ## Getting Started
 
@@ -123,6 +124,17 @@ Other commands:
 
 A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
 e.g. `postgresql://user:pass@host:5432/dbname`.
+
+## FAQ
+
+### Do I need libpq installed?
+
+By default, yes — pgmig requires the Postgres client library (libpq) on the machine. For
+standalone / CLI use you can skip that by installing the `binary` extra, which bundles it:
+
+```shell
+pip install 'pgmig[binary]'
+```
 
 ## Contributing
 
