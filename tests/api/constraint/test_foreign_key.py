@@ -1,25 +1,24 @@
 from tests.api.generate_setup import GenerateSetup
 
-
-def _setup_tables(gen_setup: GenerateSetup) -> None:
-    """
-    Create a referenced table (with a primary key) and a referencing table on both sides.
-    """
-    gen_setup.execute_both("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
-    gen_setup.execute_both("CREATE TABLE person (team_id integer)")
+# Shared setup: a referenced table (with a primary key) and a referencing table, on both sides.
+_TABLES = [
+    "CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))",
+    "CREATE TABLE person (team_id integer)",
+]
 
 
 def test_foreign_key_add(gen_setup: GenerateSetup) -> None:
     """
     Foreign key present in target but missing in source -> ADD CONSTRAINT.
     """
-    _setup_tables(gen_setup)
-    gen_setup.dst.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-
-    gen_setup.assert_migration_sql(
-        'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES public.team(id);'
+    gen_setup.assert_diff(
+        both=_TABLES,
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id)"
+        ],
     )
 
 
@@ -27,28 +26,23 @@ def test_foreign_key_drop(gen_setup: GenerateSetup) -> None:
     """
     Foreign key present in source but missing in target -> DROP CONSTRAINT.
     """
-    _setup_tables(gen_setup)
-    gen_setup.src.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
+    gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=[],
+        diff=['ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"'],
     )
-
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey";')
 
 
 def test_foreign_key_rename(gen_setup: GenerateSetup) -> None:
     """
     Same definition on both sides, only the name differs -> RENAME CONSTRAINT.
     """
-    _setup_tables(gen_setup)
-    gen_setup.src.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_old FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-    gen_setup.dst.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_new FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-
-    gen_setup.assert_migration_sql(
-        'ALTER TABLE "public"."person" RENAME CONSTRAINT "person_team_old" TO "person_team_new";'
+    gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_old FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_new FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=['ALTER TABLE "public"."person" RENAME CONSTRAINT "person_team_old" TO "person_team_new"'],
     )
 
 
@@ -56,20 +50,18 @@ def test_foreign_key_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP CONSTRAINT then ADD CONSTRAINT.
     """
-    _setup_tables(gen_setup)
-    gen_setup.src.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-    gen_setup.dst.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) ON DELETE CASCADE"
-    )
-
-    gen_setup.assert_migration_sql(
-        [
-            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey";',
+    gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) ON DELETE CASCADE"
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
             'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
-            "FOREIGN KEY (team_id) REFERENCES public.team(id) ON DELETE CASCADE;",
-        ]
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) ON DELETE CASCADE",
+        ],
     )
 
 
@@ -77,12 +69,15 @@ def test_foreign_key_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical foreign key on both sides -> no migration SQL.
     """
-    _setup_tables(gen_setup)
-    gen_setup.execute_both(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
+    gen_setup.assert_diff(
+        both=[
+            *_TABLES,
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
     )
-
-    gen_setup.assert_migration_sql("")
 
 
 def test_foreign_key_add_ordered_after_referenced_pk(gen_setup: GenerateSetup) -> None:

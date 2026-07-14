@@ -143,16 +143,14 @@ def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) 
     """
     # `id` is NOT NULL on both sides so only the constraint differs, isolating the
     # index behavior from the NOT NULL that a PRIMARY KEY would otherwise imply.
-    gen_setup.src.execute("CREATE TABLE person (id integer NOT NULL, email text)")
-    gen_setup.dst.execute("CREATE TABLE person (id integer NOT NULL, email text)")
-    gen_setup.dst.execute("ALTER TABLE person ADD PRIMARY KEY (id)")
-    gen_setup.dst.execute("ALTER TABLE person ADD UNIQUE (email)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" UNIQUE (email);',
-            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id);',
-        ]
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer NOT NULL, email text)"],
+        src=[],
+        dst=["ALTER TABLE person ADD PRIMARY KEY (id)", "ALTER TABLE person ADD UNIQUE (email)"],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" UNIQUE (email)',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id)',
+        ],
     )
 
 
