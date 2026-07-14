@@ -15,35 +15,48 @@ def test_index_drop(gen_setup: GenerateSetup) -> None:
     """
     Index present in source but missing in target -> DROP INDEX.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute("CREATE INDEX person_name_idx ON person (name)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-
-    gen_setup.assert_migration_sql('DROP INDEX "public"."person_name_idx";')
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        dst=["CREATE TABLE person (name text)"],
+        diff=['DROP INDEX "public"."person_name_idx"'],
+    )
 
 
 def test_index_rename(gen_setup: GenerateSetup) -> None:
     """
     Same definition on both sides, only the name differs -> ALTER INDEX RENAME.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute("CREATE INDEX person_name_old ON person (name)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_new ON person (name)")
-
-    gen_setup.assert_migration_sql('ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new";')
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_old ON person (name)",
+        ],
+        dst=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_new ON person (name)",
+        ],
+        diff=['ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new"'],
+    )
 
 
 def test_index_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical name and definition on both sides -> no migration SQL.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute("CREATE INDEX person_name_idx ON person (name)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        dst=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        diff=[],
+    )
 
 
 def test_index_definition_changed(gen_setup: GenerateSetup) -> None:
@@ -92,14 +105,16 @@ def test_index_on_created_table(gen_setup: GenerateSetup) -> None:
     """
     Table created on target with an index -> CREATE TABLE then CREATE INDEX.
     """
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'CREATE TABLE "public"."person" ("name" text);',
-            "CREATE INDEX person_name_idx ON public.person USING btree (name);",
-        ]
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        diff=[
+            'CREATE TABLE "public"."person" ("name" text)',
+            "CREATE INDEX person_name_idx ON public.person USING btree (name)",
+        ],
     )
 
 
@@ -107,10 +122,14 @@ def test_index_dropped_with_table(gen_setup: GenerateSetup) -> None:
     """
     Table (with an index) dropped -> DROP TABLE only; the index rides along.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute("CREATE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql('DROP TABLE "public"."person";')
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        dst=[],
+        diff=['DROP TABLE "public"."person"'],
+    )
 
 
 def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) -> None:
@@ -185,12 +204,13 @@ def test_index_drop_concurrently(gen_setup: GenerateSetup) -> None:
     """
     With index_concurrently, a dropped index carries CONCURRENTLY.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute("CREATE INDEX person_name_idx ON person (name)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-
-    gen_setup.assert_migration_sql(
-        'DROP INDEX CONCURRENTLY "public"."person_name_idx";',
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        dst=["CREATE TABLE person (name text)"],
+        diff=['DROP INDEX CONCURRENTLY "public"."person_name_idx"'],
         index_concurrently=True,
     )
 
@@ -199,12 +219,15 @@ def test_index_rename_not_concurrent(gen_setup: GenerateSetup) -> None:
     """
     A rename is ALTER INDEX and cannot be CONCURRENTLY; the flag leaves it unchanged.
     """
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute("CREATE INDEX person_name_old ON person (name)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_new ON person (name)")
-
-    gen_setup.assert_migration_sql(
-        'ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new";',
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_old ON person (name)",
+        ],
+        dst=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_new ON person (name)",
+        ],
+        diff=['ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new"'],
         index_concurrently=True,
     )

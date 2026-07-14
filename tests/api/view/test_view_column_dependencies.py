@@ -64,12 +64,11 @@ def test_view_over_unchanged_column_not_recreated(gen_setup: GenerateSetup) -> N
     `val` is retyped is left untouched. Postgres allows altering `val` while the view reads
     only `keep`, so recreating the view would be needless churn.
     """
-    gen_setup.src.execute("CREATE TABLE t (keep int, val integer)")
-    gen_setup.src.execute("CREATE VIEW v AS SELECT keep FROM t")
-    gen_setup.dst.execute("CREATE TABLE t (keep int, val bigint)")
-    gen_setup.dst.execute("CREATE VIEW v AS SELECT keep FROM t")
-
-    gen_setup.assert_migration_sql(['ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;'])
+    gen_setup.assert_diff(
+        src=["CREATE TABLE t (keep int, val integer)", "CREATE VIEW v AS SELECT keep FROM t"],
+        dst=["CREATE TABLE t (keep int, val bigint)", "CREATE VIEW v AS SELECT keep FROM t"],
+        diff=['ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint'],
+    )
 
 
 def test_view_over_retyped_column_cross_schema(gen_setup: GenerateSetup) -> None:

@@ -24,12 +24,11 @@ def test_column_type_is_schema_qualified(gen_setup: GenerateSetup) -> None:
     A non-built-in (schema-qualified) type is emitted fully qualified, so the output
     applies under any search_path (e.g. a runner that sets search_path = '').
     """
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('happy', 'sad')")
-    gen_setup.dst.execute("CREATE TABLE person (m mood)")
-
-    gen_setup.assert_migration_sql(
-        [
-            "CREATE TYPE \"public\".\"mood\" AS ENUM ('happy', 'sad');",
-            'CREATE TABLE "public"."person" ("m" public.mood);',
-        ]
+    gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE TYPE mood AS ENUM ('happy', 'sad')", "CREATE TABLE person (m mood)"],
+        diff=[
+            "CREATE TYPE \"public\".\"mood\" AS ENUM ('happy', 'sad')",
+            'CREATE TABLE "public"."person" ("m" public.mood)',
+        ],
     )

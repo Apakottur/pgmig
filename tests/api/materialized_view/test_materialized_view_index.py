@@ -16,14 +16,13 @@ def test_matview_index_on_created_matview(gen_setup: GenerateSetup) -> None:
     """
     Matview created on target with an index -> CREATE MATERIALIZED VIEW then CREATE INDEX.
     """
-    gen_setup.dst.execute("CREATE MATERIALIZED VIEW report AS SELECT 1 AS x")
-    gen_setup.dst.execute("CREATE INDEX report_x_idx ON report (x)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'CREATE MATERIALIZED VIEW "public"."report" AS SELECT 1 AS x WITH NO DATA;',
-            "CREATE INDEX report_x_idx ON public.report USING btree (x);",
-        ]
+    gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE MATERIALIZED VIEW report AS SELECT 1 AS x", "CREATE INDEX report_x_idx ON report (x)"],
+        diff=[
+            'CREATE MATERIALIZED VIEW "public"."report" AS SELECT 1 AS x WITH NO DATA',
+            "CREATE INDEX report_x_idx ON public.report USING btree (x)",
+        ],
     )
 
 
@@ -88,10 +87,11 @@ def test_matview_index_dropped_with_matview(gen_setup: GenerateSetup) -> None:
     """
     Matview (with an index) dropped -> DROP MATERIALIZED VIEW only; the index rides along.
     """
-    gen_setup.src.execute("CREATE MATERIALIZED VIEW report AS SELECT 1 AS x")
-    gen_setup.src.execute("CREATE INDEX report_x_idx ON report (x)")
-
-    gen_setup.assert_migration_sql('DROP MATERIALIZED VIEW "public"."report";')
+    gen_setup.assert_diff(
+        src=["CREATE MATERIALIZED VIEW report AS SELECT 1 AS x", "CREATE INDEX report_x_idx ON report (x)"],
+        dst=[],
+        diff=['DROP MATERIALIZED VIEW "public"."report"'],
+    )
 
 
 def test_matview_index_recreated_with_changed_matview(gen_setup: GenerateSetup) -> None:
@@ -99,17 +99,14 @@ def test_matview_index_recreated_with_changed_matview(gen_setup: GenerateSetup) 
     The gap this closes: a changed matview definition drops and recreates the matview,
     which loses its indexes, so every target index must be recreated after the matview.
     """
-    gen_setup.src.execute("CREATE MATERIALIZED VIEW report AS SELECT 1 AS x")
-    gen_setup.src.execute("CREATE INDEX report_x_idx ON report (x)")
-    gen_setup.dst.execute("CREATE MATERIALIZED VIEW report AS SELECT 2 AS x")
-    gen_setup.dst.execute("CREATE INDEX report_x_idx ON report (x)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP MATERIALIZED VIEW "public"."report";',
-            'CREATE MATERIALIZED VIEW "public"."report" AS SELECT 2 AS x WITH NO DATA;',
-            "CREATE INDEX report_x_idx ON public.report USING btree (x);",
-        ]
+    gen_setup.assert_diff(
+        src=["CREATE MATERIALIZED VIEW report AS SELECT 1 AS x", "CREATE INDEX report_x_idx ON report (x)"],
+        dst=["CREATE MATERIALIZED VIEW report AS SELECT 2 AS x", "CREATE INDEX report_x_idx ON report (x)"],
+        diff=[
+            'DROP MATERIALIZED VIEW "public"."report"',
+            'CREATE MATERIALIZED VIEW "public"."report" AS SELECT 2 AS x WITH NO DATA',
+            "CREATE INDEX report_x_idx ON public.report USING btree (x)",
+        ],
     )
 
 

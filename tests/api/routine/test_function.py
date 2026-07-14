@@ -23,9 +23,11 @@ def test_function_drop(gen_setup: GenerateSetup) -> None:
     """
     Function present in source but missing in target -> DROP ROUTINE with signature.
     """
-    gen_setup.src.execute("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$")
-
-    gen_setup.assert_migration_sql('DROP FUNCTION "public"."add"(a integer, b integer);')
+    gen_setup.assert_diff(
+        src=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
+        dst=[],
+        diff=['DROP FUNCTION "public"."add"(a integer, b integer)'],
+    )
 
 
 def test_function_body_change(gen_setup: GenerateSetup) -> None:
@@ -93,19 +95,22 @@ def test_procedure_drop(gen_setup: GenerateSetup) -> None:
     """
     A procedure present only in source is dropped via DROP PROCEDURE.
     """
-    gen_setup.src.execute("CREATE PROCEDURE noop() LANGUAGE sql AS $$SELECT 1$$")
-
-    gen_setup.assert_migration_sql('DROP PROCEDURE "public"."noop"();')
+    gen_setup.assert_diff(
+        src=["CREATE PROCEDURE noop() LANGUAGE sql AS $$SELECT 1$$"],
+        dst=[],
+        diff=['DROP PROCEDURE "public"."noop"()'],
+    )
 
 
 def test_function_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical function on both sides -> no migration SQL.
     """
-    gen_setup.src.execute("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$")
-    gen_setup.dst.execute("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        src=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
+        dst=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
+        diff=[],
+    )
 
 
 def test_function_comment_added(gen_setup: GenerateSetup) -> None:

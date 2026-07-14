@@ -7,48 +7,55 @@ def test_enum_create(gen_setup: GenerateSetup) -> None:
     """
     Enum present in target but missing in source -> CREATE TYPE ... AS ENUM.
     """
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-
-    gen_setup.assert_migration_sql("CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'ok', 'happy');")
+    gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        diff=["CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'ok', 'happy')"],
+    )
 
 
 def test_enum_drop(gen_setup: GenerateSetup) -> None:
     """
     Enum present in source but missing in target -> DROP TYPE.
     """
-    gen_setup.src.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-
-    gen_setup.assert_migration_sql('DROP TYPE "public"."mood";')
+    gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+        dst=[],
+        diff=['DROP TYPE "public"."mood"'],
+    )
 
 
 def test_enum_add_value_appended(gen_setup: GenerateSetup) -> None:
     """
     A value appended at the end -> ALTER TYPE ADD VALUE.
     """
-    gen_setup.src.execute("CREATE TYPE mood AS ENUM ('sad', 'ok')")
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-
-    gen_setup.assert_migration_sql('ALTER TYPE "public"."mood" ADD VALUE \'happy\';')
+    gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        diff=['ALTER TYPE "public"."mood" ADD VALUE \'happy\''],
+    )
 
 
 def test_enum_add_value_inserted(gen_setup: GenerateSetup) -> None:
     """
     A value inserted in the middle -> ALTER TYPE ADD VALUE ... BEFORE.
     """
-    gen_setup.src.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-
-    gen_setup.assert_migration_sql("ALTER TYPE \"public\".\"mood\" ADD VALUE 'ok' BEFORE 'happy';")
+    gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        diff=["ALTER TYPE \"public\".\"mood\" ADD VALUE 'ok' BEFORE 'happy'"],
+    )
 
 
 def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical enum on both sides -> no migration SQL.
     """
-    gen_setup.src.execute("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        diff=[],
+    )
 
 
 def test_enum_value_removal_unsupported(gen_setup: GenerateSetup) -> None:
@@ -77,14 +84,16 @@ def test_enum_typed_column_ordered_after_type(gen_setup: GenerateSetup) -> None:
     """
     A new enum and a new table with a column of that type: CREATE TYPE precedes CREATE TABLE.
     """
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.dst.execute("CREATE TABLE person (feeling mood)")
-
-    gen_setup.assert_migration_sql(
-        [
-            "CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'happy');",
-            'CREATE TABLE "public"."person" ("feeling" public.mood);',
-        ]
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            "CREATE TYPE mood AS ENUM ('sad', 'happy')",
+            "CREATE TABLE person (feeling mood)",
+        ],
+        diff=[
+            "CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'happy')",
+            'CREATE TABLE "public"."person" ("feeling" public.mood)',
+        ],
     )
 
 
@@ -92,14 +101,16 @@ def test_enum_create_with_comment(gen_setup: GenerateSetup) -> None:
     """
     Enum created on target with a comment -> CREATE TYPE then COMMENT ON TYPE.
     """
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.dst.execute("COMMENT ON TYPE mood IS 'feelings'")
-
-    gen_setup.assert_migration_sql(
-        [
-            "CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'happy');",
-            'COMMENT ON TYPE "public"."mood" IS \'feelings\';',
-        ]
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            "CREATE TYPE mood AS ENUM ('sad', 'happy')",
+            "COMMENT ON TYPE mood IS 'feelings'",
+        ],
+        diff=[
+            "CREATE TYPE \"public\".\"mood\" AS ENUM ('sad', 'happy')",
+            'COMMENT ON TYPE "public"."mood" IS \'feelings\'',
+        ],
     )
 
 

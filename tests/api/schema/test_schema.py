@@ -31,8 +31,8 @@ def test_schema_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a schema present on both sides -> COMMENT ON SCHEMA.
     """
-    gen_setup.src.execute("CREATE SCHEMA store")
-    gen_setup.dst.execute("CREATE SCHEMA store")
-    gen_setup.dst.execute("COMMENT ON SCHEMA store IS 'the store'")
-
-    gen_setup.assert_migration_sql("COMMENT ON SCHEMA \"store\" IS 'the store';")
+    gen_setup.assert_diff(
+        src=["CREATE SCHEMA store"],
+        dst=["CREATE SCHEMA store", "COMMENT ON SCHEMA store IS 'the store'"],
+        diff=["COMMENT ON SCHEMA \"store\" IS 'the store'"],
+    )

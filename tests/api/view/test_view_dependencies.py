@@ -32,14 +32,13 @@ def test_view_on_view_drop_ordering(gen_setup: GenerateSetup) -> None:
     """
     A view that reads another view is dropped before the view it reads.
     """
-    gen_setup.src.execute("CREATE VIEW base AS SELECT 1 AS x")
-    gen_setup.src.execute("CREATE VIEW derived AS SELECT x FROM base")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP VIEW "public"."derived";',
-            'DROP VIEW "public"."base";',
-        ]
+    gen_setup.assert_diff(
+        src=["CREATE VIEW base AS SELECT 1 AS x", "CREATE VIEW derived AS SELECT x FROM base"],
+        dst=[],
+        diff=[
+            'DROP VIEW "public"."derived"',
+            'DROP VIEW "public"."base"',
+        ],
     )
 
 

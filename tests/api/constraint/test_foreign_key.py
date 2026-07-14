@@ -90,19 +90,19 @@ def test_foreign_key_add_ordered_after_referenced_pk(gen_setup: GenerateSetup) -
     Creating referenced and referencing tables together: the referenced PRIMARY KEY
     is added before the FOREIGN KEY, and both come after the CREATE TABLEs.
     """
-    gen_setup.dst.execute("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
-    gen_setup.dst.execute("CREATE TABLE person (team_id integer)")
-    gen_setup.dst.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-
-    gen_setup.assert_migration_sql(
-        [
-            'CREATE TABLE "public"."person" ("team_id" integer);',
-            'CREATE TABLE "public"."team" ("id" integer NOT NULL);',
-            'ALTER TABLE "public"."team" ADD CONSTRAINT "team_pkey" PRIMARY KEY (id);',
-            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES public.team(id);',
-        ]
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            "CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))",
+            "CREATE TABLE person (team_id integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
+        ],
+        diff=[
+            'CREATE TABLE "public"."person" ("team_id" integer)',
+            'CREATE TABLE "public"."team" ("id" integer NOT NULL)',
+            'ALTER TABLE "public"."team" ADD CONSTRAINT "team_pkey" PRIMARY KEY (id)',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" FOREIGN KEY (team_id) REFERENCES public.team(id)',
+        ],
     )
 
 
@@ -110,18 +110,17 @@ def test_foreign_key_drop_ordered_before_referenced_table(gen_setup: GenerateSet
     """
     Dropping a referenced table: the FOREIGN KEY is dropped before the DROP TABLE.
     """
-    gen_setup.src.execute("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
-    gen_setup.src.execute("CREATE TABLE person (team_id integer)")
-    gen_setup.src.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-    gen_setup.dst.execute("CREATE TABLE person (team_id integer)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey";',
-            'DROP TABLE "public"."team";',
-        ]
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))",
+            "CREATE TABLE person (team_id integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
+        ],
+        dst=["CREATE TABLE person (team_id integer)"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
+            'DROP TABLE "public"."team"',
+        ],
     )
 
 
@@ -131,16 +130,16 @@ def test_foreign_key_dropped_with_its_own_table_before_referenced_table(gen_setu
     must be dropped before either DROP TABLE, otherwise Postgres rejects dropping the
     referenced table while the referencing table's constraint still depends on it.
     """
-    gen_setup.src.execute("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
-    gen_setup.src.execute("CREATE TABLE person (team_id integer)")
-    gen_setup.src.execute(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
-    )
-
-    gen_setup.assert_migration_sql(
-        [
-            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey";',
-            'DROP TABLE "public"."person";',
-            'DROP TABLE "public"."team";',
-        ]
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))",
+            "CREATE TABLE person (team_id integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
+        ],
+        dst=[],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
+            'DROP TABLE "public"."person"',
+            'DROP TABLE "public"."team"',
+        ],
     )

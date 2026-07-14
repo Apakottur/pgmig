@@ -301,14 +301,13 @@ def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> No
     must run after DROP TABLE -- dropping the extension first fails because the table's
     column still depends on it ("other objects depend on it").
     """
-    gen_setup.src.execute("CREATE EXTENSION citext")
-    gen_setup.src.execute("CREATE TABLE u (e citext)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP TABLE "public"."u";',
-            'DROP EXTENSION "citext";',
-        ]
+    gen_setup.assert_diff(
+        src=["CREATE EXTENSION citext", "CREATE TABLE u (e citext)"],
+        dst=[],
+        diff=[
+            'DROP TABLE "public"."u"',
+            'DROP EXTENSION "citext"',
+        ],
     )
 
 
