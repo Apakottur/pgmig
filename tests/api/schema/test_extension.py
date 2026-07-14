@@ -1,30 +1,21 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-from psycopg import sql
-
 from pgmig import generate
 from tests.api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import DbConnection
 
 
-def _create_extension(
-    conn: DbConnection,
-    name: str,
-    *,
-    version: str | None = None,
-    schema: str | None = None,
-) -> None:
+def _create_extension(name: str, *, version: str | None = None, schema: str | None = None) -> str:
     """
-    Install an extension, optionally pinning its version and/or schema.
+    Build a CREATE EXTENSION statement, optionally pinning its version and/or schema.
     """
-    stmt = sql.SQL("CREATE EXTENSION {name}").format(name=sql.Identifier(name))
+    stmt = f"CREATE EXTENSION {name}"
     if version is not None:
-        stmt += sql.SQL(" VERSION {version}").format(version=sql.Literal(version))
+        stmt += f" VERSION '{version}'"
     if schema is not None:
-        stmt += sql.SQL(" SCHEMA {schema}").format(schema=sql.Identifier(schema))
-
-    conn.execute(stmt)
+        stmt += f" SCHEMA {schema}"
+    return stmt
 
 
 @dataclass(frozen=True)
@@ -101,12 +92,10 @@ def test_extension_create(gen_setup: GenerateSetup) -> None:
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    # Install the extension on the target only.
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
-
-    # Verify migration.
-    gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
+    gen_setup.assert_diff(
+        src=[],
+        dst=[_create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema)],
+        diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
@@ -121,18 +110,19 @@ def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     same pg_depend deptype='e' membership PostGIS relies on -- no PostGIS image needed.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
     # A table with a primary key and a secondary index. Extension membership is
     # recorded on the table; the constraint and index are excluded because their
     # owning table is extension-owned, exercising all three query exclusions.
-    gen_setup.dst.execute("CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY, name text)")
-    gen_setup.dst.execute("CREATE INDEX spatial_ref_sys_name_idx ON spatial_ref_sys (name)")
-    ext = sql.Identifier(ext_info.name)
-    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD TABLE spatial_ref_sys").format(ext=ext))
-
-    gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
+            "CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY, name text)",
+            "CREATE INDEX spatial_ref_sys_name_idx ON spatial_ref_sys (name)",
+            f"ALTER EXTENSION {ext_info.name} ADD TABLE spatial_ref_sys",
+        ],
+        diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
@@ -147,20 +137,19 @@ def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None
     expected; the trigger itself stays user-owned and is the object exercising the bug.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
-    gen_setup.dst.execute("CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY, name text)")
-    gen_setup.dst.execute("CREATE FUNCTION spatial_audit() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'")
-    gen_setup.dst.execute(
-        "CREATE TRIGGER spatial_audit_trg BEFORE INSERT ON spatial_ref_sys "
-        "FOR EACH ROW EXECUTE FUNCTION spatial_audit()"
-    )
-    ext = sql.Identifier(ext_info.name)
-    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD TABLE spatial_ref_sys").format(ext=ext))
-    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD FUNCTION spatial_audit()").format(ext=ext))
-
-    gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
+            "CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY, name text)",
+            "CREATE FUNCTION spatial_audit() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'",
+            "CREATE TRIGGER spatial_audit_trg BEFORE INSERT ON spatial_ref_sys "
+            "FOR EACH ROW EXECUTE FUNCTION spatial_audit()",
+            f"ALTER EXTENSION {ext_info.name} ADD TABLE spatial_ref_sys",
+            f"ALTER EXTENSION {ext_info.name} ADD FUNCTION spatial_audit()",
+        ],
+        diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
@@ -171,15 +160,16 @@ def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> No
     namespace-level exclusion or the loader raises KeyError on the missing schema.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
-    gen_setup.dst.execute("CREATE SCHEMA ext_schema")
-    ext = sql.Identifier(ext_info.name)
-    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SCHEMA ext_schema").format(ext=ext))
-    gen_setup.dst.execute("CREATE FUNCTION ext_schema.helper() RETURNS integer LANGUAGE sql AS 'SELECT 1'")
-
-    gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
+            "CREATE SCHEMA ext_schema",
+            f"ALTER EXTENSION {ext_info.name} ADD SCHEMA ext_schema",
+            "CREATE FUNCTION ext_schema.helper() RETURNS integer LANGUAGE sql AS 'SELECT 1'",
+        ],
+        diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
@@ -190,15 +180,16 @@ def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
     exclusion or the loader raises KeyError on the missing schema.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
-    gen_setup.dst.execute("CREATE SCHEMA ext_schema")
-    ext = sql.Identifier(ext_info.name)
-    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SCHEMA ext_schema").format(ext=ext))
-    gen_setup.dst.execute("CREATE TYPE ext_schema.mood AS ENUM ('happy', 'sad')")
-
-    gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
+            "CREATE SCHEMA ext_schema",
+            f"ALTER EXTENSION {ext_info.name} ADD SCHEMA ext_schema",
+            "CREATE TYPE ext_schema.mood AS ENUM ('happy', 'sad')",
+        ],
+        diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
@@ -209,14 +200,15 @@ def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> Non
     schema and is not column-owned, so only sequences.sql's self-leg exclusion can drop it.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
-    gen_setup.dst.execute("CREATE SEQUENCE ext_seq")
-    ext = sql.Identifier(ext_info.name)
-    gen_setup.dst.execute(sql.SQL("ALTER EXTENSION {ext} ADD SEQUENCE ext_seq").format(ext=ext))
-
-    gen_setup.assert_migration_sql(
-        f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE;'
+    gen_setup.assert_diff(
+        src=[],
+        dst=[
+            _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
+            "CREATE SEQUENCE ext_seq",
+            f"ALTER EXTENSION {ext_info.name} ADD SEQUENCE ext_seq",
+        ],
+        diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
@@ -226,26 +218,24 @@ def test_extension_drop(gen_setup: GenerateSetup) -> None:
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    # Install the extension on the source only.
-    _create_extension(gen_setup.src, ext_info.name)
-
-    # Verify migration.
-    gen_setup.assert_migration_sql(f'DROP EXTENSION "{ext_info.name}";')
+    gen_setup.assert_diff(
+        src=[_create_extension(ext_info.name)],
+        dst=[],
+        diff=[f'DROP EXTENSION "{ext_info.name}"'],
+    )
 
 
 def test_extension_version_update(gen_setup: GenerateSetup) -> None:
     """
     Extension present in both but with different versions -> ALTER EXTENSION UPDATE.
     """
-    # Pick an extension exposing multiple versions.
     ext_info = _pick_multi_version_extension(gen_setup.src)
 
-    # Install the old version on the source and the new version on the target.
-    _create_extension(gen_setup.src, ext_info.name, version=ext_info.min_version)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.max_version)
-
-    # Verify migration.
-    gen_setup.assert_migration_sql(f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}';")
+    gen_setup.assert_diff(
+        src=[_create_extension(ext_info.name, version=ext_info.min_version)],
+        dst=[_create_extension(ext_info.name, version=ext_info.max_version)],
+        diff=[f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}'"],
+    )
 
 
 def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: GenerateSetup) -> None:
@@ -253,8 +243,8 @@ def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: Gen
     A list naming the extension suppresses only that extension's version update.
     """
     ext_info = _pick_multi_version_extension(gen_setup.src)
-    _create_extension(gen_setup.src, ext_info.name, version=ext_info.min_version)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.max_version)
+    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))  # ty: ignore[invalid-argument-type]
+    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))  # ty: ignore[invalid-argument-type]
 
     sql_out = generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name])
 
@@ -266,8 +256,8 @@ def test_ignore_extension_version_list_non_matching_still_updates(gen_setup: Gen
     A list that does not name the extension leaves its version update in place.
     """
     ext_info = _pick_multi_version_extension(gen_setup.src)
-    _create_extension(gen_setup.src, ext_info.name, version=ext_info.min_version)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.max_version)
+    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))  # ty: ignore[invalid-argument-type]
+    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))  # ty: ignore[invalid-argument-type]
 
     sql_out = generate(
         source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=["some_other_extension"]
@@ -282,17 +272,13 @@ def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    # Create the target schema on both sides so only the extension move is diffed.
-    other_schema_name = "other"
-    create_schema = sql.SQL("CREATE SCHEMA {name}").format(name=sql.Identifier(other_schema_name))
-    gen_setup.execute_both(create_schema)
-
-    # src - install in default schema, dst - install in the new schema.
-    _create_extension(gen_setup.src, ext_info.name)
-    _create_extension(gen_setup.dst, ext_info.name, schema=other_schema_name)
-
-    # Verify migration.
-    gen_setup.assert_migration_sql(f'ALTER EXTENSION "{ext_info.name}" SET SCHEMA "{other_schema_name}";')
+    gen_setup.assert_diff(
+        # Create the target schema on both sides so only the extension move is diffed.
+        both=["CREATE SCHEMA other"],
+        src=[_create_extension(ext_info.name)],
+        dst=[_create_extension(ext_info.name, schema="other")],
+        diff=[f'ALTER EXTENSION "{ext_info.name}" SET SCHEMA "other"'],
+    )
 
 
 def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> None:
@@ -318,8 +304,10 @@ def test_extension_comment_changed(gen_setup: GenerateSetup) -> None:
     comments are only synced for the present-on-both case.)
     """
     ext_info = _get_installable_extension(gen_setup.dst)
-    _create_extension(gen_setup.src, ext_info.name, version=ext_info.version, schema=ext_info.schema)
-    _create_extension(gen_setup.dst, ext_info.name, version=ext_info.version, schema=ext_info.schema)
-    gen_setup.dst.execute(sql.SQL("COMMENT ON EXTENSION {name} IS 'custom'").format(name=sql.Identifier(ext_info.name)))
+    create = _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
-    gen_setup.assert_migration_sql(f"COMMENT ON EXTENSION \"{ext_info.name}\" IS 'custom';")
+    gen_setup.assert_diff(
+        src=[create],
+        dst=[create, f"COMMENT ON EXTENSION {ext_info.name} IS 'custom'"],
+        diff=[f"COMMENT ON EXTENSION \"{ext_info.name}\" IS 'custom'"],
+    )
