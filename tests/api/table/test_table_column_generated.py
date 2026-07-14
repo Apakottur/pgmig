@@ -56,6 +56,23 @@ def test_stored_generated_column_dropped(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_stored_generated_column_type_change_omits_using(gen_setup: GenerateSetup) -> None:
+    """
+    A stored generated column whose own type changes (same generation expression) is altered
+    with ALTER COLUMN ... TYPE and NO USING clause. Postgres refuses `USING` when altering the
+    type of a generated column ("cannot specify USING when altering type of generated column"),
+    so the migration must omit it, then still converge on apply.
+    """
+    gen_setup.assert_diff(
+        src=["CREATE TABLE item (price numeric, qty integer, total numeric GENERATED ALWAYS AS (price * qty) STORED)"],
+        dst=[
+            "CREATE TABLE item (price numeric, qty integer, "
+            "total double precision GENERATED ALWAYS AS (price * qty) STORED)"
+        ],
+        diff=['ALTER TABLE "public"."item" ALTER COLUMN "total" TYPE double precision'],
+    )
+
+
 def test_generated_ness_change_raises(gen_setup: GenerateSetup) -> None:
     """
     A shared column that gains or loses its generated-ness is unsupported (Postgres has no
