@@ -1,4 +1,18 @@
+import pytest
+
+from pgmig import PgmigError, generate
 from tests.api.generate_setup import GenerateSetup
+
+
+def test_exclusion_constraint_raises_not_supported(gen_setup: GenerateSetup) -> None:
+    """
+    An EXCLUDE constraint (pg_constraint contype 'x') is not modelled yet and must raise
+    rather than be silently dropped by the constraint query's contype filter.
+    """
+    gen_setup.dst.execute("CREATE TABLE room (during int4range, EXCLUDE USING gist (during WITH &&))")
+
+    with pytest.raises(PgmigError, match=r"exclusion constraint .* is not supported"):
+        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
 def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:

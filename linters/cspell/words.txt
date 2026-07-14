@@ -153,3 +153,7 @@ conparentid
 subpartition
 deparses
 timestamptz
+mysum
+sfunc
+stype
+initcond

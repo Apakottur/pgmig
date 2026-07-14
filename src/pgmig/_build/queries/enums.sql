@@ -2,12 +2,17 @@
 SELECT
     n.nspname AS schema_name,
     t.typname AS enum_name,
-    array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_values,
+    -- LEFT JOIN (not inner) so a member-less enum (CREATE TYPE ... AS ENUM ()) still
+    -- yields one row -- otherwise it produces no rows and is invisible to the diff,
+    -- silently claiming convergence while the whole type is missing (same phantom-row
+    -- hazard tables.sql solves for zero-column tables). FILTER drops the LEFT JOIN's
+    -- NULL placeholder, and COALESCE turns the empty group into an empty array.
+    COALESCE(array_agg(e.enumlabel ORDER BY e.enumsortorder) FILTER (WHERE e.enumlabel IS NOT NULL), ARRAY[]::text[]) AS enum_values,
     obj_description(t.oid, 'pg_type') AS enum_comment
 FROM
     pg_type t
     JOIN pg_namespace n ON n.oid = t.typnamespace
-    JOIN pg_enum e ON e.enumtypid = t.oid
+    LEFT JOIN pg_enum e ON e.enumtypid = t.oid
 WHERE
     t.typtype = 'e'
     AND n.nspname NOT LIKE 'pg_%'
