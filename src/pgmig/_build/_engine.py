@@ -65,8 +65,6 @@ def build_db_info(dsn: str) -> DbInfo:
         conn = psycopg.connect(
             dsn,
             options=(
-                # The database is read-only, so we can avoid unnecessary writes.
-                "-c default_transaction_read_only=on"
                 # REPEATABLE READ takes a single catalog snapshot at the first query and holds it for
                 # the whole transaction, so all loaders below see one frozen instant. Without it, each
                 # statement gets its own snapshot (READ COMMITTED), and concurrent DDL between loaders
@@ -81,6 +79,9 @@ def build_db_info(dsn: str) -> DbInfo:
         )
     except psycopg.Error as error:
         raise PgmigError(f"Could not connect to database: {error}") from error
+
+    # Force all subsequent transactions to be read-only.
+    conn.read_only = True
 
     with conn:
         # Run every guard first and collect all findings, so a database with several
