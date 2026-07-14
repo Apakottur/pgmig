@@ -135,6 +135,7 @@ class Phase(Enum):
     COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
     VIEW_CREATE = auto()  # After the tables/functions a view/matview reads from exist.
+    MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in VIEW_CREATE.
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
