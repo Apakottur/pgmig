@@ -21,17 +21,14 @@ def test_view_over_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None
     type change leaves the view definition unchanged, so only the view-on-column edge drags
     the view into the recreate set.
     """
-    gen_setup.src.execute("CREATE TABLE t (id int, val integer)")
-    gen_setup.src.execute("CREATE VIEW v AS SELECT val FROM t")
-    gen_setup.dst.execute("CREATE TABLE t (id int, val bigint)")
-    gen_setup.dst.execute("CREATE VIEW v AS SELECT val FROM t")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP VIEW "public"."v";',
-            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;',
-            f'CREATE VIEW "public"."v" AS {_view_body(gen_setup, "val", "t", "public.t")};',
-        ]
+    gen_setup.assert_diff(
+        src=["CREATE TABLE t (id int, val integer)", "CREATE VIEW v AS SELECT val FROM t"],
+        dst=["CREATE TABLE t (id int, val bigint)", "CREATE VIEW v AS SELECT val FROM t"],
+        diff=[
+            'DROP VIEW "public"."v"',
+            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
+            f'CREATE VIEW "public"."v" AS {_view_body(gen_setup, "val", "t", "public.t")}',
+        ],
     )
 
 
@@ -41,20 +38,24 @@ def test_view_on_view_over_retyped_column_cascades(gen_setup: GenerateSetup) -> 
     transitively reads that view. Neither view's definition changes, so the whole recreate
     set comes from the column edge plus the view-on-view closure.
     """
-    for db in (gen_setup.src, gen_setup.dst):
-        col_type = "integer" if db is gen_setup.src else "bigint"
-        db.execute(f"CREATE TABLE t (val {col_type})")
-        db.execute("CREATE VIEW base AS SELECT val FROM t")
-        db.execute("CREATE VIEW derived AS SELECT val FROM base")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP VIEW "public"."derived";',
-            'DROP VIEW "public"."base";',
-            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;',
-            f'CREATE VIEW "public"."base" AS {_view_body(gen_setup, "val", "t", "public.t")};',
-            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "val", "base", "public.base")};',
-        ]
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE t (val integer)",
+            "CREATE VIEW base AS SELECT val FROM t",
+            "CREATE VIEW derived AS SELECT val FROM base",
+        ],
+        dst=[
+            "CREATE TABLE t (val bigint)",
+            "CREATE VIEW base AS SELECT val FROM t",
+            "CREATE VIEW derived AS SELECT val FROM base",
+        ],
+        diff=[
+            'DROP VIEW "public"."derived"',
+            'DROP VIEW "public"."base"',
+            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
+            f'CREATE VIEW "public"."base" AS {_view_body(gen_setup, "val", "t", "public.t")}',
+            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "val", "base", "public.base")}',
+        ],
     )
 
 
@@ -76,17 +77,22 @@ def test_view_over_retyped_column_cross_schema(gen_setup: GenerateSetup) -> None
     The view-on-column recreate spans schemas: a view in one schema reading a retyped column
     of a table in another is dropped and recreated around the alter.
     """
-    for db in (gen_setup.src, gen_setup.dst):
-        col_type = "integer" if db is gen_setup.src else "bigint"
-        db.execute("CREATE SCHEMA data")
-        db.execute("CREATE SCHEMA api")
-        db.execute(f"CREATE TABLE data.t (val {col_type})")
-        db.execute("CREATE VIEW api.v AS SELECT val FROM data.t")
-
-    gen_setup.assert_migration_sql(
-        [
-            'DROP VIEW "api"."v";',
-            'ALTER TABLE "data"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint;',
-            f'CREATE VIEW "api"."v" AS {_view_body(gen_setup, "val", "t", "data.t")};',
-        ]
+    gen_setup.assert_diff(
+        src=[
+            "CREATE SCHEMA data",
+            "CREATE SCHEMA api",
+            "CREATE TABLE data.t (val integer)",
+            "CREATE VIEW api.v AS SELECT val FROM data.t",
+        ],
+        dst=[
+            "CREATE SCHEMA data",
+            "CREATE SCHEMA api",
+            "CREATE TABLE data.t (val bigint)",
+            "CREATE VIEW api.v AS SELECT val FROM data.t",
+        ],
+        diff=[
+            'DROP VIEW "api"."v"',
+            'ALTER TABLE "data"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
+            f'CREATE VIEW "api"."v" AS {_view_body(gen_setup, "val", "t", "data.t")}',
+        ],
     )

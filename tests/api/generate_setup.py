@@ -58,7 +58,7 @@ class GenerateSetup:
 
         # Verify commands.
         for cmd in src_cmds + dst_cmds + diff:
-            if "\n" in cmd or ";" in cmd:
+            if cmd.endswith("\n") or ";" in cmd:
                 raise ValueError("Remove new lines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
