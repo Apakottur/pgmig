@@ -7,7 +7,7 @@ dev = [
   "httpx==0.28.1",
   "mypy==2.2.0",
   "pre-commit==4.6.0",
-  "psycopg[binary]>=3.3.4",
+  "psycopg[binary]==3.3.4",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest==9.1.1",
@@ -40,15 +40,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
-dependencies = [
-  #
-  # Bare psycopg: pgmig is importable as a library, so the application picks the psycopg
-  # implementation (psycopg[binary], psycopg[c], or a system libpq). See the `binary` extra
-  # below and the README for the CLI install story.
-  "psycopg>=3.3.4",
-  "pydantic>=2",
-  "typer>=0.12",
-]
+dependencies = ["psycopg>=3.3.4", "pydantic>=2", "typer>=0.12"]
 
 [project.optional-dependencies]
 # For CLI / standalone use (`pip install pgmig[binary]`, `uvx pgmig[binary]`): pull in the
