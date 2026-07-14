@@ -1,5 +1,3 @@
-import pytest
-
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -130,9 +128,10 @@ def test_function_drop_with_dependent_unsupported(gen_setup: GenerateSetup) -> N
     drop ordering is not implemented): raise NotImplementedError rather than emit an
     invalid migration that DROP FUNCTION-before-DROP DEFAULT.
     """
-    gen_setup.src.execute("CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$")
-    gen_setup.src.execute("CREATE TABLE t (x integer DEFAULT f())")
-    gen_setup.dst.execute("CREATE TABLE t (x integer)")
-
-    with pytest.raises(NotImplementedError):
-        gen_setup.assert_migration_sql("")
+    gen_setup.assert_not_implemented(
+        src=[
+            "CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
+            "CREATE TABLE t (x integer DEFAULT f())",
+        ],
+        dst=["CREATE TABLE t (x integer)"],
+    )

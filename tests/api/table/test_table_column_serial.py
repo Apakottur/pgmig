@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import generate
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -100,8 +97,8 @@ def test_serial_change_in_alter_path_raises(gen_setup: GenerateSetup) -> None:
     excluded from introspection and never created -> apply fails "relation does not
     exist". It must raise instead.
     """
-    gen_setup.src.execute("CREATE TABLE person (id integer)")
-    gen_setup.dst.execute("CREATE TABLE person (id serial)")
-
-    with pytest.raises(NotImplementedError, match="serial change"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_not_implemented(
+        src=["CREATE TABLE person (id integer)"],
+        dst=["CREATE TABLE person (id serial)"],
+        match="serial change",
+    )

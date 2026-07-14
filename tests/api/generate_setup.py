@@ -98,6 +98,7 @@ class GenerateSetup:
         src: list[str],
         dst: list[str],
         both: list[str] | None = None,
+        match: str | None = None,
     ) -> None:
         """
         Set up both databases and assert that generating the migration raises
@@ -107,6 +108,7 @@ class GenerateSetup:
             src: statements to run on the source database only.
             dst: statements to run on the target database only.
             both: statements to run on both databases.
+            match: optional regex the raised error message must match.
         """
         # Shared setup runs on both DBs, before the side-specific statements.
         src = (both or []) + src
@@ -122,7 +124,7 @@ class GenerateSetup:
         self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
 
         # Generating the migration must refuse the unsupported change.
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotImplementedError, match=match):
             generate(source=self.src.dsn, target=self.dst.dsn)
 
     def assert_migration_sql(

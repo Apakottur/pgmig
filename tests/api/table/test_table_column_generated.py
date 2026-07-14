@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import generate
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -64,11 +61,11 @@ def test_generated_ness_change_raises(gen_setup: GenerateSetup) -> None:
     A shared column that gains or loses its generated-ness is unsupported (Postgres has no
     in-place ADD GENERATED); the tool must fail loudly rather than mis-diff.
     """
-    gen_setup.src.execute("CREATE TABLE item (b integer, c integer)")
-    gen_setup.dst.execute("CREATE TABLE item (b integer, c integer GENERATED ALWAYS AS (b) STORED)")
-
-    with pytest.raises(NotImplementedError, match="generated change"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_not_implemented(
+        src=["CREATE TABLE item (b integer, c integer)"],
+        dst=["CREATE TABLE item (b integer, c integer GENERATED ALWAYS AS (b) STORED)"],
+        match="generated change",
+    )
 
 
 def test_generation_expression_change_raises(gen_setup: GenerateSetup) -> None:
@@ -76,8 +73,8 @@ def test_generation_expression_change_raises(gen_setup: GenerateSetup) -> None:
     A stored generated column whose expression changes is unsupported (no in-place
     expression ALTER pre-PG18); it must raise rather than mis-diff.
     """
-    gen_setup.src.execute("CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) STORED)")
-    gen_setup.dst.execute("CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 3) STORED)")
-
-    with pytest.raises(NotImplementedError, match="generated change"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_not_implemented(
+        src=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) STORED)"],
+        dst=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 3) STORED)"],
+        match="generated change",
+    )

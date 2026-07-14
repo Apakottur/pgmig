@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import generate
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -222,20 +219,20 @@ def test_partitioned_table_key_change_raises(gen_setup: GenerateSetup) -> None:
     Changing the partition key/strategy is impossible in place; refuse loudly rather than
     emit a data-destructive DROP + CREATE.
     """
-    gen_setup.src.execute("CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)")
-    gen_setup.dst.execute("CREATE TABLE events (id integer, region text) PARTITION BY LIST (region)")
-
-    with pytest.raises(NotImplementedError, match=r"Partition key/strategy change is not supported"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_not_implemented(
+        src=["CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)"],
+        dst=["CREATE TABLE events (id integer, region text) PARTITION BY LIST (region)"],
+        match=r"Partition key/strategy change is not supported",
+    )
 
 
 def test_partitioned_table_bound_change_raises(gen_setup: GenerateSetup) -> None:
     """
     Changing a partition's bound (same parent) is impossible in place; refuse loudly.
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer) PARTITION BY RANGE (id)")
-    gen_setup.src.execute("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-    gen_setup.dst.execute("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (200)")
-
-    with pytest.raises(NotImplementedError, match=r"Partition bound change is not supported"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_not_implemented(
+        both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
+        src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
+        dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (200)"],
+        match=r"Partition bound change is not supported",
+    )

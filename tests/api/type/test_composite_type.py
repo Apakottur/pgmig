@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import generate
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -43,11 +40,11 @@ def test_composite_type_field_change_raises(gen_setup: GenerateSetup) -> None:
     A field-level change on a type present in both sides is not supported yet (ALTER TYPE
     deferred) -> NotImplementedError.
     """
-    gen_setup.src.execute("CREATE TYPE pair AS (a integer, b integer)")
-    gen_setup.dst.execute("CREATE TYPE pair AS (a integer, b bigint)")
-
-    with pytest.raises(NotImplementedError, match="Composite type field change is not supported"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_not_implemented(
+        src=["CREATE TYPE pair AS (a integer, b integer)"],
+        dst=["CREATE TYPE pair AS (a integer, b bigint)"],
+        match="Composite type field change is not supported",
+    )
 
 
 def test_composite_type_comment(gen_setup: GenerateSetup) -> None:
