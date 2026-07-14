@@ -1,7 +1,8 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
-from pgmig._models import MaterializedView
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs, retyped_column_refs
+from pgmig._models import MaterializedView, ViewKey
 from pgmig._sql import comment_on, qualified
 
 
@@ -26,13 +27,25 @@ def generate() -> Iterator[Statement]:
     functions a matview reads from exist; drops run before those objects are dropped. A changed
     definition is a drop-and-recreate (there is no CREATE OR REPLACE MATERIALIZED VIEW). Creates
     use WITH NO DATA: the matview is created unpopulated and the user runs REFRESH themselves.
+
+    A matview reading a table column whose type changes is also dropped-and-recreated: Postgres
+    refuses ALTER COLUMN ... TYPE while a matview reads the column, and the type change leaves
+    the matview definition unchanged, so only the matview-on-column edge catches it. The drop
+    lands in VIEW_DROP (before the TABLE-phase change) and the recreate in VIEW_CREATE (after).
+    Matviews cannot depend on other managed views/matviews (that pairing is refused upstream),
+    so each matview is independent -- no transitive cascade is needed.
     """
+    # Matviews reading a column whose type changes between source and target. Source-side
+    # identity: the column and the matview reading it both exist in the source.
+    retyped_columns = retyped_column_refs()
+    column_readers = {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
+
     for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_views = src_schema.materialized_view_by_name if src_schema else {}
         dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
 
-        # Matviews recreated (definition changed): the drop resets the comment, so it must
-        # be re-emitted even when unchanged.
+        # Matviews recreated (definition changed, or reading a retyped column): the drop resets
+        # the comment, so it must be re-emitted even when unchanged.
         recreated: set[str] = set()
         for name in sorted(src_views.keys() | dst_views.keys()):
             src_view = src_views.get(name)
@@ -48,8 +61,10 @@ def generate() -> Iterator[Statement]:
             # Present in source only: drop it.
             elif dst_view is None:
                 yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
-            # Present in both with a changed definition: drop and recreate.
-            elif src_view.definition != dst_view.definition:
+            # Present in both with a changed definition, or reading a retyped column: drop and
+            # recreate. A type change leaves the definition unchanged, so the column edge is the
+            # only signal in that case.
+            elif src_view.definition != dst_view.definition or ViewKey(schema_name, name) in column_readers:
                 yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
                 yield Statement(
                     Phase.VIEW_CREATE,
