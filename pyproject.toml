@@ -5,16 +5,16 @@ requires = ["hatchling", "hatch-vcs"]
 [dependency-groups]
 dev = [
   "httpx==0.28.1",
-  "mypy==2.2.0",
+  "mypy==2.3.0",
   "pre-commit==4.6.0",
-  "psycopg[binary]==3.3.4",
+  "psycopg==3.3.4",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest==9.1.1",
   "ruff==0.15.21",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.58",
+  "ty==0.0.59",
   "typing-extensions==4.16.0",
 ]
 
