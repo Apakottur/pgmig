@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
+from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_child_comment_statements, diff_renamable
 from pgmig._models import Constraint
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import ident, qualified
 
 
 def _diff_constraints(
@@ -23,27 +23,6 @@ def _diff_constraints(
     )
 
 
-def _constraint_comment_statements(
-    schema_name: str,
-    table_name: str,
-    src: dict[str, Constraint],
-    dst: dict[str, Constraint],
-    recreated: set[str],
-    renamed_from: dict[str, str],
-) -> list[str]:
-    """
-    Emit COMMENT ON CONSTRAINT for target constraints whose comment differs from source.
-    """
-    table = qualified(schema_name, table_name)
-    return _diff_comments(
-        src,
-        dst,
-        render=lambda name, constraint: comment_on("CONSTRAINT", f"{ident(name)} ON {table}", constraint.comment),
-        recreated=recreated,
-        renamed_from=renamed_from,
-    )
-
-
 def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
@@ -61,8 +40,14 @@ def generate() -> Iterator[Statement]:
             src=src_constraints,
             dst=dst_constraints,
         )
-        comments = _constraint_comment_statements(
-            schema_name, table_name, src_constraints, dst_constraints, recreated, renamed_from
+        comments = diff_child_comment_statements(
+            schema_name,
+            table_name,
+            src_constraints,
+            dst_constraints,
+            kind="CONSTRAINT",
+            recreated=recreated,
+            renamed_from=renamed_from,
         )
         # Drops first (frees names), then renames, then adds, then comments.
         for sql in (*drops, *renames, *adds, *comments):
@@ -90,6 +75,8 @@ def generate_foreign_keys() -> Iterator[Statement]:
         for sql in drops:
             yield Statement(Phase.FOREIGN_KEY_DROP, sql)
         # Renames carry no referenced-object dependency, so they ride with the adds.
-        comments = _constraint_comment_statements(schema_name, table_name, src_fks, dst_fks, recreated, renamed_from)
+        comments = diff_child_comment_statements(
+            schema_name, table_name, src_fks, dst_fks, kind="CONSTRAINT", recreated=recreated, renamed_from=renamed_from
+        )
         for sql in (*renames, *adds, *comments):
             yield Statement(Phase.FOREIGN_KEY_ADD, sql)

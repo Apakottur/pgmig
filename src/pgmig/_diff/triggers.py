@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_renamable
+from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_child_comment_statements, diff_renamable
 from pgmig._models import Trigger
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import ident, qualified
 
 
 def _diff_triggers(
@@ -20,27 +20,6 @@ def _diff_triggers(
         render_drop=lambda name: f"DROP TRIGGER {ident(name)} ON {table};",
         render_rename=lambda old, new: f"ALTER TRIGGER {ident(old)} ON {table} RENAME TO {ident(new)};",
         render_create=lambda _name, trigger: f"{trigger.definition};",
-    )
-
-
-def _trigger_comment_statements(
-    schema_name: str,
-    table_name: str,
-    src: dict[str, Trigger],
-    dst: dict[str, Trigger],
-    recreated: set[str],
-    renamed_from: dict[str, str],
-) -> list[str]:
-    """
-    Emit COMMENT ON TRIGGER for target triggers whose comment differs from source.
-    """
-    table = qualified(schema_name, table_name)
-    return _diff_comments(
-        src,
-        dst,
-        render=lambda name, trigger: comment_on("TRIGGER", f"{ident(name)} ON {table}", trigger.comment),
-        recreated=recreated,
-        renamed_from=renamed_from,
     )
 
 
@@ -63,8 +42,14 @@ def generate() -> Iterator[Statement]:
             yield Statement(Phase.TRIGGER_DROP, sql)
         # Renames carry no function dependency, so they ride with the creates. Comments
         # follow, after the triggers they annotate exist.
-        comments = _trigger_comment_statements(
-            schema_name, table_name, src_triggers, dst_triggers, recreated, renamed_from
+        comments = diff_child_comment_statements(
+            schema_name,
+            table_name,
+            src_triggers,
+            dst_triggers,
+            kind="TRIGGER",
+            recreated=recreated,
+            renamed_from=renamed_from,
         )
         for sql in (*renames, *creates, *comments):
             yield Statement(Phase.TRIGGER_CREATE, sql)

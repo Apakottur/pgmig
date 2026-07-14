@@ -1,10 +1,10 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs, retyped_column_refs
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, retyped_column_refs
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo, View, ViewKey
-from pgmig._sql import comment_on, qualified
+from pgmig._sql import qualified
 
 _Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
 
@@ -51,19 +51,6 @@ def _topological_order(nodes: set[ViewKey], edges: _Edges) -> list[ViewKey]:
             f"view dependency cycle detected among: {', '.join(qualified(node.schema, node.name) for node in cyclic)}"
         )
     return order
-
-
-def _comment_statements(schema_name: str, src: dict[str, View], dst: dict[str, View], recreated: set[str]) -> list[str]:
-    """
-    COMMENT ON VIEW for target views whose comment differs from source. A recreated view
-    always re-emits (the drop-and-recreate reset its comment).
-    """
-    return _diff_comments(
-        src,
-        dst,
-        render=lambda name, view: comment_on("VIEW", qualified(schema_name, name), view.comment),
-        recreated=recreated,
-    )
 
 
 def _dependents_closure(seeds: set[ViewKey], edges: _Edges) -> set[ViewKey]:
@@ -139,5 +126,7 @@ def generate() -> Iterator[Statement]:
         src_schema_views = src_schema.view_by_name if src_schema else {}
         dst_schema_views = dst_schema.view_by_name if dst_schema else {}
         recreated_names = {key.name for key in recreate if key.schema == schema_name}
-        for sql in _comment_statements(schema_name, src_schema_views, dst_schema_views, recreated_names):
+        for sql in diff_comment_statements(
+            schema_name, src_schema_views, dst_schema_views, kind="VIEW", recreated=recreated_names
+        ):
             yield Statement(Phase.VIEW_CREATE, sql)

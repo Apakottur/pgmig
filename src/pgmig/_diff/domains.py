@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs, diff_renamable
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, diff_renamable
 from pgmig._models import Domain
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._sql import ident, qualified
 
 
 def _create_domain(qualified_name: str, domain: Domain) -> list[str]:
@@ -63,27 +63,13 @@ def _alter_domain(qualified_name: str, src: Domain, dst: Domain) -> list[str]:
     return statements
 
 
-def _domain_comment_statements(schema_name: str, src: dict[str, Domain], dst: dict[str, Domain]) -> list[str]:
-    """
-    Emit COMMENT ON DOMAIN for target domains whose comment differs from source.
-    """
-    return _diff_comments(
-        src, dst, render=lambda name, domain: comment_on("DOMAIN", qualified(schema_name, name), domain.comment)
-    )
-
-
 def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of domain types (create, drop, alter). Creates and alters
     are phased before tables (a column may be of the domain); drops run after.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_domains = src_schema.domain_by_name if src_schema else {}
-        dst_domains = dst_schema.domain_by_name if dst_schema else {}
-
-        for name in sorted(src_domains.keys() | dst_domains.keys()):
-            src_domain = src_domains.get(name)
-            dst_domain = dst_domains.get(name)
+    for schema_name, src_domains, dst_domains, pairs in ctx_iter_object_pairs(lambda schema: schema.domain_by_name):
+        for name, src_domain, dst_domain in pairs:
             qualified_name = qualified(schema_name, name)
 
             # Present in target only: create it.
@@ -99,5 +85,5 @@ def generate() -> Iterator[Statement]:
                     yield Statement(Phase.TYPE_CREATE, sql)
 
         # Sync comments for target domains, after the domains they annotate exist.
-        for sql in _domain_comment_statements(schema_name, src_domains, dst_domains):
+        for sql in diff_comment_statements(schema_name, src_domains, dst_domains, kind="DOMAIN"):
             yield Statement(Phase.TYPE_CREATE, sql)

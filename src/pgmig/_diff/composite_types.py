@@ -1,19 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
-from pgmig._models import CompositeType
-from pgmig._sql import comment_on, ident, qualified
-
-
-def _composite_comment_statements(
-    schema_name: str, src: dict[str, CompositeType], dst: dict[str, CompositeType]
-) -> list[str]:
-    """
-    Emit COMMENT ON TYPE for target composite types whose comment differs from source.
-    """
-    return _diff_comments(
-        src, dst, render=lambda name, ct: comment_on("TYPE", qualified(schema_name, name), ct.comment)
-    )
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._sql import ident, qualified
 
 
 def generate() -> Iterator[Statement]:
@@ -22,13 +10,8 @@ def generate() -> Iterator[Statement]:
     tables (a column may be of the type); drops run after. A field-level change on a type
     present in both sides is not supported yet (ALTER TYPE deferred) and raises.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_types = src_schema.composite_type_by_name if src_schema else {}
-        dst_types = dst_schema.composite_type_by_name if dst_schema else {}
-
-        for name in sorted(src_types.keys() | dst_types.keys()):
-            src_type = src_types.get(name)
-            dst_type = dst_types.get(name)
+    for schema_name, src_types, dst_types, pairs in ctx_iter_object_pairs(lambda schema: schema.composite_type_by_name):
+        for name, src_type, dst_type in pairs:
             qualified_name = qualified(schema_name, name)
 
             # Present in target only: create it.
@@ -46,5 +29,5 @@ def generate() -> Iterator[Statement]:
                 )
 
         # Sync comments for target composite types, after the types they annotate exist.
-        for sql in _composite_comment_statements(schema_name, src_types, dst_types):
+        for sql in diff_comment_statements(schema_name, src_types, dst_types, kind="TYPE"):
             yield Statement(Phase.TYPE_CREATE, sql)
