@@ -39,10 +39,12 @@ def test_table_column_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Identical column both sides, comment only on target -> COMMENT ON COLUMN.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("COMMENT ON COLUMN person.name IS 'full name'")
-
-    gen_setup.assert_migration_sql('COMMENT ON COLUMN "public"."person"."name" IS \'full name\';')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["COMMENT ON COLUMN person.name IS 'full name'"],
+        diff=['COMMENT ON COLUMN "public"."person"."name" IS \'full name\''],
+    )
 
 
 def test_table_column_comment_changed(gen_setup: GenerateSetup) -> None:
@@ -97,7 +99,9 @@ def test_table_column_comment_with_single_quote(gen_setup: GenerateSetup) -> Non
     """
     Column comment containing a single quote is escaped by doubling.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("COMMENT ON COLUMN person.name IS 'it''s a name'")
-
-    gen_setup.assert_migration_sql('COMMENT ON COLUMN "public"."person"."name" IS \'it\'\'s a name\';')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["COMMENT ON COLUMN person.name IS 'it''s a name'"],
+        diff=['COMMENT ON COLUMN "public"."person"."name" IS \'it\'\'s a name\''],
+    )

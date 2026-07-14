@@ -46,12 +46,11 @@ def test_table_column_type_varchar_to_enum(gen_setup: GenerateSetup) -> None:
     Varchar -> enum casts via USING col::enumtype; the enum type is fully qualified by the
     empty-search_path introspection.
     """
-    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-    gen_setup.src.execute("CREATE TABLE person (m varchar)")
-    gen_setup.dst.execute("CREATE TABLE person (m mood)")
-
-    gen_setup.assert_migration_sql(
-        'ALTER TABLE "public"."person" ALTER COLUMN "m" TYPE public.mood USING "m"::public.mood;'
+    gen_setup.assert_diff(
+        both=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        src=["CREATE TABLE person (m varchar)"],
+        dst=["CREATE TABLE person (m mood)"],
+        diff=['ALTER TABLE "public"."person" ALTER COLUMN "m" TYPE public.mood USING "m"::public.mood'],
     )
 
 
@@ -73,9 +72,12 @@ def test_table_column_type_unchanged_no_statement(gen_setup: GenerateSetup) -> N
     """
     A column with the same type on both sides emits nothing.
     """
-    gen_setup.execute_both("CREATE TABLE person (id integer)")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer)"],
+        src=[],
+        dst=[],
+        diff=[],
+    )
 
 
 def test_table_column_physical_order_preserved(gen_setup: GenerateSetup) -> None:
@@ -226,6 +228,9 @@ def test_table_column_attributes_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same type, nullability, and default on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE TABLE person (age integer NOT NULL DEFAULT 0)")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer NOT NULL DEFAULT 0)"],
+        src=[],
+        dst=[],
+        diff=[],
+    )

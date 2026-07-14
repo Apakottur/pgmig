@@ -22,10 +22,12 @@ def test_table_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Identical table both sides, comment only on target -> COMMENT ON TABLE.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("COMMENT ON TABLE person IS 'people'")
-
-    gen_setup.assert_migration_sql('COMMENT ON TABLE "public"."person" IS \'people\';')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["COMMENT ON TABLE person IS 'people'"],
+        diff=['COMMENT ON TABLE "public"."person" IS \'people\''],
+    )
 
 
 def test_table_comment_changed(gen_setup: GenerateSetup) -> None:
@@ -80,7 +82,9 @@ def test_table_comment_with_single_quote(gen_setup: GenerateSetup) -> None:
     """
     Comment containing a single quote is escaped by doubling.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("COMMENT ON TABLE person IS 'it''s people'")
-
-    gen_setup.assert_migration_sql("COMMENT ON TABLE \"public\".\"person\" IS 'it''s people';")
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["COMMENT ON TABLE person IS 'it''s people'"],
+        diff=["COMMENT ON TABLE \"public\".\"person\" IS 'it''s people'"],
+    )

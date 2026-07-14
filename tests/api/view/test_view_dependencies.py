@@ -108,7 +108,9 @@ def test_view_on_view_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical view-on-view chains on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE VIEW base AS SELECT 1 AS x")
-    gen_setup.execute_both("CREATE VIEW derived AS SELECT x FROM base")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE VIEW base AS SELECT 1 AS x", "CREATE VIEW derived AS SELECT x FROM base"],
+        src=[],
+        dst=[],
+        diff=[],
+    )

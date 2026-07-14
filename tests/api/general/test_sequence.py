@@ -131,16 +131,21 @@ def test_sequence_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical sequence on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5"],
+        src=[],
+        dst=[],
+        diff=[],
+    )
 
 
 def test_sequence_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a sequence present on both sides -> COMMENT ON SEQUENCE.
     """
-    gen_setup.execute_both("CREATE SEQUENCE counter")
-    gen_setup.dst.execute("COMMENT ON SEQUENCE counter IS 'the counter'")
-
-    gen_setup.assert_migration_sql('COMMENT ON SEQUENCE "public"."counter" IS \'the counter\';')
+    gen_setup.assert_diff(
+        both=["CREATE SEQUENCE counter"],
+        src=[],
+        dst=["COMMENT ON SEQUENCE counter IS 'the counter'"],
+        diff=['COMMENT ON SEQUENCE "public"."counter" IS \'the counter\''],
+    )

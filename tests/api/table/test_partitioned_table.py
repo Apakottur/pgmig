@@ -99,11 +99,11 @@ def test_partitioned_table_add_partition(gen_setup: GenerateSetup) -> None:
     """
     Parent on both sides, a new partition in target only -> CREATE ... PARTITION OF.
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer) PARTITION BY RANGE (id)")
-    gen_setup.dst.execute("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-
-    gen_setup.assert_migration_sql(
-        'CREATE TABLE "public"."events_2024" PARTITION OF "public"."events" FOR VALUES FROM (1) TO (100);'
+    gen_setup.assert_diff(
+        both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
+        src=[],
+        dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
+        diff=['CREATE TABLE "public"."events_2024" PARTITION OF "public"."events" FOR VALUES FROM (1) TO (100)'],
     )
 
 
@@ -112,22 +112,23 @@ def test_partitioned_table_remove_partition(gen_setup: GenerateSetup) -> None:
     Parent on both sides, a partition in source only (parent survives) -> DROP TABLE the
     partition.
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer) PARTITION BY RANGE (id)")
-    gen_setup.src.execute("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-
-    gen_setup.assert_migration_sql('DROP TABLE "public"."events_2024";')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
+        src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
+        dst=[],
+        diff=['DROP TABLE "public"."events_2024"'],
+    )
 
 
 def test_partitioned_table_attach(gen_setup: GenerateSetup) -> None:
     """
     A table that is standalone in source but a partition in target -> ATTACH PARTITION.
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer) PARTITION BY RANGE (id)")
-    gen_setup.src.execute("CREATE TABLE events_2024 (id integer)")
-    gen_setup.dst.execute("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-
-    gen_setup.assert_migration_sql(
-        'ALTER TABLE "public"."events" ATTACH PARTITION "public"."events_2024" FOR VALUES FROM (1) TO (100);'
+    gen_setup.assert_diff(
+        both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
+        src=["CREATE TABLE events_2024 (id integer)"],
+        dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
+        diff=['ALTER TABLE "public"."events" ATTACH PARTITION "public"."events_2024" FOR VALUES FROM (1) TO (100)'],
     )
 
 
@@ -136,11 +137,12 @@ def test_partitioned_table_detach(gen_setup: GenerateSetup) -> None:
     A table that is a partition in source but standalone in target -> DETACH PARTITION
     (the table itself survives).
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer) PARTITION BY RANGE (id)")
-    gen_setup.src.execute("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-    gen_setup.dst.execute("CREATE TABLE events_2024 (id integer)")
-
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."events" DETACH PARTITION "public"."events_2024";')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
+        src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
+        dst=["CREATE TABLE events_2024 (id integer)"],
+        diff=['ALTER TABLE "public"."events" DETACH PARTITION "public"."events_2024"'],
+    )
 
 
 def test_partitioned_table_reparent(gen_setup: GenerateSetup) -> None:
@@ -148,16 +150,17 @@ def test_partitioned_table_reparent(gen_setup: GenerateSetup) -> None:
     A partition attached to a different parent across the diff -> DETACH from the source
     parent, then ATTACH to the target parent.
     """
-    gen_setup.execute_both("CREATE TABLE p1 (id integer) PARTITION BY RANGE (id)")
-    gen_setup.execute_both("CREATE TABLE p2 (id integer) PARTITION BY RANGE (id)")
-    gen_setup.src.execute("CREATE TABLE part PARTITION OF p1 FOR VALUES FROM (1) TO (100)")
-    gen_setup.dst.execute("CREATE TABLE part PARTITION OF p2 FOR VALUES FROM (1) TO (100)")
-
-    gen_setup.assert_migration_sql(
-        [
-            'ALTER TABLE "public"."p1" DETACH PARTITION "public"."part";',
-            'ALTER TABLE "public"."p2" ATTACH PARTITION "public"."part" FOR VALUES FROM (1) TO (100);',
-        ]
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE p1 (id integer) PARTITION BY RANGE (id)",
+            "CREATE TABLE p2 (id integer) PARTITION BY RANGE (id)",
+        ],
+        src=["CREATE TABLE part PARTITION OF p1 FOR VALUES FROM (1) TO (100)"],
+        dst=["CREATE TABLE part PARTITION OF p2 FOR VALUES FROM (1) TO (100)"],
+        diff=[
+            'ALTER TABLE "public"."p1" DETACH PARTITION "public"."part"',
+            'ALTER TABLE "public"."p2" ATTACH PARTITION "public"."part" FOR VALUES FROM (1) TO (100)',
+        ],
     )
 
 
@@ -167,11 +170,15 @@ def test_partitioned_table_index_on_parent(gen_setup: GenerateSetup) -> None:
     cascades to partitions; the auto-created child mirror index is not re-emitted, so the
     migration converges.
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)")
-    gen_setup.execute_both("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-    gen_setup.dst.execute("CREATE INDEX events_region_idx ON events (region)")
-
-    gen_setup.assert_migration_sql("CREATE INDEX events_region_idx ON public.events USING btree (region);")
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)",
+            "CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)",
+        ],
+        src=[],
+        dst=["CREATE INDEX events_region_idx ON events (region)"],
+        diff=["CREATE INDEX events_region_idx ON public.events USING btree (region)"],
+    )
 
 
 def test_partitioned_table_primary_key_on_parent(gen_setup: GenerateSetup) -> None:
@@ -179,11 +186,15 @@ def test_partitioned_table_primary_key_on_parent(gen_setup: GenerateSetup) -> No
     A primary key declared on a partitioned parent is emitted once and cascades to
     partitions; the inherited child constraint is not re-emitted.
     """
-    gen_setup.execute_both("CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)")
-    gen_setup.execute_both("CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)")
-    gen_setup.dst.execute("ALTER TABLE events ADD CONSTRAINT events_pkey PRIMARY KEY (id)")
-
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."events" ADD CONSTRAINT "events_pkey" PRIMARY KEY (id);')
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)",
+            "CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)",
+        ],
+        src=[],
+        dst=["ALTER TABLE events ADD CONSTRAINT events_pkey PRIMARY KEY (id)"],
+        diff=['ALTER TABLE "public"."events" ADD CONSTRAINT "events_pkey" PRIMARY KEY (id)'],
+    )
 
 
 def test_partitioned_table_cross_schema(gen_setup: GenerateSetup) -> None:

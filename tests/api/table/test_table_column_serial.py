@@ -84,11 +84,11 @@ def test_identity_column_added_to_existing_table(gen_setup: GenerateSetup) -> No
     Adding an identity column to a table present on both sides emits ADD COLUMN with
     the identity clause inline.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("ALTER TABLE person ADD COLUMN id integer GENERATED ALWAYS AS IDENTITY")
-
-    gen_setup.assert_migration_sql(
-        'ALTER TABLE "public"."person" ADD COLUMN "id" integer GENERATED ALWAYS AS IDENTITY;'
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["ALTER TABLE person ADD COLUMN id integer GENERATED ALWAYS AS IDENTITY"],
+        diff=['ALTER TABLE "public"."person" ADD COLUMN "id" integer GENERATED ALWAYS AS IDENTITY'],
     )
 
 

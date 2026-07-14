@@ -47,9 +47,12 @@ def test_domain_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical domain on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE DOMAIN age AS integer DEFAULT 0 CONSTRAINT age_check CHECK (VALUE >= 0)")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE DOMAIN age AS integer DEFAULT 0 CONSTRAINT age_check CHECK (VALUE >= 0)"],
+        src=[],
+        dst=[],
+        diff=[],
+    )
 
 
 def test_domain_default_changed(gen_setup: GenerateSetup) -> None:

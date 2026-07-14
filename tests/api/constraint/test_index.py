@@ -5,10 +5,12 @@ def test_index_create(gen_setup: GenerateSetup) -> None:
     """
     Index present in target but missing in source -> CREATE INDEX.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql("CREATE INDEX person_name_idx ON public.person USING btree (name);")
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["CREATE INDEX person_name_idx ON person (name)"],
+        diff=["CREATE INDEX person_name_idx ON public.person USING btree (name)"],
+    )
 
 
 def test_index_drop(gen_setup: GenerateSetup) -> None:
@@ -83,21 +85,23 @@ def test_index_unique(gen_setup: GenerateSetup) -> None:
     """
     Unique index round-trips as CREATE UNIQUE INDEX.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE UNIQUE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql("CREATE UNIQUE INDEX person_name_idx ON public.person USING btree (name);")
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["CREATE UNIQUE INDEX person_name_idx ON person (name)"],
+        diff=["CREATE UNIQUE INDEX person_name_idx ON public.person USING btree (name)"],
+    )
 
 
 def test_index_partial(gen_setup: GenerateSetup) -> None:
     """
     Partial index (WHERE predicate) is created with its predicate.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name) WHERE name IS NOT NULL")
-
-    gen_setup.assert_migration_sql(
-        "CREATE INDEX person_name_idx ON public.person USING btree (name) WHERE (name IS NOT NULL);"
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["CREATE INDEX person_name_idx ON person (name) WHERE name IS NOT NULL"],
+        diff=["CREATE INDEX person_name_idx ON public.person USING btree (name) WHERE (name IS NOT NULL)"],
     )
 
 
@@ -156,33 +160,41 @@ def test_index_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to an index present on both sides -> COMMENT ON INDEX.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.execute_both("CREATE INDEX person_name_idx ON person (name)")
-    gen_setup.dst.execute("COMMENT ON INDEX person_name_idx IS 'by name'")
-
-    gen_setup.assert_migration_sql('COMMENT ON INDEX "public"."person_name_idx" IS \'by name\';')
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        src=[],
+        dst=["COMMENT ON INDEX person_name_idx IS 'by name'"],
+        diff=['COMMENT ON INDEX "public"."person_name_idx" IS \'by name\''],
+    )
 
 
 def test_index_comment_removed(gen_setup: GenerateSetup) -> None:
     """
     Comment removed from an index -> COMMENT ON INDEX ... IS NULL.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.execute_both("CREATE INDEX person_name_idx ON person (name)")
-    gen_setup.src.execute("COMMENT ON INDEX person_name_idx IS 'by name'")
-
-    gen_setup.assert_migration_sql('COMMENT ON INDEX "public"."person_name_idx" IS NULL;')
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE person (name text)",
+            "CREATE INDEX person_name_idx ON person (name)",
+        ],
+        src=["COMMENT ON INDEX person_name_idx IS 'by name'"],
+        dst=[],
+        diff=['COMMENT ON INDEX "public"."person_name_idx" IS NULL'],
+    )
 
 
 def test_index_create_concurrently(gen_setup: GenerateSetup) -> None:
     """
     With index_concurrently, a created index carries CONCURRENTLY.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql(
-        "CREATE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);",
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["CREATE INDEX person_name_idx ON person (name)"],
+        diff=["CREATE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name)"],
         index_concurrently=True,
     )
 
@@ -191,11 +203,11 @@ def test_index_create_unique_concurrently(gen_setup: GenerateSetup) -> None:
     """
     With index_concurrently, a created unique index carries CONCURRENTLY after UNIQUE.
     """
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE UNIQUE INDEX person_name_idx ON person (name)")
-
-    gen_setup.assert_migration_sql(
-        "CREATE UNIQUE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);",
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[],
+        dst=["CREATE UNIQUE INDEX person_name_idx ON person (name)"],
+        diff=["CREATE UNIQUE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name)"],
         index_concurrently=True,
     )
 

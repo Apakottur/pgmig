@@ -27,9 +27,12 @@ def test_view_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical view on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE VIEW active AS SELECT 1 AS x")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE VIEW active AS SELECT 1 AS x"],
+        src=[],
+        dst=[],
+        diff=[],
+    )
 
 
 def test_view_definition_change(gen_setup: GenerateSetup) -> None:

@@ -30,9 +30,12 @@ def test_composite_type_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical composite type on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE TYPE pair AS (a integer, b integer)")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE TYPE pair AS (a integer, b integer)"],
+        src=[],
+        dst=[],
+        diff=[],
+    )
 
 
 def test_composite_type_field_change_raises(gen_setup: GenerateSetup) -> None:

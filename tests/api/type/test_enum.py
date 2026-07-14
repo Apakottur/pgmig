@@ -118,38 +118,48 @@ def test_enum_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Identical enum both sides, comment only on target -> COMMENT ON TYPE.
     """
-    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.dst.execute("COMMENT ON TYPE mood IS 'feelings'")
-
-    gen_setup.assert_migration_sql('COMMENT ON TYPE "public"."mood" IS \'feelings\';')
+    gen_setup.assert_diff(
+        both=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+        src=[],
+        dst=["COMMENT ON TYPE mood IS 'feelings'"],
+        diff=['COMMENT ON TYPE "public"."mood" IS \'feelings\''],
+    )
 
 
 def test_enum_comment_changed(gen_setup: GenerateSetup) -> None:
     """
     Same enum both sides with differing comments -> COMMENT ON TYPE with target's.
     """
-    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.src.execute("COMMENT ON TYPE mood IS 'old'")
-    gen_setup.dst.execute("COMMENT ON TYPE mood IS 'new'")
-
-    gen_setup.assert_migration_sql('COMMENT ON TYPE "public"."mood" IS \'new\';')
+    gen_setup.assert_diff(
+        both=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+        src=["COMMENT ON TYPE mood IS 'old'"],
+        dst=["COMMENT ON TYPE mood IS 'new'"],
+        diff=['COMMENT ON TYPE "public"."mood" IS \'new\''],
+    )
 
 
 def test_enum_comment_removed(gen_setup: GenerateSetup) -> None:
     """
     Comment on source enum but none on target -> COMMENT ON TYPE ... IS NULL.
     """
-    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.src.execute("COMMENT ON TYPE mood IS 'feelings'")
-
-    gen_setup.assert_migration_sql('COMMENT ON TYPE "public"."mood" IS NULL;')
+    gen_setup.assert_diff(
+        both=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+        src=["COMMENT ON TYPE mood IS 'feelings'"],
+        dst=[],
+        diff=['COMMENT ON TYPE "public"."mood" IS NULL'],
+    )
 
 
 def test_enum_comment_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same enum and same comment on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.execute_both("COMMENT ON TYPE mood IS 'feelings'")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TYPE mood AS ENUM ('sad', 'happy')",
+            "COMMENT ON TYPE mood IS 'feelings'",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
+    )

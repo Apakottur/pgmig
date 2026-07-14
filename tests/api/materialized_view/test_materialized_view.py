@@ -30,9 +30,12 @@ def test_materialized_view_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical materialized view on both sides -> no migration SQL.
     """
-    gen_setup.execute_both("CREATE MATERIALIZED VIEW report AS SELECT 1 AS x")
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        both=["CREATE MATERIALIZED VIEW report AS SELECT 1 AS x"],
+        src=[],
+        dst=[],
+        diff=[],
+    )
 
 
 def test_materialized_view_definition_change(gen_setup: GenerateSetup) -> None:

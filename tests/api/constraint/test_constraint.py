@@ -5,10 +5,12 @@ def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:
     """
     Primary key present in target but missing in source -> ADD CONSTRAINT.
     """
-    gen_setup.execute_both("CREATE TABLE person (id integer NOT NULL)")
-    gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_pkey PRIMARY KEY (id)")
-
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id);')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer NOT NULL)"],
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_pkey PRIMARY KEY (id)"],
+        diff=['ALTER TABLE "public"."person" ADD CONSTRAINT "person_pkey" PRIMARY KEY (id)'],
+    )
 
 
 def test_constraint_drop_primary_key(gen_setup: GenerateSetup) -> None:
@@ -29,10 +31,12 @@ def test_constraint_add_unique(gen_setup: GenerateSetup) -> None:
     """
     Unique constraint present in target but missing in source -> ADD CONSTRAINT.
     """
-    gen_setup.execute_both("CREATE TABLE person (email text)")
-    gen_setup.dst.execute("ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)")
-
-    gen_setup.assert_migration_sql('ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" UNIQUE (email);')
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)"],
+        diff=['ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" UNIQUE (email)'],
+    )
 
 
 def test_constraint_drop_unique(gen_setup: GenerateSetup) -> None:
@@ -218,22 +222,28 @@ def test_constraint_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a constraint present on both sides -> COMMENT ON CONSTRAINT.
     """
-    gen_setup.execute_both("CREATE TABLE person (email text)")
-    gen_setup.execute_both("ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)")
-    gen_setup.dst.execute("COMMENT ON CONSTRAINT person_email_key ON person IS 'unique email'")
-
-    gen_setup.assert_migration_sql('COMMENT ON CONSTRAINT "person_email_key" ON "public"."person" IS \'unique email\';')
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE person (email text)",
+            "ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)",
+        ],
+        src=[],
+        dst=["COMMENT ON CONSTRAINT person_email_key ON person IS 'unique email'"],
+        diff=['COMMENT ON CONSTRAINT "person_email_key" ON "public"."person" IS \'unique email\''],
+    )
 
 
 def test_foreign_key_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a foreign key -> COMMENT ON CONSTRAINT.
     """
-    gen_setup.execute_both("CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))")
-    gen_setup.execute_both("CREATE TABLE person (team_id integer)")
-    gen_setup.execute_both(
-        "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"
+    gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))",
+            "CREATE TABLE person (team_id integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
+        ],
+        src=[],
+        dst=["COMMENT ON CONSTRAINT person_team_fkey ON person IS 'team ref'"],
+        diff=['COMMENT ON CONSTRAINT "person_team_fkey" ON "public"."person" IS \'team ref\''],
     )
-    gen_setup.dst.execute("COMMENT ON CONSTRAINT person_team_fkey ON person IS 'team ref'")
-
-    gen_setup.assert_migration_sql('COMMENT ON CONSTRAINT "person_team_fkey" ON "public"."person" IS \'team ref\';')

@@ -32,6 +32,7 @@ class GenerateSetup:
     def assert_diff(
         self,
         *,
+        both: list[str] | None = None,
         src: list[str],
         dst: list[str],
         diff: list[str],
@@ -43,21 +44,26 @@ class GenerateSetup:
         Set up both databases, assert the generated migration, then apply and confirm it converges.
 
         Args:
-            src: statements to run on the source database.
-            dst: statements to run on the target database.
+            both: statements to run on both databases (shared setup that must not diff).
+            src: statements to run on the source database only.
+            dst: statements to run on the target database only.
             diff: the expected migration SQL
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
             ignore_owner: Pass through to `generate` to suppress ALTER ... OWNER TO statements.
         """
+        # Shared setup runs on both databases before the side-specific statements.
+        src_cmds = (both or []) + src
+        dst_cmds = (both or []) + dst
+
         # Verify commands.
-        for cmd in src + dst + diff:
+        for cmd in src_cmds + dst_cmds + diff:
             if "\n" in cmd or ";" in cmd:
                 raise ValueError("Remove new lines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
-        self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
-        self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
+        self.src.execute(";\n".join(src_cmds))  # ty: ignore[invalid-argument-type]
+        self.dst.execute(";\n".join(dst_cmds))  # ty: ignore[invalid-argument-type]
 
         # Normalize to the "\n"-joined form that `generate` returns.
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
