@@ -45,7 +45,7 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     os.environ["PGMIG_TEST_PG_VERSION"] = pg_version
 
     # Start the database server.
-    shpyx.run("docker compose up -d postgres", exec_dir=_COMPOSE_FILE_DIR)
+    shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
     # Open a single connection to the admin database for the whole session.
     admin_conn = DbConnection("postgres")

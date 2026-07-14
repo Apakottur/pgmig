@@ -38,3 +38,14 @@ services:
       - /pgdata
     ports:
       - "15432:5432"
+
+  # Minimal pgbouncer instance for testing.
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    depends_on:
+      - postgres
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - "16432:5432"
