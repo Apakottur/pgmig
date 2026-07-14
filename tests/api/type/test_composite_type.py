@@ -12,6 +12,19 @@ def test_composite_type_create(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_composite_type_create_empty(gen_setup: GenerateSetup) -> None:
+    """
+    A field-less composite type (CREATE TYPE ... AS ()) present only in target must still
+    be seen and created -- the introspection join must not drop the zero-field type, or
+    the diff silently claims convergence while the type is missing.
+    """
+    gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE TYPE empty AS ()"],
+        diff=['CREATE TYPE "public"."empty" AS ()'],
+    )
+
+
 def test_composite_type_drop(gen_setup: GenerateSetup) -> None:
     """
     Composite type present in source but missing in target -> DROP TYPE.
