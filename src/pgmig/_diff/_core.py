@@ -261,8 +261,10 @@ def diff_renamable(
 
     Returns:
         A 5-tuple (drops, renames, creates, recreated, renamed_from). The first three are
-        rendered SQL statements; `recreated` is the set of names dropped and recreated
-        (same name, changed definition); `renamed_from` maps each new name to its old name.
+        rendered SQL statements; `recreated` is the set of names whose object is freshly
+        created and therefore starts without a comment -- a name dropped and recreated (same
+        name, changed definition) or a create reusing a name a rename vacated this run;
+        `renamed_from` maps each new name to its old name.
         A shared name is a no-op when the keys match; otherwise objects are dropped, renamed
         (same key across a name change), or created. `recreated` lets the comment diff force
         a re-emit (a recreate resets the comment), and `renamed_from` lets it resolve a
@@ -300,8 +302,12 @@ def diff_renamable(
             del dst[new_name]
 
     # After the no-op and rename passes, a name still in both sides is dropped and
-    # recreated (same name, changed definition).
-    recreated = src.keys() & dst.keys()
+    # recreated (same name, changed definition). A create whose name was vacated by a rename
+    # this run (the old name of some rename) is a fresh object too: it carries no comment, but
+    # the comment diff would resolve its name back to the renamed-away source object and find a
+    # matching comment, suppressing the COMMENT and leaving a residual diff. Treat it as
+    # recreated so its target comment is always emitted.
+    recreated = (src.keys() & dst.keys()) | (dst.keys() & set(renamed_from.values()))
     drops = [render_drop(name) for name in sorted(src.keys())]
     creates = [render_create(name, dst[name]) for name in sorted(dst.keys())]
     return drops, renames, creates, recreated, renamed_from
