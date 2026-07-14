@@ -60,11 +60,25 @@ WHERE
     --   [x] namespace leg  -- table in an extension-owned schema (n.oid)
     --   [x] self leg       -- the table itself is extension-owned (c.oid)
     --   [-] owning-table leg -- n/a; the table is the owner
-    {{exclude_extension_owned :n.oid }}
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = n.oid
+            AND d.deptype = 'e')
     -- Exclude tables an extension owns directly (e.g. PostGIS spatial_ref_sys in
     -- public): CREATE EXTENSION already creates them, so re-emitting CREATE TABLE
     -- would fail with "relation already exists".
-    {{exclude_extension_owned :c.oid }}
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
+            AND d.deptype = 'e')
 ORDER BY
     n.nspname,
     c.relname,

@@ -34,7 +34,21 @@ WHERE
     --   [x] owning-table leg -- constraint on an extension-owned table (c.oid)
     --   [-] self leg         -- an extension-owned constraint sits on an extension-owned
     --                           table, so the owning-table leg already excludes it
-    {{exclude_extension_owned :n.oid }}
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = n.oid
+            AND d.deptype = 'e')
     -- Exclude constraints on tables an extension owns directly: they are recreated by
     -- CREATE EXTENSION, so re-emitting them would conflict.
-    {{exclude_extension_owned :c.oid }};
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
+            AND d.deptype = 'e');

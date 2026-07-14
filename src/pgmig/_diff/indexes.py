@@ -24,7 +24,7 @@ def _diff_indexes(
     src: dict[str, Index],
     dst: dict[str, Index],
     concurrently: bool,
-) -> tuple[list[str], list[str], list[str], set[str]]:
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff one table's standalone indexes into (drops, renames, creates), using each
     index's name-independent canonical form as the rename key. Drops and creates carry
@@ -47,11 +47,13 @@ def diff_index_statements(schema_name: str, src: dict[str, Index], dst: dict[str
     then renames, then creates, then comment syncs. Honors context.index_concurrently.
     Shared by the table and materialized-view index generators.
     """
-    drops, renames, creates, recreated = _diff_indexes(
+    drops, renames, creates, recreated, renamed_from = _diff_indexes(
         schema_name=schema_name, src=src, dst=dst, concurrently=context.index_concurrently
     )
 
-    comments = diff_comment_statements(schema_name, src, dst, kind="INDEX", recreated=recreated)
+    comments = diff_comment_statements(
+        schema_name, src, dst, kind="INDEX", recreated=recreated, renamed_from=renamed_from
+    )
     return [*drops, *renames, *creates, *comments]
 
 

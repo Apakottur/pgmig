@@ -17,7 +17,22 @@ WHERE
     --   [x] namespace leg  -- matview in an extension-owned schema (n.oid)
     --   [x] self leg       -- the matview itself is extension-owned (c.oid)
     --   [ ] owning-table leg -- n/a, a matview is not attached to a table
-    {{exclude_extension_owned :n.oid }} {{exclude_extension_owned :c.oid }}
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = n.oid
+            AND d.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
+            AND d.deptype = 'e')
 ORDER BY
     n.nspname,
     c.relname;

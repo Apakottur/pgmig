@@ -28,7 +28,22 @@ WHERE
     --   [x] namespace leg  -- domain in an extension-owned schema (n.oid)
     --   [x] self leg       -- the domain itself is extension-owned (t.oid)
     --   [ ] owning-table leg -- n/a, domains are not attached to a table
-    {{exclude_extension_owned :n.oid }} {{exclude_extension_owned :t.oid }}
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = n.oid
+            AND d.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = t.oid
+            AND d.deptype = 'e')
 ORDER BY
     n.nspname,
     t.typname;

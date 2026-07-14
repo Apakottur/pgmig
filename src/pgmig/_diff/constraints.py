@@ -7,7 +7,7 @@ from pgmig._sql import ident, qualified
 
 def _diff_constraints(
     *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> tuple[list[str], list[str], list[str], set[str]]:
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff one table's constraints (of a single kind) into (drops, renames, adds).
     The constraint definition (from pg_get_constraintdef) is already name-independent.
@@ -34,14 +34,20 @@ def generate() -> Iterator[Statement]:
 
         src_constraints = src_table.constraint_by_name if src_table else {}
         dst_constraints = dst_table.constraint_by_name
-        drops, renames, adds, recreated = _diff_constraints(
+        drops, renames, adds, recreated, renamed_from = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
             dst=dst_constraints,
         )
         comments = diff_child_comment_statements(
-            schema_name, table_name, src_constraints, dst_constraints, kind="CONSTRAINT", recreated=recreated
+            schema_name,
+            table_name,
+            src_constraints,
+            dst_constraints,
+            kind="CONSTRAINT",
+            recreated=recreated,
+            renamed_from=renamed_from,
         )
         # Drops first (frees names), then renames, then adds, then comments.
         for sql in (*drops, *renames, *adds, *comments):
@@ -60,7 +66,7 @@ def generate_foreign_keys() -> Iterator[Statement]:
         # FOREIGN_KEY_DROP phase (before any DROP TABLE), so a referenced table can be
         # dropped even while its referencing table's constraint has not yet cascaded away.
         dst_fks = dst_table.foreign_key_by_name if dst_table else {}
-        drops, renames, adds, recreated = _diff_constraints(
+        drops, renames, adds, recreated, renamed_from = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_fks,
@@ -70,7 +76,7 @@ def generate_foreign_keys() -> Iterator[Statement]:
             yield Statement(Phase.FOREIGN_KEY_DROP, sql)
         # Renames carry no referenced-object dependency, so they ride with the adds.
         comments = diff_child_comment_statements(
-            schema_name, table_name, src_fks, dst_fks, kind="CONSTRAINT", recreated=recreated
+            schema_name, table_name, src_fks, dst_fks, kind="CONSTRAINT", recreated=recreated, renamed_from=renamed_from
         )
         for sql in (*renames, *adds, *comments):
             yield Statement(Phase.FOREIGN_KEY_ADD, sql)

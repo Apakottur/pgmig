@@ -26,6 +26,11 @@ WHERE
     AND dependent.oid <> referenced.oid
     AND dependent_ns.nspname NOT LIKE 'pg_%'
     AND dependent_ns.nspname <> 'information_schema'
+    -- A dependency on a system view/matview (e.g. a monitoring matview over pg_stat_activity)
+    -- is not a matview-on-managed-object edge: system schemas are not diffed, so the referenced
+    -- side always exists and needs no ordering. Excluding it prevents a false refusal.
+    AND referenced_ns.nspname NOT LIKE 'pg_%'
+    AND referenced_ns.nspname <> 'information_schema'
 ORDER BY
     dependent_schema,
     dependent_view,

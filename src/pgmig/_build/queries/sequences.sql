@@ -24,7 +24,22 @@ WHERE
     --   [x] self leg       -- the sequence itself is extension-owned (c.oid)
     --   [ ] owning-table leg -- n/a; a sequence backing a serial/identity column is
     --                           excluded separately below (deptype 'a'/'i')
-    {{exclude_extension_owned :n.oid }} {{exclude_extension_owned :c.oid }}
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = n.oid
+            AND d.deptype = 'e')
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.objid = c.oid
+            AND d.deptype = 'e')
     AND NOT EXISTS (
         SELECT
             1

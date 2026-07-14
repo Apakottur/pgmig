@@ -12,6 +12,19 @@ def test_enum_create(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_enum_create_empty(gen_setup: GenerateSetup) -> None:
+    """
+    A member-less enum (CREATE TYPE ... AS ENUM ()) present only in target must still be
+    seen and created -- the introspection join must not drop the zero-member type, or the
+    diff silently claims convergence while the type is missing.
+    """
+    gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE TYPE mood AS ENUM ()"],
+        diff=['CREATE TYPE "public"."mood" AS ENUM ()'],
+    )
+
+
 def test_enum_drop(gen_setup: GenerateSetup) -> None:
     """
     Enum present in source but missing in target -> DROP TYPE.

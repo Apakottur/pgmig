@@ -30,6 +30,7 @@ def _diff_comments(
     *,
     render: Callable[[str, _CommentedT], str],
     recreated: frozenset[str] | set[str] = frozenset(),
+    renamed_from: Mapping[str, str] | None = None,
 ) -> list[str]:
     """
     Diff comments across two name->object mappings whose objects carry `.comment`.
@@ -44,13 +45,20 @@ def _diff_comments(
     comment to NULL. Its source comment is therefore treated as None so the target
     comment is always re-emitted; otherwise an unchanged comment would be silently lost
     and leave a residual diff.
+
+    `renamed_from` maps a target (new) name to its source (old) name for objects renamed
+    this run. A rename preserves the comment, so the source comment is resolved through the
+    old name; without this the lookup by new name misses, the source comment reads as None,
+    and a `COMMENT ... IS NULL` is never emitted when the target dropped the comment -- the
+    renamed object keeps the stale comment and the migration does not converge.
     """
+    renamed_from = renamed_from or {}
     statements: list[str] = []
     for name in sorted(dst):
         if name in recreated:
             src_comment = None
         else:
-            src_obj = src.get(name)
+            src_obj = src.get(renamed_from.get(name, name))
             src_comment = src_obj.comment if src_obj is not None else None
         if src_comment != dst[name].comment:
             statements.append(render(name, dst[name]))
@@ -64,6 +72,7 @@ def diff_comment_statements(
     *,
     kind: str,
     recreated: frozenset[str] | set[str] = frozenset(),
+    renamed_from: Mapping[str, str] | None = None,
 ) -> list[str]:
     """
     COMMENT ON <kind> for every target object (identified by its schema-qualified name)
@@ -76,6 +85,7 @@ def diff_comment_statements(
         dst,
         render=lambda name, obj: comment_on(kind, qualified(schema_name, name), obj.comment),
         recreated=recreated,
+        renamed_from=renamed_from,
     )
 
 
@@ -87,6 +97,7 @@ def diff_child_comment_statements(
     *,
     kind: str,
     recreated: frozenset[str] | set[str] = frozenset(),
+    renamed_from: Mapping[str, str] | None = None,
 ) -> list[str]:
     """
     COMMENT ON <kind> for a table-owned object addressed as `<name> ON <table>`
@@ -98,6 +109,7 @@ def diff_child_comment_statements(
         dst,
         render=lambda name, obj: comment_on(kind, f"{ident(name)} ON {table}", obj.comment),
         recreated=recreated,
+        renamed_from=renamed_from,
     )
 
 
@@ -228,17 +240,20 @@ def diff_renamable(
     render_drop: Callable[[str], str],
     render_rename: Callable[[str, str], str],
     render_create: Callable[[str, _Renamable], str],
-) -> tuple[list[str], list[str], list[str], set[str]]:
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff two name->object mappings whose objects carry a name-independent `key`,
     detecting renames (same key, different name).
 
     Returns:
-        A 4-tuple (drops, renames, creates, recreated) of rendered SQL statements plus
-        the set of names that were both dropped and recreated (same name, changed
-        definition). A shared name is a no-op when the keys match; otherwise objects
-        are dropped, renamed (same key across a name change), or created. `recreated`
-        lets the comment diff force a re-emit, since a recreate resets the comment.
+        A 5-tuple (drops, renames, creates, recreated, renamed_from). The first three are
+        rendered SQL statements; `recreated` is the set of names dropped and recreated
+        (same name, changed definition); `renamed_from` maps each new name to its old name.
+        A shared name is a no-op when the keys match; otherwise objects are dropped, renamed
+        (same key across a name change), or created. `recreated` lets the comment diff force
+        a re-emit (a recreate resets the comment), and `renamed_from` lets it resolve a
+        renamed object's source comment through the old name (a rename preserves the
+        comment, so it must be cleared when the target has none).
     """
     src = dict(src)
     dst = dict(dst)
@@ -258,6 +273,7 @@ def diff_renamable(
         dst_by_key.setdefault(key(item), []).append(name)
 
     renames: list[str] = []
+    renamed_from: dict[str, str] = {}
     for shared_key in sorted(src_by_key.keys() & dst_by_key.keys()):
         src_names = sorted(src_by_key[shared_key])
         dst_names = sorted(dst_by_key[shared_key])
@@ -265,6 +281,7 @@ def diff_renamable(
         # pair here is a genuine rename. Counts may differ, so pair up to the shorter.
         for old_name, new_name in zip(src_names, dst_names, strict=False):
             renames.append(render_rename(old_name, new_name))
+            renamed_from[new_name] = old_name
             del src[old_name]
             del dst[new_name]
 
@@ -273,4 +290,4 @@ def diff_renamable(
     recreated = src.keys() & dst.keys()
     drops = [render_drop(name) for name in sorted(src.keys())]
     creates = [render_create(name, dst[name]) for name in sorted(dst.keys())]
-    return drops, renames, creates, recreated
+    return drops, renames, creates, recreated, renamed_from

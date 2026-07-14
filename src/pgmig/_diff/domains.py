@@ -45,7 +45,9 @@ def _alter_domain(qualified_name: str, src: Domain, dst: Domain) -> list[str]:
 
     # CHECK constraints diff by name-independent definition, so a same-definition rename
     # is a RENAME rather than a drop + add.
-    drops, renames, adds, _recreated = diff_renamable(
+    # Domain CHECK constraints carry no comment in the model, so the recreated / renamed-from
+    # metadata is unused here.
+    drops, renames, adds, _recreated, _renamed_from = diff_renamable(
         src.check_by_name,
         dst.check_by_name,
         key=lambda definition: definition,

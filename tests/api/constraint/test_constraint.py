@@ -1,4 +1,18 @@
+import pytest
+
+from pgmig import PgmigError, generate
 from tests.api.generate_setup import GenerateSetup
+
+
+def test_exclusion_constraint_raises_not_supported(gen_setup: GenerateSetup) -> None:
+    """
+    An EXCLUDE constraint (pg_constraint contype 'x') is not modelled yet and must raise
+    rather than be silently dropped by the constraint query's contype filter.
+    """
+    gen_setup.dst.execute("CREATE TABLE room (during int4range, EXCLUDE USING gist (during WITH &&))")
+
+    with pytest.raises(PgmigError, match=r"exclusion constraint .* is not supported"):
+        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
 def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:
@@ -67,6 +81,26 @@ def test_constraint_rename(gen_setup: GenerateSetup) -> None:
             "ALTER TABLE person ADD CONSTRAINT person_email_new UNIQUE (email)",
         ],
         diff=['ALTER TABLE "public"."person" RENAME CONSTRAINT "person_email_old" TO "person_email_new"'],
+    )
+
+
+def test_constraint_rename_clears_comment(gen_setup: GenerateSetup) -> None:
+    """
+    A constraint renamed (same definition) whose source carries a comment but whose target
+    does not: RENAME preserves the comment, so COMMENT ... IS NULL must also be emitted, else
+    the migration does not converge.
+    """
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=[
+            "ALTER TABLE person ADD CONSTRAINT person_email_old UNIQUE (email)",
+            "COMMENT ON CONSTRAINT person_email_old ON person IS 'unique email'",
+        ],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_new UNIQUE (email)"],
+        diff=[
+            'ALTER TABLE "public"."person" RENAME CONSTRAINT "person_email_old" TO "person_email_new"',
+            'COMMENT ON CONSTRAINT "person_email_new" ON "public"."person" IS NULL',
+        ],
     )
 
 
