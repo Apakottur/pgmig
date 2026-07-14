@@ -1,5 +1,3 @@
-import pytest
-
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -62,22 +60,20 @@ def test_enum_value_removal_unsupported(gen_setup: GenerateSetup) -> None:
     """
     Removing a value is unsupported -> NotImplementedError.
     """
-    gen_setup.src.execute("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')")
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-
-    with pytest.raises(NotImplementedError):
-        gen_setup.assert_migration_sql("")
+    gen_setup.assert_not_implemented(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+    )
 
 
 def test_enum_value_reorder_unsupported(gen_setup: GenerateSetup) -> None:
     """
     Reordering values is unsupported -> NotImplementedError.
     """
-    gen_setup.src.execute("CREATE TYPE mood AS ENUM ('sad', 'happy')")
-    gen_setup.dst.execute("CREATE TYPE mood AS ENUM ('happy', 'sad')")
-
-    with pytest.raises(NotImplementedError):
-        gen_setup.assert_migration_sql("")
+    gen_setup.assert_not_implemented(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('happy', 'sad')"],
+    )
 
 
 def test_enum_typed_column_ordered_after_type(gen_setup: GenerateSetup) -> None:
