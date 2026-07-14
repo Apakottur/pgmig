@@ -1,6 +1,4 @@
 import pytest
-from psycopg import sql
-from typing_extensions import LiteralString
 
 from pgmig import generate
 from tests.fixtures.db_utils import DbConnection
@@ -22,13 +20,6 @@ class GenerateSetup:
         """
         (row,) = self.src.execute("SHOW server_version_num")
         return int(row[0]) // 10000
-
-    def execute_both(self, query: LiteralString | sql.Composed) -> None:
-        """
-        Run the same query on both the source and target databases.
-        """
-        self.src.execute(query)
-        self.dst.execute(query)
 
     def assert_diff(
         self,
