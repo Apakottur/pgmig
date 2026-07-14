@@ -151,7 +151,7 @@ def test_domain_base_type_change_raises(gen_setup: GenerateSetup) -> None:
     A domain's base type cannot be altered; a change must raise rather than emit a
     non-converging migration.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=["CREATE DOMAIN age AS integer"],
         dst=["CREATE DOMAIN age AS bigint"],
         match="Domain base type change is not supported",

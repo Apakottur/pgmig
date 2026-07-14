@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs
+from pgmig._errors import UnsupportedChangeError
 from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -67,7 +68,7 @@ def _column_def(column: Column) -> str:
     # DEFAULT. Virtual columns (PG18+) are unsupported. A stored generated column may still
     # be NOT NULL, appended after the clause.
     if column.generated == "v":
-        raise NotImplementedError(f"Virtual generated column is not supported: {ident(column.name)}")
+        raise UnsupportedChangeError(f"Virtual generated column is not supported: {ident(column.name)}")
     if column.generated == "s":
         expression = _parenthesize_generation(column.generation_expression or "")
         clause = f"{ident(column.name)} {column.type} GENERATED ALWAYS AS {expression} STORED"
@@ -207,7 +208,7 @@ def _alter_shared_column(
     # a non-serial target reached via an identity change, so it is let through.
     serial_changed = src_column.serial_type != dst_column.serial_type
     if serial_changed and (dst_column.serial_type is not None or not identity_changed):
-        raise NotImplementedError(
+        raise UnsupportedChangeError(
             f"Column serial change is not supported: "
             f"{qualified(schema_name, table_name)}.{ident(column_name)} "
             f"{src_column.serial_type} -> {dst_column.serial_type}"
@@ -219,7 +220,7 @@ def _alter_shared_column(
     if src_column.generated != dst_column.generated or (
         src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
     ):
-        raise NotImplementedError(
+        raise UnsupportedChangeError(
             f"Column generated change is not supported: {qualified(schema_name, table_name)}.{ident(column_name)}"
         )
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
@@ -332,7 +333,7 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
         src_table.partition_strategy != dst_table.partition_strategy
         or src_table.partition_key != dst_table.partition_key
     ):
-        raise NotImplementedError(
+        raise UnsupportedChangeError(
             f"Partition key/strategy change is not supported: {qualified(schema_name, table_name)}"
         )
 
@@ -346,7 +347,9 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
                 _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
             ]
         if src_table.partition_bound != dst_table.partition_bound:
-            raise NotImplementedError(f"Partition bound change is not supported: {qualified(schema_name, table_name)}")
+            raise UnsupportedChangeError(
+                f"Partition bound change is not supported: {qualified(schema_name, table_name)}"
+            )
         return []
     if src_parent is not None:
         return [_detach_partition(schema_name, table_name, src_parent)]

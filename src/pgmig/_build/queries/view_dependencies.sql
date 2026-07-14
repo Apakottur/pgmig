@@ -2,7 +2,7 @@
 -- from another view or matview. A view's rewrite rule (pg_rewrite) depends (pg_depend) on
 -- the relations it reads; a dependency on another view/matview means ordering the
 -- create/drop needs a topological sort within the shared view phases, which is not
--- implemented yet, so such a pair must be reported rather than mis-ordered. A dependency
+-- supported yet, so such a pair must be reported rather than mis-ordered. A dependency
 -- on a plain table is fine (tables are created before, and dropped after, the view phases).
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,

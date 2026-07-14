@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_object_pairs
+from pgmig._errors import UnsupportedChangeError
 from pgmig._models import Function
 from pgmig._sql import comment_on, qualified
 
@@ -15,10 +16,10 @@ def _drop_function_sql(schema_name: str, function: Function) -> str:
     invalid migration. Fail loudly until per-statement dependency ordering lands.
     """
     if function.has_dependents:
-        raise NotImplementedError(
+        raise UnsupportedChangeError(
             f"Dropping {qualified(schema_name, function.name)}({function.identity_arguments}) is not supported: "
             f"another object (column default, check constraint, expression index, or routine) depends on it, "
-            f"and dependency-aware drop ordering is not implemented yet."
+            f"and dependency-aware drop ordering is not supported yet."
         )
     return f"DROP {function.drop_keyword} {qualified(schema_name, function.name)}({function.identity_arguments});"
 

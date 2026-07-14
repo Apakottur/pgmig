@@ -1,6 +1,6 @@
 import pytest
 
-from pgmig import generate
+from pgmig import UnsupportedChangeError, generate
 from tests.fixtures.db_utils import DbConnection
 
 
@@ -85,7 +85,7 @@ class GenerateSetup:
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
-    def assert_not_implemented(
+    def assert_unsupported(
         self,
         *,
         src: list[str],
@@ -94,9 +94,10 @@ class GenerateSetup:
         match: str | None = None,
     ) -> None:
         """
-        Wrapper around `assert_diff` that asserts the migration raises NotImplementedError.
+        Wrapper around `assert_diff` that asserts the migration refuses the change with an
+        UnsupportedChangeError (a documented limitation, not a bug).
         """
-        with pytest.raises(NotImplementedError, match=match):
+        with pytest.raises(UnsupportedChangeError, match=match):
             self.assert_diff(
                 src=src,
                 dst=dst,

@@ -1,4 +1,4 @@
-from pgmig._errors import PgmigError
+from pgmig._errors import PgmigError, UnsupportedChangeError
 from pgmig.api import generate
 
-__all__ = ["PgmigError", "generate"]
+__all__ = ["PgmigError", "UnsupportedChangeError", "generate"]

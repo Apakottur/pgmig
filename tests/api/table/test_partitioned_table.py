@@ -219,7 +219,7 @@ def test_partitioned_table_key_change_raises(gen_setup: GenerateSetup) -> None:
     Changing the partition key/strategy is impossible in place; refuse loudly rather than
     emit a data-destructive DROP + CREATE.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=["CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)"],
         dst=["CREATE TABLE events (id integer, region text) PARTITION BY LIST (region)"],
         match=r"Partition key/strategy change is not supported",
@@ -230,7 +230,7 @@ def test_partitioned_table_bound_change_raises(gen_setup: GenerateSetup) -> None
     """
     Changing a partition's bound (same parent) is impossible in place; refuse loudly.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
         src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
         dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (200)"],
