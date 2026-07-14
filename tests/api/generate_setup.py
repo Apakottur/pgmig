@@ -57,10 +57,12 @@ class GenerateSetup:
         src = (both or []) + src
         dst = (both or []) + dst
 
-        # Verify commands.
+        # Verify commands. A statement may contain internal newlines/semicolons (e.g. a
+        # function body), but must not carry its own trailing terminator -- the helper joins
+        # with ";\n" and appends the ";" to each diff statement itself.
         for cmd in src + dst + diff:
-            if cmd.endswith("\n") or ";" in cmd:
-                raise ValueError("Remove new lines and semicolons from the statements to keep tests clean")
+            if cmd.endswith(("\n", ";")):
+                raise ValueError("Remove trailing newlines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
         self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
@@ -101,31 +103,16 @@ class GenerateSetup:
         match: str | None = None,
     ) -> None:
         """
-        Set up both databases and assert that generating the migration raises
-        NotImplementedError -- the diff involves a change pgmig deliberately refuses.
-
-        Args:
-            src: statements to run on the source database only.
-            dst: statements to run on the target database only.
-            both: statements to run on both databases.
-            match: optional regex the raised error message must match.
+        Wrapper around `assert_diff` that asserts the migration raises NotImplementedError.
         """
-        # Shared setup runs on both DBs, before the side-specific statements.
-        src = (both or []) + src
-        dst = (both or []) + dst
-
-        # Verify commands.
-        for cmd in src + dst:
-            if cmd.endswith("\n") or ";" in cmd:
-                raise ValueError("Remove new lines and semicolons from the statements to keep tests clean")
-
-        # Execute commands.
-        self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
-        self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
-
-        # Generating the migration must refuse the unsupported change.
         with pytest.raises(NotImplementedError, match=match):
-            generate(source=self.src.dsn, target=self.dst.dsn)
+            self.assert_diff(
+                src=src,
+                dst=dst,
+                both=both,
+                diff=[],
+                apply=False,
+            )
 
     def assert_migration_sql(
         self,
