@@ -7,6 +7,7 @@ dev = [
   "httpx==0.28.1",
   "mypy==2.2.0",
   "pre-commit==4.6.0",
+  "psycopg[binary]>=3.3.4",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest==9.1.1",
@@ -22,7 +23,7 @@ name = "pgmig"
 dynamic = ["version"]
 description = "Generate migrations between Postgres databases"
 authors = [{name = "Yossi Rozantsev"}]
-license = {text = "MIT"}
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = ["postgres", "postgresql", "migrations", "database", "schema"]
@@ -31,7 +32,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries",
   "Topic :: Software Development :: Libraries :: Python Modules",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -42,10 +42,18 @@ classifiers = [
 ]
 dependencies = [
   #
-  "psycopg[binary]>=3.3.4",
+  # Bare psycopg: pgmig is importable as a library, so the application picks the psycopg
+  # implementation (psycopg[binary], psycopg[c], or a system libpq). See the `binary` extra
+  # below and the README for the CLI install story.
+  "psycopg>=3.3.4",
   "pydantic>=2",
   "typer>=0.12",
 ]
+
+[project.optional-dependencies]
+# For CLI / standalone use (`pip install pgmig[binary]`, `uvx pgmig[binary]`): pull in the
+# bundled-libpq psycopg wheel so no system libpq is required.
+binary = ["psycopg[binary]>=3.3.4"]
 
 [project.scripts]
 pgmig = "pgmig._cli:app"

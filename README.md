@@ -32,23 +32,31 @@ This project is currently in active development, see [Roadmap](https://github.co
 
 pgmig is available as [`pgmig`](https://pypi.org/project/pgmig/) on PyPI.
 
-Invoke pgmig directly with [`uvx`](https://docs.astral.sh/uv/):
+**As a CLI tool**, install the `binary` extra so the bundled libpq comes along (no system
+libpq needed). Invoke pgmig directly with [`uvx`](https://docs.astral.sh/uv/):
 
 ```shell
-uvx pgmig generate \
+uvx 'pgmig[binary]' generate \
   --source postgresql://user:pass@localhost:5432/current \
   --target postgresql://user:pass@localhost:5432/desired
 ```
 
-Or install pgmig with `uv` (recommended) or `pip`:
+Or install it globally:
 
 ```shell
 # With uv.
-uv tool install pgmig@latest  # Install pgmig globally.
-uv add --dev pgmig            # Or add pgmig to your project.
+uv tool install 'pgmig[binary]'
 
 # With pip.
-pip install pgmig
+pip install 'pgmig[binary]'
+```
+
+**As a library** (`import pgmig`), depend on bare `pgmig` and let your application pick the
+psycopg implementation — `psycopg[binary]`, `psycopg[c]`, or a system libpq — as
+[psycopg recommends](https://www.psycopg.org/psycopg3/docs/basic/install.html):
+
+```shell
+uv add pgmig      # Or: pip install pgmig
 ```
 
 ### Usage
