@@ -162,89 +162,120 @@ def _alter_columns(
         elif column_name not in dst_columns:
             statements.append(f"ALTER TABLE {qualified(schema_name, table_name)} DROP COLUMN {ident(column_name)};")
         else:
-            src_column = src_columns[column_name]
-            dst_column = dst_columns[column_name]
-            identity_changed = src_column.identity != dst_column.identity
-            # A serial change keeps the integer type, so the type guard does not fire. The
-            # serial backing sequence is excluded from introspection, so emitting SET
-            # DEFAULT nextval('..._seq') would reference a sequence that is never created
-            # (apply fails "relation does not exist"). Refuse rather than emit a
-            # non-converging diff -- EXCEPT a serial *source* converting to an identity
-            # target, which is supported below (its nextval() default is dropped and the
-            # identity creates its own sequence). That single case is a serial change with
-            # a non-serial target reached via an identity change, so it is let through.
-            serial_changed = src_column.serial_type != dst_column.serial_type
-            if serial_changed and (dst_column.serial_type is not None or not identity_changed):
-                raise NotImplementedError(
-                    f"Column serial change is not supported: "
-                    f"{qualified(schema_name, table_name)}.{ident(column_name)} "
-                    f"{src_column.serial_type} -> {dst_column.serial_type}"
-                )
-            # Generated columns cannot be altered in place: Postgres has no ADD GENERATED,
-            # and a generation-expression change has no in-place ALTER (pre-PG18). Raise on a
-            # generated-ness flip or an expression change rather than mis-diff. A generated
-            # column's `default` is None on both sides, so the DEFAULT sync below is inert.
-            if src_column.generated != dst_column.generated or (
-                src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
-            ):
-                raise NotImplementedError(
-                    f"Column generated change is not supported: "
-                    f"{qualified(schema_name, table_name)}.{ident(column_name)}"
-                )
-            prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
-            # Emit order matters: drops before adds. Postgres refuses ADD IDENTITY on a
-            # column that still has a default, and refuses SET DEFAULT on a column that is
-            # still an identity. So: TYPE, then DROP IDENTITY, then DROP DEFAULT, then the
-            # identity ADD/SET, then SET DEFAULT, then NOT NULL.
-            #
-            # Type change first: a widened type must be in place before a dependent
-            # default or NOT NULL is (re)applied. A USING col::newtype cast is emitted so
-            # conversions needing an explicit cast (text -> integer, varchar -> enum,
-            # timezone changes) converge; the explicit cast is a superset of the implicit
-            # assignment cast, so it never regresses. A pair with no cast at all fails
-            # loudly at apply -- a visible error, not a silent divergence.
-            #
-            # A generated column is the exception: Postgres recomputes it from its
-            # expression on a type change and refuses USING ("cannot specify USING when
-            # altering type of generated column"), so the USING clause is omitted for it.
-            if src_column.type != dst_column.type:
-                if dst_column.generated != "":
-                    statements.append(f"{prefix} TYPE {dst_column.type};")
-                else:
-                    statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
-            if identity_changed and dst_column.identity_kind is None:
-                # Loses its identity. The owned identity sequence drops with it; the
-                # column stays NOT NULL (handled by the NOT NULL block below).
-                statements.append(f"{prefix} DROP IDENTITY;")
-            if dst_column.default is None and src_column.default is not None:
-                # Drop the old default before any ADD IDENTITY. For a serial source this
-                # is the nextval() default; its owned sequence lingers (excluded from
-                # introspection) but the diff still converges.
-                statements.append(f"{prefix} DROP DEFAULT;")
-            if identity_changed and dst_column.identity_kind is not None:
-                if src_column.identity_kind is None:
-                    # Gains an identity. ADD ... AS IDENTITY requires the column to already
-                    # be NOT NULL, so set it first when the source was nullable (the generic
-                    # NOT NULL block below is skipped for identity targets, so no double).
-                    if not src_column.not_null:
-                        statements.append(f"{prefix} SET NOT NULL;")
-                    statements.append(f"{prefix} ADD {dst_column.identity_clause};")
-                else:
-                    # Stays an identity, generation kind flips (ALWAYS <-> BY DEFAULT).
-                    statements.append(f"{prefix} SET GENERATED {dst_column.identity_kind};")
-            if dst_column.default is not None and src_column.default != dst_column.default:
-                statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
-            if src_column.not_null != dst_column.not_null:
-                if dst_column.not_null:
-                    # Skip if a target primary key or the target identity already implies
-                    # NOT NULL for this column.
-                    if column_name not in pk_columns and dst_column.identity_kind is None:
-                        statements.append(f"{prefix} SET NOT NULL;")
-                elif column_name in src_pk_columns:
-                    # Covering source PK drops this run; defer past the CONSTRAINT phase.
-                    deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")
-                else:
-                    statements.append(f"{prefix} DROP NOT NULL;")
+            column_statements, column_deferred = _alter_shared_column(
+                schema_name=schema_name,
+                table_name=table_name,
+                column_name=column_name,
+                src_column=src_columns[column_name],
+                dst_column=dst_columns[column_name],
+                pk_columns=pk_columns,
+                src_pk_columns=src_pk_columns,
+            )
+            statements.extend(column_statements)
+            deferred_drop_not_null.extend(column_deferred)
+    return statements, deferred_drop_not_null
+
+
+def _alter_shared_column(
+    *,
+    schema_name: str,
+    table_name: str,
+    column_name: str,
+    src_column: Column,
+    dst_column: Column,
+    pk_columns: set[str],
+    src_pk_columns: set[str],
+) -> tuple[list[str], list[str]]:
+    """
+    Sync one column present on both sides: TYPE, then DEFAULT, then NOT NULL, with the
+    identity ADD/SET/DROP interleaved in the order Postgres requires. An identity or serial
+    change that cannot be expressed raises rather than emitting a silently-empty diff.
+
+    Returns (statements, deferred_drop_not_null) for this column; see `_alter_columns` for
+    why a DROP NOT NULL on a source-PK column is deferred past the CONSTRAINT phase.
+    """
+    statements: list[str] = []
+    deferred_drop_not_null: list[str] = []
+    identity_changed = src_column.identity != dst_column.identity
+    # A serial change keeps the integer type, so the type guard does not fire. The
+    # serial backing sequence is excluded from introspection, so emitting SET
+    # DEFAULT nextval('..._seq') would reference a sequence that is never created
+    # (apply fails "relation does not exist"). Refuse rather than emit a
+    # non-converging diff -- EXCEPT a serial *source* converting to an identity
+    # target, which is supported below (its nextval() default is dropped and the
+    # identity creates its own sequence). That single case is a serial change with
+    # a non-serial target reached via an identity change, so it is let through.
+    serial_changed = src_column.serial_type != dst_column.serial_type
+    if serial_changed and (dst_column.serial_type is not None or not identity_changed):
+        raise NotImplementedError(
+            f"Column serial change is not supported: "
+            f"{qualified(schema_name, table_name)}.{ident(column_name)} "
+            f"{src_column.serial_type} -> {dst_column.serial_type}"
+        )
+    # Generated columns cannot be altered in place: Postgres has no ADD GENERATED,
+    # and a generation-expression change has no in-place ALTER (pre-PG18). Raise on a
+    # generated-ness flip or an expression change rather than mis-diff. A generated
+    # column's `default` is None on both sides, so the DEFAULT sync below is inert.
+    if src_column.generated != dst_column.generated or (
+        src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
+    ):
+        raise NotImplementedError(
+            f"Column generated change is not supported: {qualified(schema_name, table_name)}.{ident(column_name)}"
+        )
+    prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
+    # Emit order matters: drops before adds. Postgres refuses ADD IDENTITY on a
+    # column that still has a default, and refuses SET DEFAULT on a column that is
+    # still an identity. So: TYPE, then DROP IDENTITY, then DROP DEFAULT, then the
+    # identity ADD/SET, then SET DEFAULT, then NOT NULL.
+    #
+    # Type change first: a widened type must be in place before a dependent
+    # default or NOT NULL is (re)applied. A USING col::newtype cast is emitted so
+    # conversions needing an explicit cast (text -> integer, varchar -> enum,
+    # timezone changes) converge; the explicit cast is a superset of the implicit
+    # assignment cast, so it never regresses. A pair with no cast at all fails
+    # loudly at apply -- a visible error, not a silent divergence.
+    #
+    # A generated column is the exception: Postgres recomputes it from its
+    # expression on a type change and refuses USING ("cannot specify USING when
+    # altering type of generated column"), so the USING clause is omitted for it.
+    if src_column.type != dst_column.type:
+        if dst_column.generated != "":
+            statements.append(f"{prefix} TYPE {dst_column.type};")
+        else:
+            statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
+    if identity_changed and dst_column.identity_kind is None:
+        # Loses its identity. The owned identity sequence drops with it; the
+        # column stays NOT NULL (handled by the NOT NULL block below).
+        statements.append(f"{prefix} DROP IDENTITY;")
+    if dst_column.default is None and src_column.default is not None:
+        # Drop the old default before any ADD IDENTITY. For a serial source this
+        # is the nextval() default; its owned sequence lingers (excluded from
+        # introspection) but the diff still converges.
+        statements.append(f"{prefix} DROP DEFAULT;")
+    if identity_changed and dst_column.identity_kind is not None:
+        if src_column.identity_kind is None:
+            # Gains an identity. ADD ... AS IDENTITY requires the column to already
+            # be NOT NULL, so set it first when the source was nullable (the generic
+            # NOT NULL block below is skipped for identity targets, so no double).
+            if not src_column.not_null:
+                statements.append(f"{prefix} SET NOT NULL;")
+            statements.append(f"{prefix} ADD {dst_column.identity_clause};")
+        else:
+            # Stays an identity, generation kind flips (ALWAYS <-> BY DEFAULT).
+            statements.append(f"{prefix} SET GENERATED {dst_column.identity_kind};")
+    if dst_column.default is not None and src_column.default != dst_column.default:
+        statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
+    if src_column.not_null != dst_column.not_null:
+        if dst_column.not_null:
+            # Skip if a target primary key or the target identity already implies
+            # NOT NULL for this column.
+            if column_name not in pk_columns and dst_column.identity_kind is None:
+                statements.append(f"{prefix} SET NOT NULL;")
+        elif column_name in src_pk_columns:
+            # Covering source PK drops this run; defer past the CONSTRAINT phase.
+            deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")
+        else:
+            statements.append(f"{prefix} DROP NOT NULL;")
     return statements, deferred_drop_not_null
 
 
