@@ -81,6 +81,29 @@ def test_materialized_view_over_system_view_not_refused(gen_setup: GenerateSetup
     )
 
 
+def test_materialized_view_over_extension_view_not_refused(gen_setup: GenerateSetup) -> None:
+    """
+    A matview reading an extension-owned view (pg_stat_statements, in the user's own public
+    schema, a common setup) must not trip the matview-dependency guard: extension-owned
+    relations are not diffed, so the referenced side always exists and needs no ordering.
+    Its schema is not a system schema, so only the extension-ownership leg excludes it.
+    """
+    # pg_get_viewdef qualifies the column with the relation name on 14/15, bare on 16+; the
+    # FROM relation is schema-qualified because introspection runs with an empty search_path.
+    column = "pg_stat_statements.userid" if gen_setup.pg_major in (14, 15) else "userid"
+    gen_setup.assert_diff(
+        both=["CREATE EXTENSION pg_stat_statements"],
+        src=[],
+        # WITH NO DATA in the fixture: querying pg_stat_statements needs the preloaded library,
+        # which the test server does not have; the unpopulated matview only needs the catalog.
+        dst=["CREATE MATERIALIZED VIEW stats AS SELECT userid FROM pg_stat_statements WITH NO DATA"],
+        diff=[
+            f'CREATE MATERIALIZED VIEW "public"."stats" AS SELECT {column}'
+            "\n   FROM public.pg_stat_statements WITH NO DATA"
+        ],
+    )
+
+
 def test_materialized_view_on_materialized_view_raises(gen_setup: GenerateSetup) -> None:
     """
     A materialized view that reads from another materialized view is not supported yet
