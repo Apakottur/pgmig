@@ -23,8 +23,9 @@ This project is currently in active development, see [Roadmap](https://github.co
 
 1. [Getting Started](#getting-started)
 2. [Configuration](#configuration)
-3. [Contributing](#contributing)
-4. [License](#license)
+3. [FAQ](#faq)
+4. [Contributing](#contributing)
+5. [License](#license)
 
 ## Getting Started
 
@@ -32,31 +33,23 @@ This project is currently in active development, see [Roadmap](https://github.co
 
 pgmig is available as [`pgmig`](https://pypi.org/project/pgmig/) on PyPI.
 
-**As a CLI tool**, install the `binary` extra so the bundled libpq comes along (no system
-libpq needed). Invoke pgmig directly with [`uvx`](https://docs.astral.sh/uv/):
+Invoke pgmig directly with [`uvx`](https://docs.astral.sh/uv/):
 
 ```shell
-uvx 'pgmig[binary]' generate \
+uvx pgmig generate \
   --source postgresql://user:pass@localhost:5432/current \
   --target postgresql://user:pass@localhost:5432/desired
 ```
 
-Or install it globally:
+Or install pgmig with `uv` (recommended) or `pip`:
 
 ```shell
 # With uv.
-uv tool install 'pgmig[binary]'
+uv tool install pgmig@latest  # Install pgmig globally.
+uv add --dev pgmig            # Or add pgmig to your project.
 
 # With pip.
-pip install 'pgmig[binary]'
-```
-
-**As a library** (`import pgmig`), depend on bare `pgmig` and let your application pick the
-psycopg implementation — `psycopg[binary]`, `psycopg[c]`, or a system libpq — as
-[psycopg recommends](https://www.psycopg.org/psycopg3/docs/basic/install.html):
-
-```shell
-uv add pgmig      # Or: pip install pgmig
+pip install pgmig
 ```
 
 ### Usage
@@ -131,6 +124,21 @@ Other commands:
 
 A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
 e.g. `postgresql://user:pass@host:5432/dbname`.
+
+## FAQ
+
+### How do I install pgmig with the Postgres client library (libpq) bundled?
+
+pgmig depends on bare [`psycopg`](https://www.psycopg.org/psycopg3/), so when embedded as a
+library your application picks the psycopg build (`psycopg[binary]`, `psycopg[c]`, or a
+system libpq). For standalone / CLI use where no system libpq is available, install the
+`binary` extra to pull in the self-contained wheel:
+
+```shell
+uvx 'pgmig[binary]' generate ...   # One-off run.
+uv tool install 'pgmig[binary]'    # Global install.
+pip install 'pgmig[binary]'
+```
 
 ## Contributing
 
