@@ -70,6 +70,26 @@ def test_constraint_rename(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_constraint_rename_clears_comment(gen_setup: GenerateSetup) -> None:
+    """
+    A constraint renamed (same definition) whose source carries a comment but whose target
+    does not: RENAME preserves the comment, so COMMENT ... IS NULL must also be emitted, else
+    the migration does not converge.
+    """
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=[
+            "ALTER TABLE person ADD CONSTRAINT person_email_old UNIQUE (email)",
+            "COMMENT ON CONSTRAINT person_email_old ON person IS 'unique email'",
+        ],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_new UNIQUE (email)"],
+        diff=[
+            'ALTER TABLE "public"."person" RENAME CONSTRAINT "person_email_old" TO "person_email_new"',
+            'COMMENT ON CONSTRAINT "person_email_new" ON "public"."person" IS NULL',
+        ],
+    )
+
+
 def test_constraint_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP CONSTRAINT then ADD CONSTRAINT.

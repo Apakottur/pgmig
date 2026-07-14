@@ -11,7 +11,7 @@ def _diff_indexes(
     schema_name: str,
     src: dict[str, Index],
     dst: dict[str, Index],
-) -> tuple[list[str], list[str], list[str], set[str]]:
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff one table's standalone indexes into (drops, renames, creates), using each
     index's name-independent canonical form as the rename key.
@@ -31,6 +31,7 @@ def _index_comment_statements(
     src: dict[str, Index],
     dst: dict[str, Index],
     recreated: set[str],
+    renamed_from: dict[str, str],
 ) -> list[str]:
     """
     Emit COMMENT ON INDEX for target indexes whose comment differs from source.
@@ -40,6 +41,7 @@ def _index_comment_statements(
         dst,
         render=lambda name, index: comment_on("INDEX", qualified(schema_name, name), index.comment),
         recreated=recreated,
+        renamed_from=renamed_from,
     )
 
 
@@ -49,13 +51,13 @@ def diff_index_statements(schema_name: str, src: dict[str, Index], dst: dict[str
     then renames, then creates, then comment syncs. Honors context.index_concurrently.
     Shared by the table and materialized-view index generators.
     """
-    drops, renames, creates, recreated = _diff_indexes(schema_name=schema_name, src=src, dst=dst)
+    drops, renames, creates, recreated, renamed_from = _diff_indexes(schema_name=schema_name, src=src, dst=dst)
 
     if context.index_concurrently:
         drops = [drop.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for drop in drops]
         creates = [create.replace(" INDEX ", " INDEX CONCURRENTLY ", 1) for create in creates]
 
-    comments = _index_comment_statements(schema_name, src, dst, recreated)
+    comments = _index_comment_statements(schema_name, src, dst, recreated, renamed_from)
     return [*drops, *renames, *creates, *comments]
 
 
