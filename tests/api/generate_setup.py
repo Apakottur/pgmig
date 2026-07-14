@@ -1,5 +1,4 @@
-from psycopg import sql
-from typing_extensions import LiteralString
+import pytest
 
 from pgmig import generate
 from tests.fixtures.db_utils import DbConnection
@@ -22,40 +21,53 @@ class GenerateSetup:
         (row,) = self.src.execute("SHOW server_version_num")
         return int(row[0]) // 10000
 
-    def execute_both(self, query: LiteralString | sql.Composed) -> None:
-        """
-        Run the same query on both the source and target databases.
-        """
-        self.src.execute(query)
-        self.dst.execute(query)
-
-    def assert_migration_sql(
+    def assert_diff(
         self,
-        expected: str | list[str],
         *,
+        src: list[str],
+        dst: list[str],
+        diff: list[str],
+        both: list[str] | None = None,
         apply: bool = True,
         index_concurrently: bool = False,
         ignore_owner: bool = False,
     ) -> None:
         """
-        Assert that the migration SQL generated from the source database to the target database is as expected.
+        Set up both databases, assert the generated migration, then apply and confirm it converges.
 
         Args:
-            expected: The expected migration SQL, as a string or list of strings.
+            src: statements to run on the source database only.
+            dst: statements to run on the target database only.
+            diff: the expected migration SQL
+            both: statements to run on both databases.
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
             ignore_owner: Pass through to `generate` to suppress ALTER ... OWNER TO statements.
         """
-        # Multi-statement expectations must be passed as a list, not a "\n"-joined string.
-        if isinstance(expected, str) and "\n" in expected:
-            raise ValueError("Pass multi-statement expectations as a list of strings, not a '\\n'-joined string.")
+        # Shared setup runs on both DBs, before the side-specific statements.
+        src = (both or []) + src
+        dst = (both or []) + dst
+
+        # Verify commands. A statement may contain internal newlines/semicolons (e.g. a
+        # function body), but must not carry its own trailing terminator -- the helper joins
+        # with ";\n" and appends the ";" to each diff statement itself.
+        for cmd in src + dst + diff:
+            if cmd.endswith(("\n", ";")):
+                raise ValueError("Remove trailing newlines and semicolons from the statements to keep tests clean")
+
+        # Execute commands.
+        self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
+        self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
 
         # Normalize to the "\n"-joined form that `generate` returns.
-        expected_sql = "\n".join(expected) if isinstance(expected, list) else expected
+        expected_sql = "\n".join([f"{cmd};" for cmd in diff])
 
         # Generate the migration SQL.
         result = generate(
-            source=self.src.dsn, target=self.dst.dsn, index_concurrently=index_concurrently, ignore_owner=ignore_owner
+            source=self.src.dsn,
+            target=self.dst.dsn,
+            index_concurrently=index_concurrently,
+            ignore_owner=ignore_owner,
         )
 
         # Verify the result.
@@ -63,10 +75,6 @@ class GenerateSetup:
 
         # Apply the migration to the source and confirm it converges: after applying,
         # source should match target, so a second generate must produce nothing.
-        # The whole migration is run as one script; individual statements are
-        # ";"-terminated and may themselves span multiple lines (e.g. functions),
-        # so it must not be split on newlines. CONCURRENTLY statements cannot run in a
-        # transaction, but the test connections are autocommit, so they apply directly.
         if apply and result:
             self.src.execute(result)  # ty: ignore[invalid-argument-type]
             residual = generate(
@@ -76,3 +84,23 @@ class GenerateSetup:
                 ignore_owner=ignore_owner,
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
+
+    def assert_not_implemented(
+        self,
+        *,
+        src: list[str],
+        dst: list[str],
+        both: list[str] | None = None,
+        match: str | None = None,
+    ) -> None:
+        """
+        Wrapper around `assert_diff` that asserts the migration raises NotImplementedError.
+        """
+        with pytest.raises(NotImplementedError, match=match):
+            self.assert_diff(
+                src=src,
+                dst=dst,
+                both=both,
+                diff=[],
+                apply=False,
+            )

@@ -78,7 +78,8 @@ def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
 
 def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
     # --index-concurrently emits CONCURRENTLY index statements.
-    gen_setup.execute_both("CREATE TABLE person (name text)")
+    gen_setup.src.execute("CREATE TABLE person (name text)")
+    gen_setup.dst.execute("CREATE TABLE person (name text)")
     gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
 
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--index-concurrently"])

@@ -27,12 +27,18 @@ def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = _ensure_role(gen_setup, "pgmig_owner_b")
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute(sql.SQL("ALTER TABLE person OWNER TO {}").format(sql.Identifier(role_a)))
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute(sql.SQL("ALTER TABLE person OWNER TO {}").format(sql.Identifier(role_b)))
 
-    gen_setup.assert_migration_sql(f'ALTER TABLE "public"."person" OWNER TO "{role_b}";')
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            f"ALTER TABLE person OWNER TO {role_a}",
+        ],
+        dst=[
+            "CREATE TABLE person (name text)",
+            f"ALTER TABLE person OWNER TO {role_b}",
+        ],
+        diff=[f'ALTER TABLE "public"."person" OWNER TO "{role_b}"'],
+    )
 
 
 def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
@@ -41,12 +47,19 @@ def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = _ensure_role(gen_setup, "pgmig_owner_b")
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.src.execute(sql.SQL("ALTER TABLE person OWNER TO {}").format(sql.Identifier(role_a)))
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute(sql.SQL("ALTER TABLE person OWNER TO {}").format(sql.Identifier(role_b)))
 
-    gen_setup.assert_migration_sql("", ignore_owner=True)
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            f"ALTER TABLE person OWNER TO {role_a}",
+        ],
+        dst=[
+            "CREATE TABLE person (name text)",
+            f"ALTER TABLE person OWNER TO {role_b}",
+        ],
+        diff=[],
+        ignore_owner=True,
+    )
 
 
 def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
@@ -54,7 +67,14 @@ def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
     Same table and same owner on both sides -> no migration SQL.
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
-    gen_setup.execute_both("CREATE TABLE person (name text)")
-    gen_setup.execute_both(sql.SQL("ALTER TABLE person OWNER TO {}").format(sql.Identifier(role_a)))
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (name text)",
+            f"ALTER TABLE person OWNER TO {role_a}",
+        ],
+        dst=[
+            "CREATE TABLE person (name text)",
+            f"ALTER TABLE person OWNER TO {role_a}",
+        ],
+        diff=[],
+    )
