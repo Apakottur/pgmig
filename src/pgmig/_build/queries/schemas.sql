@@ -13,13 +13,6 @@ WHERE
     --   [x] self leg       -- the schema itself is extension-owned (n.oid)
     --   [-] namespace leg  -- n/a; a schema is a namespace, not an object inside one
     --   [-] owning-table leg -- n/a; schemas are not attached to a table
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
+    {{exclude_extension_owned :n.oid }}
 ORDER BY
     n.nspname;

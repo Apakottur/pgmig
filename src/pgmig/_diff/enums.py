@@ -1,8 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
-from pgmig._models import EnumType
-from pgmig._sql import comment_on, literal, qualified
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._sql import literal, qualified
 
 
 def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_values: list[str]) -> list[str]:
@@ -34,28 +33,14 @@ def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_v
     return statements
 
 
-def _enum_comment_statements(schema_name: str, src: dict[str, EnumType], dst: dict[str, EnumType]) -> list[str]:
-    """
-    Emit COMMENT ON TYPE for target enums whose comment differs from source.
-    """
-    return _diff_comments(
-        src, dst, render=lambda name, enum: comment_on("TYPE", qualified(schema_name, name), enum.comment)
-    )
-
-
 def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of enum types (create, drop, ADD VALUE). Creates and
     value additions are phased before tables (a column may be of the type); drops run
     after.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_enums = src_schema.enum_by_name if src_schema else {}
-        dst_enums = dst_schema.enum_by_name if dst_schema else {}
-
-        for name in sorted(src_enums.keys() | dst_enums.keys()):
-            src_enum = src_enums.get(name)
-            dst_enum = dst_enums.get(name)
+    for schema_name, src_enums, dst_enums, pairs in ctx_iter_object_pairs(lambda schema: schema.enum_by_name):
+        for name, src_enum, dst_enum in pairs:
             qualified_name = qualified(schema_name, name)
 
             # Present in target only: create it.
@@ -71,5 +56,5 @@ def generate() -> Iterator[Statement]:
                     yield Statement(Phase.TYPE_CREATE, sql)
 
         # Sync comments for target enums, after the types they annotate exist.
-        for sql in _enum_comment_statements(schema_name, src_enums, dst_enums):
+        for sql in diff_comment_statements(schema_name, src_enums, dst_enums, kind="TYPE"):
             yield Statement(Phase.TYPE_CREATE, sql)

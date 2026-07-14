@@ -35,24 +35,10 @@ WHERE
     --   [x] owning-table leg -- index on an extension-owned table (c.oid)
     --   [-] self leg         -- an extension-owned index sits on an extension-owned
     --                           table, so the owning-table leg already excludes it
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
+    {{exclude_extension_owned :n.oid }}
     -- Exclude indexes on tables an extension owns directly: they are recreated by
     -- CREATE EXTENSION, so re-emitting them would conflict.
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = c.oid
-            AND d.deptype = 'e')
+    {{exclude_extension_owned :c.oid }}
     AND NOT i.indisprimary
     AND NOT EXISTS (
         SELECT

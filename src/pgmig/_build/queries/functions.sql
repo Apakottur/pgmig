@@ -30,22 +30,7 @@ WHERE
     --   [x] namespace leg  -- function in an extension-owned schema (n.oid)
     --   [x] self leg       -- the function itself is extension-owned (p.oid)
     --   [ ] owning-table leg -- n/a, functions are not attached to a table
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = p.oid
-            AND d.deptype = 'e')
+    {{exclude_extension_owned :n.oid }} {{exclude_extension_owned :p.oid }}
 ORDER BY
     n.nspname,
     p.proname,

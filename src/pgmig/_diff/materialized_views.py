@@ -1,23 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
-from pgmig._models import MaterializedView
-from pgmig._sql import comment_on, qualified
-
-
-def _materialized_view_comment_statements(
-    schema_name: str, src: dict[str, MaterializedView], dst: dict[str, MaterializedView], recreated: set[str]
-) -> list[str]:
-    """
-    Emit COMMENT ON MATERIALIZED VIEW for target matviews whose comment differs from source
-    (a recreated matview always re-emits, since the drop-and-recreate reset its comment).
-    """
-    return _diff_comments(
-        src,
-        dst,
-        render=lambda name, view: comment_on("MATERIALIZED VIEW", qualified(schema_name, name), view.comment),
-        recreated=recreated,
-    )
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._sql import qualified
 
 
 def generate() -> Iterator[Statement]:
@@ -27,16 +11,13 @@ def generate() -> Iterator[Statement]:
     definition is a drop-and-recreate (there is no CREATE OR REPLACE MATERIALIZED VIEW). Creates
     use WITH NO DATA: the matview is created unpopulated and the user runs REFRESH themselves.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_views = src_schema.materialized_view_by_name if src_schema else {}
-        dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
-
+    for schema_name, src_views, dst_views, pairs in ctx_iter_object_pairs(
+        lambda schema: schema.materialized_view_by_name
+    ):
         # Matviews recreated (definition changed): the drop resets the comment, so it must
         # be re-emitted even when unchanged.
         recreated: set[str] = set()
-        for name in sorted(src_views.keys() | dst_views.keys()):
-            src_view = src_views.get(name)
-            dst_view = dst_views.get(name)
+        for name, src_view, dst_view in pairs:
             qualified_name = qualified(schema_name, name)
 
             # Present in target only: create it.
@@ -58,5 +39,7 @@ def generate() -> Iterator[Statement]:
                 recreated.add(name)
 
         # Sync comments for target matviews, after the matviews they annotate exist.
-        for sql in _materialized_view_comment_statements(schema_name, src_views, dst_views, recreated):
+        for sql in diff_comment_statements(
+            schema_name, src_views, dst_views, kind="MATERIALIZED VIEW", recreated=recreated
+        ):
             yield Statement(Phase.VIEW_CREATE, sql)

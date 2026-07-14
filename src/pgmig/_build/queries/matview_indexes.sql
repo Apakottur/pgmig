@@ -22,22 +22,7 @@ WHERE
     AND n.nspname <> 'information_schema'
     -- Extension-ownership exclusion: index in an extension-owned schema, or an index on a
     -- matview an extension owns directly (recreated by CREATE EXTENSION).
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = c.oid
-            AND d.deptype = 'e')
+    {{exclude_extension_owned :n.oid }} {{exclude_extension_owned :c.oid }}
 ORDER BY
     n.nspname,
     c.relname,

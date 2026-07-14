@@ -26,26 +26,11 @@ WHERE
     --   [x] namespace leg  -- composite type in an extension-owned schema (n.oid)
     --   [x] self leg       -- the composite type itself is extension-owned (t.oid)
     --   [ ] owning-table leg -- n/a, a standalone composite type is not attached to a table
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
-        AND NOT EXISTS (
-            SELECT
-                1
-            FROM
-                pg_depend d
-            WHERE
-                d.objid = t.oid
-                AND d.deptype = 'e')
-    GROUP BY
-        n.nspname,
-        t.oid,
-        t.typname
-    ORDER BY
-        n.nspname,
-        t.typname;
+    {{exclude_extension_owned :n.oid }} {{exclude_extension_owned :t.oid }}
+GROUP BY
+    n.nspname,
+    t.oid,
+    t.typname
+ORDER BY
+    n.nspname,
+    t.typname;

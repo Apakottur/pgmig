@@ -5,8 +5,10 @@ from typing import Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._models import ColumnKey, Schema, Table
+from pgmig._sql import comment_on, ident, qualified
 
 _Renamable = TypeVar("_Renamable")
+_ObjT = TypeVar("_ObjT")
 
 
 class _Commented(Protocol):
@@ -53,6 +55,50 @@ def _diff_comments(
         if src_comment != dst[name].comment:
             statements.append(render(name, dst[name]))
     return statements
+
+
+def diff_comment_statements(
+    schema_name: str,
+    src: Mapping[str, _CommentedT],
+    dst: Mapping[str, _CommentedT],
+    *,
+    kind: str,
+    recreated: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
+    """
+    COMMENT ON <kind> for every target object (identified by its schema-qualified name)
+    whose comment differs from source. The render shared by every schema-qualified object
+    kind (types, domains, sequences, indexes, views, ...), gathered here so the per-kind
+    generators name their `kind` rather than each restating the _diff_comments call.
+    """
+    return _diff_comments(
+        src,
+        dst,
+        render=lambda name, obj: comment_on(kind, qualified(schema_name, name), obj.comment),
+        recreated=recreated,
+    )
+
+
+def diff_child_comment_statements(
+    schema_name: str,
+    table_name: str,
+    src: Mapping[str, _CommentedT],
+    dst: Mapping[str, _CommentedT],
+    *,
+    kind: str,
+    recreated: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
+    """
+    COMMENT ON <kind> for a table-owned object addressed as `<name> ON <table>`
+    (constraints, triggers) whose comment differs from source.
+    """
+    table = qualified(schema_name, table_name)
+    return _diff_comments(
+        src,
+        dst,
+        render=lambda name, obj: comment_on(kind, f"{ident(name)} ON {table}", obj.comment),
+        recreated=recreated,
+    )
 
 
 class Phase(Enum):
@@ -129,6 +175,25 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
         dst_tables = dst_schema.table_by_name if dst_schema else {}
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
+
+
+def ctx_iter_object_pairs(
+    select: Callable[[Schema], Mapping[str, _ObjT]],
+) -> Iterator[tuple[str, dict[str, _ObjT], dict[str, _ObjT], list[tuple[str, _ObjT | None, _ObjT | None]]]]:
+    """
+    For every schema across both databases (sorted), yield
+    (schema_name, source_objects, target_objects, pairs), where `select` picks a
+    name->object map off a Schema (empty when the schema is absent on that side) and
+    `pairs` is the (name, source, target) triples over the union of names, sorted by name.
+
+    Captures the create/drop/alter scaffold shared by the schema-scoped object generators:
+    the body iterates `pairs`, while the object maps feed the trailing comment diff.
+    """
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_objs: dict[str, _ObjT] = dict(select(src_schema)) if src_schema else {}
+        dst_objs: dict[str, _ObjT] = dict(select(dst_schema)) if dst_schema else {}
+        pairs = [(name, src_objs.get(name), dst_objs.get(name)) for name in sorted(src_objs.keys() | dst_objs.keys())]
+        yield schema_name, src_objs, dst_objs, pairs
 
 
 def retyped_column_refs() -> set[ColumnKey]:

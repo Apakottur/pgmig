@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_schema_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_object_pairs
 from pgmig._models import Function
 from pgmig._sql import comment_on, qualified
 
@@ -48,17 +48,13 @@ def generate() -> Iterator[Statement]:
     CREATE OR REPLACE) are phased after tables so routine bodies can reference them;
     drops run early.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_functions = src_schema.function_by_signature if src_schema else {}
-        dst_functions = dst_schema.function_by_signature if dst_schema else {}
-
+    for schema_name, src_functions, dst_functions, pairs in ctx_iter_object_pairs(
+        lambda schema: schema.function_by_signature
+    ):
         # Routines dropped and recreated (return-type change): CREATE OR REPLACE keeps the
         # comment, but a drop-and-recreate resets it, so its comment must be re-emitted.
         recreated: set[str] = set()
-        for signature in sorted(src_functions.keys() | dst_functions.keys()):
-            src_func = src_functions.get(signature)
-            dst_func = dst_functions.get(signature)
-
+        for signature, src_func, dst_func in pairs:
             # Present in target only: create it.
             if src_func is None:
                 # pg_get_functiondef has no trailing semicolon; add one to terminate the statement.
