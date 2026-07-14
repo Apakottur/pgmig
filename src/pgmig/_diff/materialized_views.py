@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, retyped_column_refs
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, retyped_column_readers
 from pgmig._models import ViewKey
 from pgmig._sql import qualified
 
@@ -20,10 +19,9 @@ def generate() -> Iterator[Statement]:
     Matviews cannot depend on other managed views/matviews (that pairing is refused upstream),
     so each matview is independent -- no transitive cascade is needed.
     """
-    # Matviews reading a column whose type changes between source and target. Source-side
-    # identity: the column and the matview reading it both exist in the source.
-    retyped_columns = retyped_column_refs()
-    column_readers = {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
+    # Matviews reading a column whose type changes between source and target (same helper the
+    # matview-index differ uses, so both agree on which matviews are recreated).
+    column_readers = retyped_column_readers()
 
     for schema_name, src_views, dst_views, pairs in ctx_iter_object_pairs(
         lambda schema: schema.materialized_view_by_name

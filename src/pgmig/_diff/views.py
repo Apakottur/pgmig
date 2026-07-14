@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, retyped_column_refs
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, retyped_column_readers
 from pgmig._errors import PgmigError
 from pgmig._models import DbInfo, View, ViewKey
 from pgmig._sql import qualified
@@ -97,9 +97,7 @@ def generate() -> Iterator[Statement]:
     # refuses ALTER COLUMN ... TYPE while a view reads the column, so the view is dropped in
     # VIEW_DROP (before the TABLE-phase change) and recreated in VIEW_CREATE. A type change
     # leaves the view's definition unchanged, so `changed` above never catches this.
-    # Source-side edges: the column and the view reading it both exist in the source.
-    retyped_columns = retyped_column_refs()
-    column_readers = {key for key, cols in source.view_column_dependencies.items() if cols & retyped_columns}
+    column_readers = retyped_column_readers()
     # A recreate resets the view (and its comment); pull in every view that transitively
     # reads a changed one. Restrict to shared views -- a create-only view has nothing to
     # drop, and a drop-only view is already dropped below.

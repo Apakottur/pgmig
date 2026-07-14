@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._models import ColumnKey, Schema, Table
+from pgmig._models import ColumnKey, Schema, Table, ViewKey
 from pgmig._sql import comment_on, ident, qualified
 
 _Renamable = TypeVar("_Renamable")
@@ -230,6 +230,20 @@ def retyped_column_refs() -> set[ColumnKey]:
             if dst_column is not None and src_column.type != dst_column.type:
                 refs.add(ColumnKey(schema_name, table_name, src_column.name))
     return refs
+
+
+def retyped_column_readers() -> set[ViewKey]:
+    """
+    Views and materialized views that read (in the source) a table column whose type changes
+    between source and target. Such a reader must be dropped and recreated around the
+    ALTER COLUMN ... TYPE: Postgres refuses the alter while the column is read, and the type
+    change leaves the reader's definition text unchanged, so only the column edge catches it.
+
+    Shared by the view diff, the matview diff, and the matview-index differ (which must treat
+    such a matview as recreated so its indexes are recreated with it).
+    """
+    retyped_columns = retyped_column_refs()
+    return {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
 
 
 def diff_renamable(
