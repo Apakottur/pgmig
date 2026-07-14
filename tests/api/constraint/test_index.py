@@ -44,6 +44,26 @@ def test_index_rename(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_index_rename_clears_comment(gen_setup: GenerateSetup) -> None:
+    """
+    An index renamed (same definition) whose source carries a comment but whose target does
+    not: RENAME preserves the comment, so COMMENT ... IS NULL must also be emitted, else the
+    renamed index keeps the stale comment and the migration does not converge.
+    """
+    gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[
+            "CREATE INDEX person_name_old ON person (name)",
+            "COMMENT ON INDEX person_name_old IS 'by name'",
+        ],
+        dst=["CREATE INDEX person_name_new ON person (name)"],
+        diff=[
+            'ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new"',
+            'COMMENT ON INDEX "public"."person_name_new" IS NULL',
+        ],
+    )
+
+
 def test_index_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical name and definition on both sides -> no migration SQL.

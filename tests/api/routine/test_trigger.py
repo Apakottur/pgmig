@@ -53,6 +53,26 @@ def test_trigger_rename(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_trigger_rename_clears_comment(gen_setup: GenerateSetup) -> None:
+    """
+    A trigger renamed (same definition) whose source carries a comment but whose target does
+    not: RENAME preserves the comment, so COMMENT ... IS NULL must also be emitted, else the
+    migration does not converge.
+    """
+    gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=[
+            "CREATE TRIGGER audit_old AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()",
+            "COMMENT ON TRIGGER audit_old ON person IS 'audit'",
+        ],
+        dst=["CREATE TRIGGER audit_new AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()"],
+        diff=[
+            'ALTER TRIGGER "audit_old" ON "public"."person" RENAME TO "audit_new"',
+            'COMMENT ON TRIGGER "audit_new" ON "public"."person" IS NULL',
+        ],
+    )
+
+
 def test_trigger_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP TRIGGER then CREATE TRIGGER.
