@@ -44,6 +44,36 @@ def test_index_rename(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_index_create_reusing_renamed_away_name_emits_comment(gen_setup: GenerateSetup) -> None:
+    """
+    Source has index `shared_idx`; target has `shared_idx` (redefined) plus `renamed_idx`
+    whose definition matches source `shared_idx`. The differ renames shared_idx -> renamed_idx
+    (same definition) and creates a fresh shared_idx. The fresh shared_idx was just created and
+    carries no comment, so its target comment must be emitted -- even though resolving the new
+    name back to the (renamed-away) source object would otherwise find a matching comment and
+    suppress it, leaving a residual diff. A create reusing a vacated name is treated as
+    recreated for comment purposes.
+    """
+    gen_setup.assert_diff(
+        both=["CREATE TABLE t (a int, b int)"],
+        src=[
+            "CREATE INDEX shared_idx ON t (a)",
+            "COMMENT ON INDEX shared_idx IS 'kept'",
+        ],
+        dst=[
+            "CREATE INDEX shared_idx ON t (b)",
+            "COMMENT ON INDEX shared_idx IS 'kept'",
+            "CREATE INDEX renamed_idx ON t (a)",
+            "COMMENT ON INDEX renamed_idx IS 'kept'",
+        ],
+        diff=[
+            'ALTER INDEX "public"."shared_idx" RENAME TO "renamed_idx"',
+            "CREATE INDEX shared_idx ON public.t USING btree (b)",
+            'COMMENT ON INDEX "public"."shared_idx" IS \'kept\'',
+        ],
+    )
+
+
 def test_index_rename_clears_comment(gen_setup: GenerateSetup) -> None:
     """
     An index renamed (same definition) whose source carries a comment but whose target does
