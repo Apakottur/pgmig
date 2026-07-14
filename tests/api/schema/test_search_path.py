@@ -1,5 +1,3 @@
-from psycopg import sql
-
 from tests.api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import SRC_DB
 
@@ -9,14 +7,18 @@ def test_identical_dbs_with_source_search_path_setting(gen_setup: GenerateSetup)
     Two byte-identical databases must produce no diff even when one of them pins a
     non-default search_path. Introspection must not depend on the DB's search_path.
     """
-    gen_setup.execute_both("CREATE TYPE mood AS ENUM ('happy', 'sad')")
-    gen_setup.execute_both("CREATE TABLE person (m mood)")
-
-    # Source database pins an empty search_path (a common hardened setup); new
-    # connections inherit it.
-    gen_setup.src.execute(sql.SQL("ALTER DATABASE {} SET search_path = ''").format(sql.Identifier(SRC_DB)))
-
-    gen_setup.assert_migration_sql("")
+    gen_setup.assert_diff(
+        src=[
+            # Source database pins an empty search_path (a common hardened setup); new connections inherit it.
+            f"ALTER DATABASE {SRC_DB} SET search_path = ''",
+        ],
+        dst=[],
+        both=[
+            "CREATE TYPE mood AS ENUM ('happy', 'sad')",
+            "CREATE TABLE person (m mood)",
+        ],
+        diff=[],
+    )
 
 
 def test_column_type_is_schema_qualified(gen_setup: GenerateSetup) -> None:
