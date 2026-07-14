@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from pgmig._errors import UnsupportedChangeError
+
 
 @dataclass(frozen=True, order=True)
 class ViewKey:
@@ -56,7 +58,7 @@ class Column:
             case "bigint":
                 return "bigserial"
             case _:
-                raise NotImplementedError(f"Unknown integer type: {self.type}")
+                raise UnsupportedChangeError(f"Unknown integer type: {self.type}")
 
     @property
     def identity_kind(self) -> str | None:
@@ -74,7 +76,7 @@ class Column:
             case "d":
                 return "BY DEFAULT"
             case _:
-                raise NotImplementedError(f"Unknown identity kind: {self.identity!r}")
+                raise UnsupportedChangeError(f"Unknown identity kind: {self.identity!r}")
 
     @property
     def identity_clause(self) -> str | None:

@@ -1,6 +1,23 @@
 from tests.api.generate_setup import GenerateSetup
 
 
+def test_owned_sequence_on_non_integer_column_is_unsupported(gen_setup: GenerateSetup) -> None:
+    """
+    A column that owns a sequence (so pg_get_serial_sequence resolves it) but whose type is
+    not one of the serial integer types has no serial pseudo-type to emit; pgmig refuses it
+    rather than guess.
+    """
+    gen_setup.assert_unsupported(
+        src=[],
+        dst=[
+            "CREATE SEQUENCE s",
+            "CREATE TABLE t (x numeric DEFAULT nextval('s'))",
+            "ALTER SEQUENCE s OWNED BY t.x",
+        ],
+        match="Unknown integer type",
+    )
+
+
 def test_serial_column_emitted_as_serial(gen_setup: GenerateSetup) -> None:
     """
     A serial column is emitted with the `serial` pseudo-type, not its expanded
@@ -97,7 +114,7 @@ def test_serial_change_in_alter_path_raises(gen_setup: GenerateSetup) -> None:
     excluded from introspection and never created -> apply fails "relation does not
     exist". It must raise instead.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=["CREATE TABLE person (id integer)"],
         dst=["CREATE TABLE person (id serial)"],
         match="serial change",

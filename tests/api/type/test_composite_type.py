@@ -51,9 +51,9 @@ def test_composite_type_unchanged(gen_setup: GenerateSetup) -> None:
 def test_composite_type_field_change_raises(gen_setup: GenerateSetup) -> None:
     """
     A field-level change on a type present in both sides is not supported yet (ALTER TYPE
-    deferred) -> NotImplementedError.
+    deferred) -> UnsupportedChangeError.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=["CREATE TYPE pair AS (a integer, b integer)"],
         dst=["CREATE TYPE pair AS (a integer, b bigint)"],
         match="Composite type field change is not supported",

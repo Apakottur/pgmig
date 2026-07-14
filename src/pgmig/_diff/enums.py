@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._errors import UnsupportedChangeError
 from pgmig._sql import literal, qualified
 
 
@@ -10,12 +11,12 @@ def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_v
 
     Only additions are supported: the source values must remain a subsequence of the
     target values (same relative order, values only inserted). A removal, reorder, or
-    renamed-looking label raises NotImplementedError rather than emitting a wrong or
+    renamed-looking label raises UnsupportedChangeError rather than emitting a wrong or
     non-converging migration.
     """
     target_iter = iter(dst_values)
     if not all(value in target_iter for value in src_values):
-        raise NotImplementedError(
+        raise UnsupportedChangeError(
             f"Unsupported enum change for {qualified_name}: values may only be appended or inserted, "
             f"not removed, reordered, or renamed ({src_values} -> {dst_values})."
         )

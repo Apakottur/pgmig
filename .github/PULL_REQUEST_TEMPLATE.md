@@ -2,7 +2,7 @@
 
 <!-- One or two lines: what this changes and why. Link the roadmap/issue, e.g. "Refs #8". -->
 
-## Behavior
+## Details
 
 <!--
 For a diff feature, show what SQL is emitted. A table reads well:
@@ -19,6 +19,6 @@ Delete this section for pure refactors / docs / tooling.
 
 <!--
 Anything a reviewer needs: ordering/phase decisions, scope boundaries,
-known limitations, or explicit out-of-scope behavior (e.g. what raises
-NotImplementedError). Delete if there's nothing to add.
+known limitations, or explicit out-of-scope behavior (e.g. what raises unsupported).
+Delete if there's nothing to add.
 -->

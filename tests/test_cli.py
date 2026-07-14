@@ -57,6 +57,20 @@ def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
     assert "ValueError" in result.output
 
 
+def test_generate_unsupported_change_is_clean(gen_setup: GenerateSetup) -> None:
+    # A documented limitation (UnsupportedChangeError) is a known failure: clean message,
+    # no traceback and no "internal error, open an issue" prompt.
+    gen_setup.src.execute("CREATE DOMAIN d AS integer")
+    gen_setup.dst.execute("CREATE DOMAIN d AS text")
+
+    result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn])
+
+    assert result.exit_code == 1
+    assert "not supported" in result.output
+    assert "Traceback" not in result.output
+    assert "internal error" not in result.output.lower()
+
+
 def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
     # --check turns a non-empty diff into a non-zero exit (CI gate) while still showing it.
     gen_setup.dst.execute("CREATE TABLE person (name text)")

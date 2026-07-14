@@ -71,9 +71,9 @@ def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
 
 def test_enum_value_removal_unsupported(gen_setup: GenerateSetup) -> None:
     """
-    Removing a value is unsupported -> NotImplementedError.
+    Removing a value is unsupported -> UnsupportedChangeError.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
         dst=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
     )
@@ -81,9 +81,9 @@ def test_enum_value_removal_unsupported(gen_setup: GenerateSetup) -> None:
 
 def test_enum_value_reorder_unsupported(gen_setup: GenerateSetup) -> None:
     """
-    Reordering values is unsupported -> NotImplementedError.
+    Reordering values is unsupported -> UnsupportedChangeError.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
         dst=["CREATE TYPE mood AS ENUM ('happy', 'sad')"],
     )

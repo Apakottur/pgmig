@@ -139,10 +139,10 @@ def test_function_comment_added(gen_setup: GenerateSetup) -> None:
 def test_function_drop_with_dependent_unsupported(gen_setup: GenerateSetup) -> None:
     """
     Dropping a function that a column default depends on is refused (dependency-aware
-    drop ordering is not implemented): raise NotImplementedError rather than emit an
+    drop ordering is not supported): raise UnsupportedChangeError rather than emit an
     invalid migration that DROP FUNCTION-before-DROP DEFAULT.
     """
-    gen_setup.assert_not_implemented(
+    gen_setup.assert_unsupported(
         src=[
             "CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
             "CREATE TABLE t (x integer DEFAULT f())",

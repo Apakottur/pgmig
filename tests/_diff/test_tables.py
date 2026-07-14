@@ -1,5 +1,6 @@
 import pytest
 
+from pgmig import UnsupportedChangeError
 from pgmig._diff.tables import _column_def, _parenthesize_generation
 from pgmig._models import Column
 
@@ -21,7 +22,7 @@ def test_virtual_generated_column_raises() -> None:
         generation_expression="(b * 2)",
     )
 
-    with pytest.raises(NotImplementedError, match="Virtual generated column"):
+    with pytest.raises(UnsupportedChangeError, match="Virtual generated column"):
         _column_def(column)
 
 
