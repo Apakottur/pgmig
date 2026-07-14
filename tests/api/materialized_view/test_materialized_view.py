@@ -72,10 +72,12 @@ def test_materialized_view_over_system_view_not_refused(gen_setup: GenerateSetup
     must not trip the matview-dependency guard: system schemas are not managed by pgmig, so
     the dependency is not a matview-on-managed-view edge that needs ordering.
     """
+    # pg_get_viewdef qualifies the column with the relation name on 14/15, bare on 16+.
+    column = "pg_stat_activity.pid" if gen_setup.pg_major in (14, 15) else "pid"
     gen_setup.assert_diff(
         src=[],
         dst=["CREATE MATERIALIZED VIEW active AS SELECT pid FROM pg_stat_activity"],
-        diff=['CREATE MATERIALIZED VIEW "public"."active" AS SELECT pid\n   FROM pg_stat_activity WITH NO DATA'],
+        diff=[f'CREATE MATERIALIZED VIEW "public"."active" AS SELECT {column}\n   FROM pg_stat_activity WITH NO DATA'],
     )
 
 
