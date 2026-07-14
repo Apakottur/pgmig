@@ -66,6 +66,19 @@ def test_materialized_view_comment(gen_setup: GenerateSetup) -> None:
     )
 
 
+def test_materialized_view_over_system_view_not_refused(gen_setup: GenerateSetup) -> None:
+    """
+    A matview reading a system catalog view (pg_stat_activity, a common monitoring pattern)
+    must not trip the matview-dependency guard: system schemas are not managed by pgmig, so
+    the dependency is not a matview-on-managed-view edge that needs ordering.
+    """
+    gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE MATERIALIZED VIEW active AS SELECT pid FROM pg_stat_activity"],
+        diff=['CREATE MATERIALIZED VIEW "public"."active" AS SELECT pid\n   FROM pg_stat_activity WITH NO DATA'],
+    )
+
+
 def test_materialized_view_on_materialized_view_raises(gen_setup: GenerateSetup) -> None:
     """
     A materialized view that reads from another materialized view is not supported yet

@@ -17,9 +17,10 @@ class _ViewColumnDependencyRow(BaseModel):
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
     """
-    View-on-column edges: record, for each plain view, the set of table columns it reads.
-    The view diff uses these to drop and recreate a view around a change (type change, drop)
-    to a column it depends on, since Postgres refuses to alter or drop a column a view reads.
+    View-on-column edges: record, for each view or materialized view, the set of table
+    columns it reads. The view and matview diffs use these to drop and recreate a (mat)view
+    around a change (type change, drop) to a column it depends on, since Postgres refuses to
+    alter or drop a column a view or matview reads.
     """
     for row in _run_query(conn, "view_column_dependencies.sql", _ViewColumnDependencyRow):
         view = ViewKey(row.view_schema, row.view_name)
