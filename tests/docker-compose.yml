@@ -39,9 +39,7 @@ services:
     ports:
       - "15432:5432"
 
-  # Connection pooler in front of Postgres, so the suite can exercise pgmig through
-  # pgbouncer. Transaction pooling rejects server-side startup options (-c ...), which is
-  # the failure mode the introspection connection must avoid; see tests/_build/test_pgbouncer.py.
+  # Minimal pgbouncer instance for testing.
   pgbouncer:
     image: edoburu/pgbouncer:v1.25.2-p0
     depends_on:

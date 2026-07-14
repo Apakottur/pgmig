@@ -15,17 +15,16 @@ def _wait_for_pgbouncer(dsn: str) -> None:
 
 def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
     """
-    pgmig must introspect a database reached through pgbouncer, whose transaction pooling
-    rejects server-side startup options (-c ...). This exercises the whole introspection
-    end to end through the pooler: if the session were configured via startup options the
-    connection would be refused ("unsupported startup parameter in options: ...").
+    Ensure that introspection works through pgbouncer.
     """
     # Create an object on the source database over a direct connection.
     gen_setup.src.execute("CREATE TABLE widget (id integer)")
 
-    # Introspect the same database THROUGH pgbouncer (wildcard-routed, transaction pooling).
+    # Wait for pgbouncer to start accepting connections.
     _wait_for_pgbouncer(gen_setup.src.pgbouncer_dsn)
+
+    # Introspect the database through pgbouncer.
     info = build_db_info(gen_setup.src.pgbouncer_dsn)
 
-    # The full introspection ran through the pooler and saw the object.
+    # Verify the introspection result.
     assert "widget" in info.schema_by_name["public"].table_by_name
