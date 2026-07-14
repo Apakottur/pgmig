@@ -4,7 +4,22 @@ import psycopg
 from pydantic import BaseModel
 
 from pgmig._build._core import _run_query
-from pgmig._models import DbInfo, Function
+from pgmig._models import DbInfo, Function, FunctionKey, RelationKey
+
+
+class _FunctionDep(BaseModel):
+    """A routine another routine hard-depends on (jsonb object from functions.sql)."""
+
+    schema_name: str
+    name: str
+    args: str  # pg_get_function_identity_arguments
+
+
+class _RelationDep(BaseModel):
+    """A table/view/matview a routine hard-depends on (jsonb object from functions.sql)."""
+
+    schema_name: str
+    name: str
 
 
 class _FunctionRow(BaseModel):
@@ -16,6 +31,8 @@ class _FunctionRow(BaseModel):
     func_kind: str
     func_comment: str | None
     func_has_dependents: bool
+    func_depends_on_functions: list[_FunctionDep]
+    func_depends_on_relations: list[_RelationDep]
 
 
 def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
@@ -32,4 +49,11 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
             kind=func_row.func_kind,
             comment=func_row.func_comment,
             has_dependents=func_row.func_has_dependents,
+            depends_on_functions=frozenset(
+                FunctionKey(schema=dep.schema_name, signature=f"{dep.name}({dep.args})")
+                for dep in func_row.func_depends_on_functions
+            ),
+            depends_on_relations=frozenset(
+                RelationKey(schema=dep.schema_name, name=dep.name) for dep in func_row.func_depends_on_relations
+            ),
         )
