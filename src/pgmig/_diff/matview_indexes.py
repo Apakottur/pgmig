@@ -10,11 +10,12 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of indexes on materialized views (create, drop, rename).
 
     An index is created after its matview exists, so all statements land in
-    Phase.VIEW_CREATE (matview creates are emitted earlier in that phase). A recreated matview
-    loses every index; it is therefore diffed against an empty index set so all target indexes
-    are created fresh. A matview is recreated when its definition changed OR it reads a column
-    whose type changes (the matview diff drops and recreates it in that case too, even though
-    its definition is unchanged). A dropped matview takes its indexes with it and is skipped.
+    Phase.MATVIEW_INDEX_CREATE, which follows Phase.VIEW_CREATE where matviews are created --
+    the ordering is a phase invariant, independent of generator registration order. A recreated
+    matview loses every index; it is therefore diffed against an empty index set so all target
+    indexes are created fresh. A matview is recreated when its definition changed OR it reads a
+    column whose type changes (the matview diff drops and recreates it in that case too, even
+    though its definition is unchanged). A dropped matview takes its indexes with it and is skipped.
     """
     # Matviews the matview diff recreates because they read a retyped column (definition
     # unchanged). Kept in sync with materialized_views.generate via the shared helper.
@@ -41,4 +42,4 @@ def generate() -> Iterator[Statement]:
                 src_indexes = src_view.index_by_name
 
             for sql in diff_index_statements(schema_name, src_indexes, dst_view.index_by_name):
-                yield Statement(Phase.VIEW_CREATE, sql)
+                yield Statement(Phase.MATVIEW_INDEX_CREATE, sql)
