@@ -203,8 +203,15 @@ def _alter_columns(
             # timezone changes) converge; the explicit cast is a superset of the implicit
             # assignment cast, so it never regresses. A pair with no cast at all fails
             # loudly at apply -- a visible error, not a silent divergence.
+            #
+            # A generated column is the exception: Postgres recomputes it from its
+            # expression on a type change and refuses USING ("cannot specify USING when
+            # altering type of generated column"), so the USING clause is omitted for it.
             if src_column.type != dst_column.type:
-                statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
+                if dst_column.generated != "":
+                    statements.append(f"{prefix} TYPE {dst_column.type};")
+                else:
+                    statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
             if identity_changed and dst_column.identity_kind is None:
                 # Loses its identity. The owned identity sequence drops with it; the
                 # column stays NOT NULL (handled by the NOT NULL block below).
