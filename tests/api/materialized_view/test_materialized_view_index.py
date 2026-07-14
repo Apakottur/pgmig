@@ -118,6 +118,35 @@ def test_matview_index_recreated_with_changed_matview(gen_setup: GenerateSetup) 
     )
 
 
+def test_matview_index_recreated_over_retyped_column(gen_setup: GenerateSetup) -> None:
+    """
+    The bug this closes: a matview reading a column whose type changes is dropped and
+    recreated even though its definition is unchanged (only the matview-on-column edge
+    catches it), which loses its indexes -- including the unique index REFRESH CONCURRENTLY
+    needs. The index differ must treat this matview as recreated and create every index fresh.
+    """
+    # pg_get_viewdef qualifies the column with the table on PG14/15 but not 16+.
+    body = "SELECT t.val\n   FROM public.t" if gen_setup.pg_major in (14, 15) else "SELECT val\n   FROM public.t"
+    gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE t (id int, val integer)",
+            "CREATE MATERIALIZED VIEW m AS SELECT val FROM t",
+            "CREATE UNIQUE INDEX m_val ON m (val)",
+        ],
+        dst=[
+            "CREATE TABLE t (id int, val bigint)",
+            "CREATE MATERIALIZED VIEW m AS SELECT val FROM t",
+            "CREATE UNIQUE INDEX m_val ON m (val)",
+        ],
+        diff=[
+            'DROP MATERIALIZED VIEW "public"."m"',
+            'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
+            f'CREATE MATERIALIZED VIEW "public"."m" AS {body} WITH NO DATA',
+            "CREATE UNIQUE INDEX m_val ON public.m USING btree (val)",
+        ],
+    )
+
+
 def test_matview_index_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to an index present on both sides -> COMMENT ON INDEX.
