@@ -31,7 +31,7 @@ def _load_views(
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()
-        select_target(context.db_info.schema_by_name[row.schema_name])[row.view_name] = build(
+        select_target(context.db_introspection_result.schema_by_name[row.schema_name])[row.view_name] = build(
             row.view_name, definition, row.view_comment
         )
 

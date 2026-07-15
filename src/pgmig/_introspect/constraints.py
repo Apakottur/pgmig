@@ -26,7 +26,7 @@ def load() -> None:
             columns=con_row.con_columns or [],
             comment=con_row.con_comment,
         )
-        table = context.db_info.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
+        table = context.db_introspection_result.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
         if constraint.is_foreign_key:
             table.foreign_key_by_name[con_row.con_name] = constraint
         else:

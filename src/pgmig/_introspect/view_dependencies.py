@@ -33,7 +33,7 @@ def load() -> None:
     for row in run_introspection_query("view_dependencies.sql", _ViewDependencyRow):
         dependent = ViewKey(row.dependent_schema, row.dependent_view)
         referenced = ViewKey(row.referenced_schema, row.referenced_view)
-        context.db_info.view_dependencies.setdefault(dependent, set()).add(referenced)
+        context.db_introspection_result.view_dependencies.setdefault(dependent, set()).add(referenced)
 
 
 def check() -> list[str]:

@@ -31,13 +31,13 @@ def generate(
     with ThreadPoolExecutor(max_workers=2) as executor:
         source_future = executor.submit(introspect_db, source)
         target_future = executor.submit(introspect_db, target)
-        source_db_info = source_future.result()
-        target_db_info = target_future.result()
+        source_db_introspection_result = source_future.result()
+        target_db_introspection_result = target_future.result()
 
     # Generate migration SQL.
     with context.context_scope(
-        source=source_db_info,
-        target=target_db_info,
+        source=source_db_introspection_result,
+        target=target_db_introspection_result,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
         ignore_owner=ignore_owner,

@@ -82,10 +82,10 @@ def introspect_db(dsn: str) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
     """
-    db_info = DbIntrospectionResult(
+    db_introspection_result = DbIntrospectionResult(
         schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}
     )
-    with _connect(dsn) as conn, context.context_scope(conn=conn, db_info=db_info):
+    with _connect(dsn) as conn, context.context_scope(conn=conn, db_introspection_result=db_introspection_result):
         # Use an empty search path to make introspection independent of the database's own search path.
         conn.execute("SET LOCAL search_path = ''")
 
@@ -97,4 +97,4 @@ def introspect_db(dsn: str) -> DbIntrospectionResult:
 
         for load in _LOADERS:
             load()
-    return db_info
+    return db_introspection_result

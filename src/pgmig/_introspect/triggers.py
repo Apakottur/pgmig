@@ -17,7 +17,9 @@ def load() -> None:
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
     """
     for trigger_row in run_introspection_query("triggers.sql", _TriggerRow):
-        table = context.db_info.schema_by_name[trigger_row.schema_name].table_by_name[trigger_row.table_name]
+        table = context.db_introspection_result.schema_by_name[trigger_row.schema_name].table_by_name[
+            trigger_row.table_name
+        ]
         table.trigger_by_name[trigger_row.trigger_name] = Trigger(
             name=trigger_row.trigger_name,
             definition=trigger_row.trigger_def,

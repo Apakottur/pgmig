@@ -18,7 +18,9 @@ def load() -> None:
     Must run after materialized_views.load so the owning matview exists in the model.
     """
     for row in run_introspection_query("matview_indexes.sql", _MatviewIndexRow):
-        matview = context.db_info.schema_by_name[row.schema_name].materialized_view_by_name[row.view_name]
+        matview = context.db_introspection_result.schema_by_name[row.schema_name].materialized_view_by_name[
+            row.view_name
+        ]
         matview.index_by_name[row.index_name] = Index(
             name=row.index_name,
             definition=row.index_def,
