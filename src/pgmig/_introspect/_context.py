@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from pgmig._db import DbConnection
+from pgmig._db import DbConnection, DbReadOnlyConnection
 from pgmig._models import DbIntrospectionResult
 
 
@@ -14,7 +14,7 @@ class _ContextData:
     """
 
     # DB connection.
-    conn: DbConnection
+    conn: DbReadOnlyConnection
 
     # Result being assembled by the loaders.
     db_introspection_result: DbIntrospectionResult
@@ -33,7 +33,7 @@ class _Context:
     def context_scope(
         self,
         *,
-        conn: DbConnection,
+        conn: DbReadOnlyConnection,
         db_introspection_result: DbIntrospectionResult,
     ) -> Iterator[None]:
         token = _context.set(
@@ -48,7 +48,7 @@ class _Context:
             _context.reset(token)
 
     @property
-    def conn(self) -> DbConnection:
+    def conn(self) -> DbReadOnlyConnection:
         return _context.get().conn
 
     @property

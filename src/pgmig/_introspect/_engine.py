@@ -1,4 +1,4 @@
-from pgmig._db import DbConnection
+from pgmig._db import DbConnection, DbReadOnlyConnection
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
     composite_types,
@@ -67,7 +67,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         view_column_dependencies={},
     )
 
-    async with DbConnection.connect(dsn) as conn:
+    async with DbReadOnlyConnection.connect(dsn) as conn:
         # Run within the introspection context.
         with context.context_scope(
             conn=conn,

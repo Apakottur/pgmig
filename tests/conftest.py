@@ -6,7 +6,7 @@ import pytest
 import shpyx
 
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection, get_unique_postgres_name
+from tests.fixtures.db_utils import PytestDbConnection, get_unique_postgres_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -47,7 +47,7 @@ def _unique_key() -> str:
 
 
 @pytest.fixture(scope="session")
-def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
+def _admin_conn(request: pytest.FixtureRequest) -> Iterator[PytestDbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
@@ -62,7 +62,7 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
     # Open a single connection to the admin database for the whole session.
-    admin_conn = DbConnection("postgres")
+    admin_conn = PytestDbConnection("postgres")
 
     try:
         yield admin_conn
@@ -77,15 +77,15 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
 
 @pytest.fixture(scope="function")
 def gen_setup(
-    _admin_conn: DbConnection,
+    _admin_conn: PytestDbConnection,
     _unique_key: str,
 ) -> Iterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
     # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(get_unique_postgres_name("pgmig_src", _unique_key), admin_conn=_admin_conn)
-    dst_conn = DbConnection(get_unique_postgres_name("pgmig_dst", _unique_key), admin_conn=_admin_conn)
+    src_conn = PytestDbConnection(get_unique_postgres_name("pgmig_src", _unique_key), admin_conn=_admin_conn)
+    dst_conn = PytestDbConnection(get_unique_postgres_name("pgmig_dst", _unique_key), admin_conn=_admin_conn)
 
     # Provide the utility class for the test.
     try:

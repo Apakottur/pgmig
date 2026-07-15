@@ -1,8 +1,8 @@
 import pytest
 
 from pgmig import PgmigUnsupportedError, generate
+from pgmig._db import UniqueViolation
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import UniqueViolation
 
 
 def test_invalid_index_is_rejected(gen_setup: GenerateSetup) -> None:

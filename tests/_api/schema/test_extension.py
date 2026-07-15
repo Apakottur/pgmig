@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from pgmig import generate
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection
+from tests.fixtures.db_utils import PytestDbConnection
 
 
 def _create_extension(name: str, *, version: str | None = None, schema: str | None = None) -> str:
@@ -25,7 +25,7 @@ class _ExtensionInfo:
     schema: str
 
 
-def _get_installable_extension(conn: DbConnection) -> _ExtensionInfo:
+def _get_installable_extension(conn: PytestDbConnection) -> _ExtensionInfo:
     """
     Find a relocatable extension that can be installed, along with its default
     version. Relocatable extensions install into the current schema (public in a
@@ -53,7 +53,7 @@ class _MultiVersionExtension:
     max_version: str
 
 
-def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
+def _pick_multi_version_extension(conn: PytestDbConnection) -> _MultiVersionExtension:
     """
     Find an extension exposing more than one installable version.
     """
