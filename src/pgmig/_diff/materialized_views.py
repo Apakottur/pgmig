@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, retyped_column_readers
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, recreated_matview_keys
 from pgmig._models import ViewKey
 from pgmig._sql import qualified
 
@@ -19,9 +19,9 @@ def generate() -> Iterator[Statement]:
     Matviews cannot depend on other managed views/matviews (that pairing is refused upstream),
     so each matview is independent -- no transitive cascade is needed.
     """
-    # Matviews reading a column whose type changes between source and target (same helper the
-    # matview-index differ uses, so both agree on which matviews are recreated).
-    column_readers = retyped_column_readers()
+    # Matviews the migration drops and recreates (definition changed, or reading a retyped
+    # column). Shared with the matview-index differ so both agree on which matviews are recreated.
+    recreated_keys = recreated_matview_keys()
 
     for schema_name, src_views, dst_views, pairs in ctx_iter_object_pairs(
         lambda schema: schema.materialized_view_by_name
@@ -41,10 +41,10 @@ def generate() -> Iterator[Statement]:
             # Present in source only: drop it.
             elif dst_view is None:
                 yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
-            # Present in both with a changed definition, or reading a retyped column: drop and
-            # recreate. A type change leaves the definition unchanged, so the column edge is the
-            # only signal in that case.
-            elif src_view.definition != dst_view.definition or ViewKey(schema_name, name) in column_readers:
+            # Present in both and recreated (changed definition, or reading a retyped column):
+            # drop and recreate. A type change leaves the definition unchanged, so the column
+            # edge is the only signal in that case.
+            elif ViewKey(schema_name, name) in recreated_keys:
                 yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
                 yield Statement(
                     Phase.VIEW_CREATE,
