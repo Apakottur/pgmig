@@ -4,7 +4,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 from pgmig._cli import app
-from tests.api.generate_setup import GenerateSetup
+from tests._api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
 
@@ -49,7 +49,7 @@ def test_generate_empty_diff_truncates_stale_output(gen_setup: GenerateSetup, tm
 
 
 def test_generate_connection_error_is_clean() -> None:
-    # A bad connection string is a known (PgmigError) failure: clean message, no traceback.
+    # A bad connection string is an expected failure: clean message, no traceback.
     result = _runner.invoke(app, ["generate", "-s", "not-a-dsn", "-t", "not-a-dsn"])
 
     assert result.exit_code == 1

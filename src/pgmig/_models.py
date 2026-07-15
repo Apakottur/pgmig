@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from pgmig._errors import UnsupportedChangeError
+from pgmig._errors import PgmigUnsupportedChangeError
 
 
 @dataclass(frozen=True, order=True)
@@ -78,7 +78,7 @@ class Column:
             case "bigint":
                 return "bigserial"
             case _:
-                raise UnsupportedChangeError(f"Unknown integer type: {self.type}")
+                raise PgmigUnsupportedChangeError(f"Unknown integer type: {self.type}")
 
     @property
     def identity_kind(self) -> str | None:
@@ -96,7 +96,7 @@ class Column:
             case "d":
                 return "BY DEFAULT"
             case _:
-                raise UnsupportedChangeError(f"Unknown identity kind: {self.identity!r}")
+                raise PgmigUnsupportedChangeError(f"Unknown identity kind: {self.identity!r}")
 
     @property
     def identity_clause(self) -> str | None:

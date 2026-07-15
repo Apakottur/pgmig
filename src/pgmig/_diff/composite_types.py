@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
-from pgmig._errors import UnsupportedChangeError
+from pgmig._errors import PgmigUnsupportedChangeError
 from pgmig._sql import ident, qualified
 
 
@@ -24,7 +24,7 @@ def generate() -> Iterator[Statement]:
                 yield Statement(Phase.TYPE_DROP, f"DROP TYPE {qualified_name};")
             # Present in both with differing fields: ALTER TYPE is not supported yet.
             elif src_type.fields != dst_type.fields:
-                raise UnsupportedChangeError(
+                raise PgmigUnsupportedChangeError(
                     f"Composite type field change is not supported: {qualified_name} "
                     f"({src_type.fields} -> {dst_type.fields})"
                 )

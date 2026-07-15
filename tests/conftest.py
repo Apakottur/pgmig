@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import shpyx
 
-from tests.api.generate_setup import GenerateSetup
+from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import DST_DB, SRC_DB, DbConnection
 
 _COMPOSE_FILE_DIR = Path(__file__).parent

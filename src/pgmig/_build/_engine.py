@@ -23,7 +23,7 @@ from pgmig._build import (
     views,
 )
 from pgmig._build._core import Guard, Loader
-from pgmig._errors import PgmigError, UnsupportedChangeError
+from pgmig._errors import _PgmigError, PgmigUnsupportedChangeError
 from pgmig._models import DbInfo
 
 # Preconditions run before any loader. Each guard reports every object it finds that
@@ -74,7 +74,7 @@ def _connect(dsn: str) -> psycopg.Connection[Any]:
     try:
         conn = psycopg.connect(dsn)
     except psycopg.Error as error:
-        raise PgmigError(f"Could not connect to database: {error}") from error
+        raise _PgmigError(f"Could not connect to database: {error}") from error
 
     # Force all subsequent transactions to be read-only.
     conn.read_only = True
@@ -105,8 +105,8 @@ def build_db_info(dsn: str) -> DbInfo:
             # combined report surfaces as a plain PgmigError. A database whose only problems
             # are unsupported objects raises the more specific UnsupportedChangeError.
             if error_problems:
-                raise PgmigError(message)
-            raise UnsupportedChangeError(message)
+                raise _PgmigError(message)
+            raise PgmigUnsupportedChangeError(message)
 
         db_info = DbInfo(
             schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}
