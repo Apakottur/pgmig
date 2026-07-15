@@ -1,8 +1,8 @@
 from pgmig._api import generate
-from pgmig._errors import PgmigCorruptedIndexError, PgmigUnsupportedChangeError
+from pgmig._errors import PgmigCorruptedIndexError, PgmigUnsupportedError
 
 __all__ = [
     "PgmigCorruptedIndexError",
-    "PgmigUnsupportedChangeError",
+    "PgmigUnsupportedError",
     "generate",
 ]

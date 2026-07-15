@@ -1,6 +1,6 @@
 import pytest
 
-from pgmig import PgmigUnsupportedChangeError, generate
+from pgmig import PgmigUnsupportedError, generate
 from tests.fixtures.db_utils import DbConnection
 
 
@@ -97,7 +97,7 @@ class GenerateSetup:
         Wrapper around `assert_diff` that asserts the migration refuses the change with an
         UnsupportedChangeError (a documented limitation, not a bug).
         """
-        with pytest.raises(PgmigUnsupportedChangeError, match=match):
+        with pytest.raises(PgmigUnsupportedError, match=match):
             self.assert_diff(
                 src=src,
                 dst=dst,

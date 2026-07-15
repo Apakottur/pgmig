@@ -11,13 +11,7 @@ class _PgmigError(Exception):
         super().__init__(message)
 
 
-class PgmigUnsupportedChangeError(_PgmigError):
+class PgmigUnsupportedError(_PgmigError):
     """
-    A schema diff that pgmig does not yet support.
-    """
-
-
-class PgmigCorruptedIndexError(_PgmigError):
-    """
-    The schema contains an invalid index, which makes the diff unreliable.
+    The database is in a state that pgmig does not yet support.
     """

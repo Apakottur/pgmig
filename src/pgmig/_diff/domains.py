@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, diff_renamable
-from pgmig._errors import PgmigUnsupportedChangeError
+from pgmig._errors import PgmigUnsupportedError
 from pgmig._models import Domain
 from pgmig._sql import ident, qualified
 
@@ -31,7 +31,7 @@ def _alter_domain(qualified_name: str, src: Domain, dst: Domain) -> list[str]:
     type change is unsupported (ALTER DOMAIN cannot change the type) and raises.
     """
     if src.data_type != dst.data_type:
-        raise PgmigUnsupportedChangeError(
+        raise PgmigUnsupportedError(
             f"Domain base type change is not supported: {qualified_name} {src.data_type} -> {dst.data_type}"
         )
 
