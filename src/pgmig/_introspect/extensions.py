@@ -10,11 +10,11 @@ class _ExtensionRow(_QueryRow):
     extension_comment: str | None
 
 
-def load() -> None:
+async def load() -> None:
     """
     Extensions (database-level).
     """
-    for ext_row in run_introspection_query("extensions.sql", _ExtensionRow):
+    for ext_row in await run_introspection_query("extensions.sql", _ExtensionRow):
         context.db_introspection_result.extension_by_name[ext_row.name] = Extension(
             name=ext_row.name,
             version=ext_row.version,

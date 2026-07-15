@@ -59,42 +59,45 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-def _connect(dsn: str) -> psycopg.Connection[Any]:
+async def _connect(dsn: str) -> psycopg.AsyncConnection[Any]:
     """
     Create the introspection connection.
     """
     try:
-        conn = psycopg.connect(dsn)
+        conn = await psycopg.AsyncConnection.connect(dsn)
     except psycopg.Error as error:
         raise _PgmigError(f"Could not connect to database: {error}") from error
 
     # Force all subsequent transactions to be read-only.
-    conn.read_only = True
+    await conn.set_read_only(True)
 
     # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
-    conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+    await conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
 
     # Return the connection.
     return conn
 
 
-def introspect_db(dsn: str) -> DbIntrospectionResult:
+async def introspect_db(dsn: str) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
     """
     db_introspection_result = DbIntrospectionResult(
         schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}
     )
-    with _connect(dsn) as conn, context.context_scope(conn=conn, db_introspection_result=db_introspection_result):
-        # Use an empty search path to make introspection independent of the database's own search path.
-        conn.execute("SET LOCAL search_path = ''")
+    async with await _connect(dsn) as conn:
+        with context.context_scope(conn=conn, db_introspection_result=db_introspection_result):
+            # Use an empty search path to make introspection independent of the database's own search path.
+            await conn.execute("SET LOCAL search_path = ''")
 
-        # Get all the unsupported findings.
-        all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in guard()]
-        if all_findings:
-            message = "pgmig cannot process this database:\n" + "\n".join(f"  - {finding}" for finding in all_findings)
-            raise PgmigUnsupportedError(message)
+            # Get all the unsupported findings.
+            all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
+            if all_findings:
+                message = "pgmig cannot process this database:\n" + "\n".join(
+                    f"  - {finding}" for finding in all_findings
+                )
+                raise PgmigUnsupportedError(message)
 
-        for load in _LOADERS:
-            load()
+            for load in _LOADERS:
+                await load()
     return db_introspection_result

@@ -13,7 +13,7 @@ def _wait_for_pgbouncer(dsn: str) -> None:
     psycopg.connect(dsn).close()
 
 
-def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
+async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
     """
     Ensure that introspection works through pgbouncer.
     """
@@ -24,7 +24,7 @@ def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
     _wait_for_pgbouncer(gen_setup.src.pgbouncer_dsn)
 
     # Introspect the database through pgbouncer.
-    info = introspect_db(gen_setup.src.pgbouncer_dsn)
+    info = await introspect_db(gen_setup.src.pgbouncer_dsn)
 
     # Verify the introspection result.
     assert "widget" in info.schema_by_name["public"].table_by_name

@@ -23,20 +23,20 @@ class _MatviewDependencyRow(_QueryRow):
     referenced_kind: str
 
 
-def load() -> None:
+async def load() -> None:
     """
     View-on-view edges: record, for each plain view that reads another plain view, the set
     of views it reads from. The view diff uses these to topologically order CREATE
     (dependencies first) and DROP (dependents first) within the view phases. Dependencies
     involving a materialized view are rejected by `check`, not ordered.
     """
-    for row in run_introspection_query("view_dependencies.sql", _ViewDependencyRow):
+    for row in await run_introspection_query("view_dependencies.sql", _ViewDependencyRow):
         dependent = ViewKey(row.dependent_schema, row.dependent_view)
         referenced = ViewKey(row.referenced_schema, row.referenced_view)
         context.db_introspection_result.view_dependencies.setdefault(dependent, set()).add(referenced)
 
 
-def check() -> list[str]:
+async def check() -> list[str]:
     """
     Guard: report a dependency where a materialized view reads, or is read by, another view
     or matview. Plain view-on-view dependencies are ordered by a topological sort (see
@@ -44,7 +44,7 @@ def check() -> list[str]:
     reported rather than emitted in a possibly-wrong order.
     """
     findings: list[str] = []
-    for row in run_introspection_query("matview_dependencies.sql", _MatviewDependencyRow):
+    for row in await run_introspection_query("matview_dependencies.sql", _MatviewDependencyRow):
         dependent = qualified(row.dependent_schema, row.dependent_view)
         referenced = qualified(row.referenced_schema, row.referenced_view)
         dependent_label = _KIND_LABEL[row.dependent_kind]

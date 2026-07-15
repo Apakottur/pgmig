@@ -13,12 +13,12 @@ class _ConstraintRow(_QueryRow):
     con_comment: str | None
 
 
-def load() -> None:
+async def load() -> None:
     """
     Constraints (primary key, unique, and check). Foreign keys are routed to their own
     bucket on the table.
     """
-    for con_row in run_introspection_query("constraints.sql", _ConstraintRow):
+    for con_row in await run_introspection_query("constraints.sql", _ConstraintRow):
         constraint = Constraint(
             name=con_row.con_name,
             definition=con_row.con_def,

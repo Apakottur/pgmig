@@ -29,7 +29,7 @@ class _UnsupportedRow(_QueryRow):
     kind: str
 
 
-def check() -> list[str]:
+async def check() -> list[str]:
     """
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
     list: foreign tables, range/base types, exclusion constraints, aggregate/window
@@ -39,7 +39,7 @@ def check() -> list[str]:
     objects differ on one side, falsely claiming convergence.
     """
     findings = []
-    for row in run_introspection_query("unsupported.sql", _UnsupportedRow):
+    for row in await run_introspection_query("unsupported.sql", _UnsupportedRow):
         name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
         parts = [row.schema_name, row.obj_name] if row.schema_name is not None else [row.obj_name]
         findings.append(f"{name} {qualified(*parts)} is not supported yet")

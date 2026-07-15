@@ -15,7 +15,7 @@ class _ViewRow(_QueryRow):
     view_comment: str | None
 
 
-def _load_views(
+async def _load_views(
     query_file: str,
     select_target: Callable[[Schema], dict[str, _T]],
     build: Callable[[str, str, str | None], _T],
@@ -27,7 +27,7 @@ def _load_views(
     parsing lives in one place. `select_target` picks the schema's view/matview mapping;
     `build` turns (name, definition, comment) into the object to store.
     """
-    for row in run_introspection_query(query_file, _ViewRow):
+    for row in await run_introspection_query(query_file, _ViewRow):
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()
@@ -36,11 +36,11 @@ def _load_views(
         )
 
 
-def load() -> None:
+async def load() -> None:
     """
     Views (user views only; extension-owned ones are excluded).
     """
-    _load_views(
+    await _load_views(
         "views.sql",
         lambda schema: schema.view_by_name,
         lambda name, definition, comment: View(name=name, definition=definition, comment=comment),

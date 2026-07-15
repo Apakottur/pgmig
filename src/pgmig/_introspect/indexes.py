@@ -12,11 +12,11 @@ class _IndexRow(_QueryRow):
     index_comment: str | None
 
 
-def load() -> None:
+async def load() -> None:
     """
     Indexes (standalone only; constraint-backed indexes are excluded).
     """
-    for index_row in run_introspection_query("indexes.sql", _IndexRow):
+    for index_row in await run_introspection_query("indexes.sql", _IndexRow):
         table = context.db_introspection_result.schema_by_name[index_row.schema_name].table_by_name[
             index_row.table_name
         ]
