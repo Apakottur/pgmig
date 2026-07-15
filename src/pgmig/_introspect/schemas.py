@@ -1,7 +1,3 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Schema
 
@@ -11,11 +7,11 @@ class _SchemaRow(_QueryRow):
     schema_comment: str | None
 
 
-async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
+async def load(db_info: DbInfo) -> None:
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in await _run_query(conn, "schemas.sql", _SchemaRow):
+    for schema_row in await _run_query("schemas.sql", _SchemaRow):
         db_info.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,

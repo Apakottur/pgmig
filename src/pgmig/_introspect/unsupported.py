@@ -1,7 +1,3 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._sql import qualified
 
@@ -33,7 +29,7 @@ class _UnsupportedRow(_QueryRow):
     kind: str
 
 
-async def check(conn: psycopg.AsyncConnection[Any]) -> list[str]:
+async def check() -> list[str]:
     """
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
     list: foreign tables, range/base types, exclusion constraints, aggregate/window
@@ -43,7 +39,7 @@ async def check(conn: psycopg.AsyncConnection[Any]) -> list[str]:
     objects differ on one side, falsely claiming convergence.
     """
     findings = []
-    for row in await _run_query(conn, "unsupported.sql", _UnsupportedRow):
+    for row in await _run_query("unsupported.sql", _UnsupportedRow):
         name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
         parts = [row.schema_name, row.obj_name] if row.schema_name is not None else [row.obj_name]
         findings.append(f"{name} {qualified(*parts)} is not supported yet")

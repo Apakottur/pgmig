@@ -1,7 +1,3 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Function, FunctionKey, RelationKey
 
@@ -34,11 +30,11 @@ class _FunctionRow(_QueryRow):
     func_depends_on_relations: list[_RelationDep]
 
 
-async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
+async def load(db_info: DbInfo) -> None:
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
-    for func_row in await _run_query(conn, "functions.sql", _FunctionRow):
+    for func_row in await _run_query("functions.sql", _FunctionRow):
         signature = f"{func_row.func_name}({func_row.func_args})"
         db_info.schema_by_name[func_row.schema_name].function_by_signature[signature] = Function(
             name=func_row.func_name,

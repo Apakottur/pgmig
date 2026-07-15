@@ -1,7 +1,5 @@
 from collections.abc import Callable
-from typing import Any, TypeVar
-
-import psycopg
+from typing import TypeVar
 
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Schema, View
@@ -17,7 +15,6 @@ class _ViewRow(_QueryRow):
 
 
 async def _load_views(
-    conn: psycopg.AsyncConnection[Any],
     db_info: DbInfo,
     query_file: str,
     select_target: Callable[[Schema], dict[str, _T]],
@@ -30,7 +27,7 @@ async def _load_views(
     parsing lives in one place. `select_target` picks the schema's view/matview mapping;
     `build` turns (name, definition, comment) into the object to store.
     """
-    for row in await _run_query(conn, query_file, _ViewRow):
+    for row in await _run_query(query_file, _ViewRow):
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()
@@ -39,12 +36,11 @@ async def _load_views(
         )
 
 
-async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
+async def load(db_info: DbInfo) -> None:
     """
     Views (user views only; extension-owned ones are excluded).
     """
     await _load_views(
-        conn,
         db_info,
         "views.sql",
         lambda schema: schema.view_by_name,

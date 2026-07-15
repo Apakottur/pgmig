@@ -1,7 +1,3 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import Column, DbInfo, Table
 
@@ -30,11 +26,11 @@ class _TableRow(_QueryRow):
     partition_parent_name: str | None
 
 
-async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
+async def load(db_info: DbInfo) -> None:
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in await _run_query(conn, "tables.sql", _TableRow):
+    for table_row in await _run_query("tables.sql", _TableRow):
         schema = db_info.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:

@@ -1,7 +1,3 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import Constraint, DbInfo
 
@@ -16,12 +12,12 @@ class _ConstraintRow(_QueryRow):
     con_comment: str | None
 
 
-async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
+async def load(db_info: DbInfo) -> None:
     """
     Constraints (primary key, unique, and check). Foreign keys are routed to their own
     bucket on the table.
     """
-    for con_row in await _run_query(conn, "constraints.sql", _ConstraintRow):
+    for con_row in await _run_query("constraints.sql", _ConstraintRow):
         constraint = Constraint(
             name=con_row.con_name,
             definition=con_row.con_def,

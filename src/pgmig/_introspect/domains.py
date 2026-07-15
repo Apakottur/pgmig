@@ -1,7 +1,3 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Domain
 
@@ -16,11 +12,11 @@ class _DomainRow(_QueryRow):
     checks: dict[str, str]
 
 
-async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
+async def load(db_info: DbInfo) -> None:
     """
     Domain types (user domains only; extension-owned ones are excluded).
     """
-    for domain_row in await _run_query(conn, "domains.sql", _DomainRow):
+    for domain_row in await _run_query("domains.sql", _DomainRow):
         db_info.schema_by_name[domain_row.schema_name].domain_by_name[domain_row.domain_name] = Domain(
             name=domain_row.domain_name,
             data_type=domain_row.data_type,
