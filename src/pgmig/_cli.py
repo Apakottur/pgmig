@@ -33,6 +33,17 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit
 
 
+def _write_to_file(text: str, output: Path) -> None:
+    """
+    Write text to a file.
+    """
+    try:
+        output.write_text(text, encoding="utf-8")
+    except OSError as error:
+        typer.echo(f"Could not write to file: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+
 @app.command()
 def generate(
     source: Annotated[
@@ -83,12 +94,12 @@ def generate(
     """
     Generate the migration SQL that turns the source database into the target database.
     """
-    # DSNs come from the flag or its environment variable; missing both is a usage error.
+    # Get the DSNs.
     source = _require_dsn(source, flag="--source", env_var="PGMIG_SOURCE")
     target = _require_dsn(target, flag="--target", env_var="PGMIG_TARGET")
 
+    # Generate the migration SQL.
     try:
-        # Generate the migration SQL.
         sql = generate_migration(
             source=source,
             target=target,
@@ -110,22 +121,25 @@ def generate(
         )
         raise typer.Exit(code=1) from error
 
-    # Emit the migration. With --output, always (re)write the file -- even for an empty diff
-    # -- so it reflects this run rather than leaving a stale migration from a previous run on
-    # disk. Without --output, only a non-empty diff is written, to stdout.
-    if output is not None:
-        try:
-            output.write_text(f"{sql}\n" if sql else "", encoding="utf-8")
-        except OSError as error:
-            typer.echo(f"Could not write migration output: {error}", err=True)
-            raise typer.Exit(code=1) from error
-    elif sql:
-        typer.echo(sql)
+    if sql:
+        # Schemas are not in sync.
 
-    # Check mode: a non-empty diff means the source is out of date -> return non-zero exit code.
-    if check and sql:
-        typer.echo("Databases differ: a migration is required.", err=True)
-        raise typer.Exit(code=1)
+        # Write to file/stdout.
+        if output:
+            _write_to_file(f"{sql}\n", output)
+        else:
+            typer.echo(sql)
+
+        # Exit with a non-zero status if the databases differ.
+        if check:
+            typer.echo("Databases differ: a migration is required.", err=True)
+            raise typer.Exit(code=1)
+    else:
+        # Schemas are in sync.
+
+        # Truncate the file if it exists.
+        if output:
+            _write_to_file("", output)
 
 
 @app.callback()

@@ -164,7 +164,7 @@ def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp_path:
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-o", str(out)])
 
     assert result.exit_code == 1
-    assert "Could not write migration output" in result.output
+    assert "Could not write to file" in result.output
     assert "Traceback" not in result.output
 
 
