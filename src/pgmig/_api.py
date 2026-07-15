@@ -7,14 +7,6 @@ from pgmig._introspect._engine import introspect_db
 from pgmig._models import DbInfo
 
 
-async def _introspect_both(source: str, target: str) -> tuple[DbInfo, DbInfo]:
-    """
-    Introspect the source and target databases concurrently. Each introspection opens its
-    own connection, so the two databases' round-trips overlap on the wire.
-    """
-    return await asyncio.gather(introspect_db(source), introspect_db(target))
-
-
 def generate(
     *,
     source: str,
@@ -37,7 +29,7 @@ def generate(
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
     """
     # Introspect both databases concurrently.
-    source_db_info, target_db_info = asyncio.run(_introspect_both(source, target))
+    source_db_info, target_db_info = asyncio.gather(introspect_db(source), introspect_db(target))
 
     # Generate migration SQL.
     with context.context_scope(

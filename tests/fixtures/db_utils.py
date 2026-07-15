@@ -138,11 +138,3 @@ class DbConnection:
             return []
         else:
             return result.fetchall()
-
-    def execute_formatted(self, template: LiteralString, *identifiers: str) -> list[tuple[Any, ...]]:
-        """
-        Execute a statement whose `{}` placeholders are filled with the given identifiers
-        (role names, etc.), each safely quoted. Lets callers interpolate identifiers without
-        building psycopg SQL objects themselves.
-        """
-        return self.execute(sql.SQL(template).format(*(sql.Identifier(identifier) for identifier in identifiers)))

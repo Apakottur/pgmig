@@ -14,8 +14,8 @@ def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
     this cluster, don't race on the same role.
     """
     name = get_unique_db_name(base, _KEY)
-    gen_setup.src.execute_formatted("DROP ROLE IF EXISTS {}", name)
-    gen_setup.src.execute_formatted("CREATE ROLE {}", name)
+    gen_setup.src.execute(f"DROP ROLE IF EXISTS {name}")
+    gen_setup.src.execute(f"CREATE ROLE {name}")
     return name
 
 
