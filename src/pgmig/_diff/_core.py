@@ -1,14 +1,54 @@
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Protocol, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._models import ColumnKey, Schema, Table, ViewKey
 from pgmig._sql import comment_on, ident, qualified
 
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
+
 _Renamable = TypeVar("_Renamable")
 _ObjT = TypeVar("_ObjT")
+_SortableT = TypeVar("_SortableT", bound="SupportsRichComparison")
+
+
+def topological_sort(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_SortableT]]) -> list[_SortableT]:
+    """
+    Order `nodes` dependencies-first via Kahn's algorithm: a node appears after every node
+    it points to in `edges` that is also in `nodes` (edges leaving the set are ignored).
+    Ties break by sorted node, so the output is deterministic regardless of set iteration
+    order.
+
+    A cycle raises rather than silently dropping the cyclic nodes: cyclic nodes never reach
+    zero remaining dependencies, so a plain Kahn's loop would just omit them -- and a caller
+    that reverses this order to emit DROPs would then produce a non-converging diff with no
+    error. Postgres forbids cycles among views and among SQL-body routines, so this guards a
+    can't-happen case.
+    """
+    deps = {node: {dep for dep in edges.get(node, set()) if dep in nodes} for node in nodes}
+    dependents: dict[_SortableT, set[_SortableT]] = {node: set() for node in nodes}
+    for node, node_deps in deps.items():
+        for dep in node_deps:
+            dependents[dep].add(node)
+
+    ready = sorted(node for node, node_deps in deps.items() if not node_deps)
+    order: list[_SortableT] = []
+    while ready:
+        node = ready.pop(0)
+        order.append(node)
+        for dependent in dependents[node]:
+            deps[dependent].discard(node)
+            if not deps[dependent]:
+                ready.append(dependent)
+        ready.sort()
+
+    if len(order) != len(nodes):
+        cyclic = sorted(nodes - set(order))
+        raise AssertionError(f"dependency cycle detected among: {', '.join(repr(node) for node in cyclic)}")
+    return order
 
 
 class _Commented(Protocol):
