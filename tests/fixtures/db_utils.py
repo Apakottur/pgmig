@@ -65,11 +65,11 @@ class DbConnection:
         # lingering backends and drops the database, avoiding the race between a
         # separate pg_terminate_backend call and the drop.
         self._admin_conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self._db_name))
+            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self.db_name))
         )
 
         # Create the database.
-        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self._db_name)))
+        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
