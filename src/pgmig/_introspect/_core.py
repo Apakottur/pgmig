@@ -49,4 +49,4 @@ async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_R
     """
     file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
     query = file_path.read_text(encoding="utf-8")
-    return await context.conn.execute(query, model)
+    return await context.conn.introspect(query, model)

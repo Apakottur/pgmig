@@ -6,7 +6,7 @@ import pytest
 import shpyx
 
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DST_DB, SRC_DB, DbConnection
+from tests.fixtures.db_utils import DbConnection, get_unique_postgres_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -30,6 +30,20 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "Falls back to the PGMIG_TEST_PG_VERSION env var, then 18."
         ),
     )
+
+
+@pytest.fixture(scope="session")
+def _unique_key() -> str:
+    """
+    Get a unique identifier for the current test session.
+    """
+    result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
+    branch = result.stdout.strip()
+    if result.return_code == 0 and branch and branch != "HEAD":
+        return branch
+
+    # Default if git branch is not available.
+    return "unknown"
 
 
 @pytest.fixture(scope="session")
@@ -62,17 +76,20 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
 
 
 @pytest.fixture(scope="function")
-def gen_setup(_admin_conn: DbConnection) -> Iterator[GenerateSetup]:
+def gen_setup(
+    _admin_conn: DbConnection,
+    _unique_key: str,
+) -> Iterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
     # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(SRC_DB, admin_conn=_admin_conn)
-    dst_conn = DbConnection(DST_DB, admin_conn=_admin_conn)
+    src_conn = DbConnection(get_unique_postgres_name("pgmig_src", _unique_key), admin_conn=_admin_conn)
+    dst_conn = DbConnection(get_unique_postgres_name("pgmig_dst", _unique_key), admin_conn=_admin_conn)
 
     # Provide the utility class for the test.
     try:
-        yield GenerateSetup(src_conn, dst_conn)
+        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=_unique_key)
     finally:
         src_conn.close()
         dst_conn.close()

@@ -17,7 +17,9 @@ async def load() -> None:
     Indexes (standalone only; constraint-backed indexes are excluded).
     """
     for index_row in await run_introspection_query("indexes.sql", _IndexRow):
-        table = context.db_info.schema_by_name[index_row.schema_name].table_by_name[index_row.table_name]
+        table = context.db_introspection_result.schema_by_name[index_row.schema_name].table_by_name[
+            index_row.table_name
+        ]
         table.index_by_name[index_row.index_name] = Index(
             name=index_row.index_name,
             definition=index_row.index_def,

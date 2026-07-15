@@ -32,7 +32,7 @@ async def load() -> None:
     Tables (and their columns, in physical order).
     """
     for table_row in await run_introspection_query("tables.sql", _TableRow):
-        schema = context.db_info.schema_by_name[table_row.schema_name]
+        schema = context.db_introspection_result.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:
             # A partition has both a parent schema and name (the query sets them together).

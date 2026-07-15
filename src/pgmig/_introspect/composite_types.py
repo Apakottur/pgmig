@@ -21,6 +21,6 @@ async def load() -> None:
     """
     for row in await run_introspection_query("composite_types.sql", _CompositeTypeRow):
         fields = [CompositeField(name=field.name, type=field.type) for field in row.fields]
-        context.db_info.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = CompositeType(
-            name=row.type_name, fields=fields, comment=row.type_comment
+        context.db_introspection_result.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = (
+            CompositeType(name=row.type_name, fields=fields, comment=row.type_comment)
         )

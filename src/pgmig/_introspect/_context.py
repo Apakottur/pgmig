@@ -17,7 +17,7 @@ class _ContextData:
     conn: DbConnection
 
     # Result being assembled by the loaders.
-    db_info: DbIntrospectionResult
+    db_introspection_result: DbIntrospectionResult
 
 
 # Context of the current introspection.
@@ -34,12 +34,12 @@ class _Context:
         self,
         *,
         conn: DbConnection,
-        db_info: DbIntrospectionResult,
+        db_introspection_result: DbIntrospectionResult,
     ) -> Iterator[None]:
         token = _context.set(
             _ContextData(
                 conn=conn,
-                db_info=db_info,
+                db_introspection_result=db_introspection_result,
             )
         )
         try:
@@ -52,8 +52,8 @@ class _Context:
         return _context.get().conn
 
     @property
-    def db_info(self) -> DbIntrospectionResult:
-        return _context.get().db_info
+    def db_introspection_result(self) -> DbIntrospectionResult:
+        return _context.get().db_introspection_result
 
 
 context = _Context()

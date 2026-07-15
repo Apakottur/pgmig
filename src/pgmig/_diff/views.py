@@ -15,13 +15,13 @@ from pgmig._sql import qualified
 _Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
 
 
-def _collect_views(db_info: DbIntrospectionResult) -> dict[ViewKey, View]:
+def _collect_views(db_introspection_result: DbIntrospectionResult) -> dict[ViewKey, View]:
     """
     Flatten every schema's views into one (schema, name) -> View map. View-on-view
     ordering is global because a dependency can cross schemas.
     """
     views: dict[ViewKey, View] = {}
-    for schema_name, schema in db_info.schema_by_name.items():
+    for schema_name, schema in db_introspection_result.schema_by_name.items():
         for name, view in schema.view_by_name.items():
             views[ViewKey(schema_name, name)] = view
     return views

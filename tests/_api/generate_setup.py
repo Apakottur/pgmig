@@ -9,9 +9,13 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, src_conn: DbConnection, dst_conn: DbConnection) -> None:
+    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, unique_key: str) -> None:
+        # Database connections.
         self.src = src_conn
         self.dst = dst_conn
+
+        # Unique key for the test session.
+        self.unique_key = unique_key
 
     @property
     def pg_major(self) -> int:
