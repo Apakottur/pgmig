@@ -4,6 +4,7 @@
 -- create/drop needs a topological sort within the shared view phases, which is not
 -- supported yet, so such a pair must be reported rather than mis-ordered. A dependency
 -- on a plain table is fine (tables are created before, and dropped after, the view phases).
+-- Twin of matview_dependencies.sql; that query adds a predicate requiring one side to be a matview. Keep in sync.
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,
     dependent.relname AS dependent_view,
