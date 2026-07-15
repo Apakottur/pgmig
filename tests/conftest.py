@@ -6,7 +6,7 @@ import pytest
 import shpyx
 
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection, get_db_key_from_git_branch, get_unique_postgres_name
+from tests.fixtures.db_utils import DbConnection, get_unique_postgres_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -33,25 +33,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.fixture(scope="session")
-def db_key() -> str:
+def _unique_key() -> str:
     """
-    Branch-derived key used to namespace the per-branch test databases (and other
-    cluster-wide objects). Resolved once per session so git runs at most once, and only
-    when a database-backed test actually needs it.
+    Get a unique identifier for the current test session.
     """
-    return get_db_key_from_git_branch()
+    result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
+    branch = result.stdout.strip()
+    if result.return_code == 0 and branch and branch != "HEAD":
+        return branch
 
-
-@pytest.fixture(scope="session")
-def src_db_name(db_key: str) -> str:
-    """Name of the per-branch source database."""
-    return get_unique_postgres_name("pgmig_src", db_key)
-
-
-@pytest.fixture(scope="session")
-def dst_db_name(db_key: str) -> str:
-    """Name of the per-branch target database."""
-    return get_unique_postgres_name("pgmig_dst", db_key)
+    # Default if git branch is not available.
+    return "unknown"
 
 
 @pytest.fixture(scope="session")
@@ -86,20 +78,18 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
 @pytest.fixture(scope="function")
 def gen_setup(
     _admin_conn: DbConnection,
-    src_db_name: str,
-    dst_db_name: str,
-    db_key: str,
+    _unique_key: str,
 ) -> Iterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
     # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(src_db_name, admin_conn=_admin_conn)
-    dst_conn = DbConnection(dst_db_name, admin_conn=_admin_conn)
+    src_conn = DbConnection(get_unique_postgres_name("pgmig_src", _unique_key), admin_conn=_admin_conn)
+    dst_conn = DbConnection(get_unique_postgres_name("pgmig_dst", _unique_key), admin_conn=_admin_conn)
 
     # Provide the utility class for the test.
     try:
-        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=db_key)
+        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=_unique_key)
     finally:
         src_conn.close()
         dst_conn.close()

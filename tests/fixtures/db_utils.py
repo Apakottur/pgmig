@@ -3,7 +3,6 @@ import re
 from typing import Any
 
 import psycopg
-import shpyx
 import tenacity
 from psycopg import sql
 from typing_extensions import LiteralString
@@ -11,19 +10,6 @@ from typing_extensions import LiteralString
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 _ADMIN_DB_NAME = "postgres"
-
-
-def get_db_key_from_git_branch() -> str:
-    """
-    Get a unique identifier for DB naming, based on the current git branch.
-    """
-    result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
-    branch = result.stdout.strip()
-    if result.return_code == 0 and branch and branch != "HEAD":
-        return branch
-
-    # Default if git branch is not available.
-    return "unknown"
 
 
 # Postgres truncates identifiers past this length, which would silently collapse
