@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
-from pgmig._build._engine import build_db_info
 from pgmig._diff._context import context
 from pgmig._diff._engine import generate_migration_sql
+from pgmig._introspect._engine import introspect_db
 
 
 def generate(
@@ -29,8 +29,8 @@ def generate(
     """
     # Introspect both databases concurrently.
     with ThreadPoolExecutor(max_workers=2) as executor:
-        source_future = executor.submit(build_db_info, source)
-        target_future = executor.submit(build_db_info, target)
+        source_future = executor.submit(introspect_db, source)
+        target_future = executor.submit(introspect_db, target)
         source_db_info = source_future.result()
         target_db_info = target_future.result()
 
