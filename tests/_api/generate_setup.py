@@ -68,7 +68,7 @@ class GenerateSetup:
 
         # Generate the migration SQL.
         result = await agenerate(
-            source=self.src.dsn,
+            source_db=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
             ignore_owner=ignore_owner,
@@ -82,7 +82,7 @@ class GenerateSetup:
         if apply and result:
             await self.src.execute(result)
             residual = await agenerate(
-                source=self.src.dsn,
+                source_db=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
                 ignore_owner=ignore_owner,
