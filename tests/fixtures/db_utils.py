@@ -5,9 +5,11 @@ from typing import Any
 import tenacity
 from typing_extensions import LiteralString
 
+from pgmig._db import DbConnection
+
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
-_ADMIN_DB_NAME = "postgres"
+ADMIN_DB_DSN = f"{_DSN_PREFIX}/postgres"
 
 
 @tenacity.retry(wait=tenacity.wait_fixed(0.5), stop=tenacity.stop_after_delay(15), reraise=True)
@@ -45,64 +47,22 @@ def get_unique_postgres_name(base: str, key: str) -> str:
     return f"{base}_{slug_trunc}_{digest}"
 
 
+async def recreate_database(db_name: str, admin_conn: DbConnection) -> None:
+    # Drop the database, if exists. WITH (FORCE) atomically terminates any
+    # lingering backends and drops the database, avoiding the race between a
+    # separate pg_terminate_backend call and the drop.
+    await admin_conn.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")
+
+    # Create the database.
+    await admin_conn.execute(f"CREATE DATABASE {db_name}")
+
+
 class PytestDbConnection:
-    def __init__(self, db_name: str, admin_conn: "PytestDbConnection | None" = None) -> None:
+    def __init__(self, db_name: str) -> None:
         # Database name and DSN.
         self.db_name = db_name
         self.dsn = f"{_DSN_PREFIX}/{db_name}"
         self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
 
-        # Admin connection.
-        self._admin_conn = admin_conn
-
-        # Recreate the database (if not admin DB).
-        if db_name != _ADMIN_DB_NAME:
-            self._recreate_database()
-
         # Open a single connection, reused for every query on this database.
         self._conn = self._connect()
-
-    def _recreate_database(self) -> None:
-        """
-        Recreate the database.
-        """
-        assert self._admin_conn is not None
-
-        # Drop the database, if exists. WITH (FORCE) atomically terminates any
-        # lingering backends and drops the database, avoiding the race between a
-        # separate pg_terminate_backend call and the drop.
-        self._admin_conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self.db_name))
-        )
-
-        # Create the database.
-        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
-
-    @tenacity.retry(
-        wait=tenacity.wait_fixed(0.5),
-        stop=tenacity.stop_after_delay(10),
-        reraise=True,
-    )
-    def _connect(self) -> psycopg.Connection:
-        """
-        Open a connection, retrying until the database is ready to accept them.
-        """
-        return psycopg.connect(self.dsn, autocommit=True)
-
-    def close(self) -> None:
-        """
-        Close the connection.
-        """
-        self._conn.close()
-
-    def execute(self, query: LiteralString | sql.Composed) -> list[tuple[Any, ...]]:
-        """
-        Execute a SQL statement against this database on the reused connection.
-        """
-        result = self._conn.execute(query)
-
-        # Fetch query results.
-        if result.description is None:
-            return []
-        else:
-            return result.fetchall()

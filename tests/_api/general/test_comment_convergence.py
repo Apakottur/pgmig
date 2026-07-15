@@ -7,7 +7,7 @@ def test_index_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) 
     re-emitted: the drop-and-recreate resets it to NULL, so skipping COMMENT ON would
     leave a residual diff (convergence violation).
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE TABLE t (a integer, b integer)",
             "CREATE INDEX my_idx ON t (a)",
@@ -31,7 +31,7 @@ def test_constraint_redefinition_reemits_identical_comment(gen_setup: GenerateSe
     A check constraint redefined on both sides with the same comment must re-emit it;
     the drop-and-recreate resets it.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=["CREATE TABLE t (a integer)"],
         src=[
             "ALTER TABLE t ADD CONSTRAINT c_pos CHECK (a > 0)",
@@ -55,7 +55,7 @@ def test_function_return_type_change_reemits_identical_comment(gen_setup: Genera
     cannot change the return type), which resets its comment; an identical comment on
     both sides must still be re-emitted.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION g() RETURNS integer LANGUAGE sql AS 'SELECT 1'",
             "COMMENT ON FUNCTION g() IS 'hi'",

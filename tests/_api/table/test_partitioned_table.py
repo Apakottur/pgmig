@@ -6,7 +6,7 @@ def test_partitioned_table_create_range(gen_setup: GenerateSetup) -> None:
     A range-partitioned parent and its partition, present in target only -> CREATE the
     parent (with PARTITION BY) then each partition (with PARTITION OF, no column list).
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)",
@@ -24,7 +24,7 @@ def test_partitioned_table_create_list_and_default(gen_setup: GenerateSetup) -> 
     A list-partitioned table with an explicit partition and a DEFAULT partition. Creates
     are ordered parent first, then partitions by name.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE TABLE t (id integer, region text) PARTITION BY LIST (region)",
@@ -43,7 +43,7 @@ def test_partitioned_table_create_hash(gen_setup: GenerateSetup) -> None:
     """
     A hash-partitioned table.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE TABLE h (id integer) PARTITION BY HASH (id)",
@@ -61,7 +61,7 @@ def test_partitioned_table_subpartition(gen_setup: GenerateSetup) -> None:
     A partition that is itself partitioned (sub-partitioning). Creates are ordered by
     hierarchy depth: grandparent, parent, leaf.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE TABLE s (id integer, region text) PARTITION BY RANGE (id)",
@@ -82,7 +82,7 @@ def test_partitioned_table_drop_whole_unit(gen_setup: GenerateSetup) -> None:
     A partitioned table present in source only -> a single DROP TABLE on the parent; the
     partition is dropped by cascade, not re-emitted.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE TABLE events (id integer) PARTITION BY RANGE (id)",
             "CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)",
@@ -96,7 +96,7 @@ def test_partitioned_table_add_partition(gen_setup: GenerateSetup) -> None:
     """
     Parent on both sides, a new partition in target only -> CREATE ... PARTITION OF.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
         src=[],
         dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
@@ -109,7 +109,7 @@ def test_partitioned_table_remove_partition(gen_setup: GenerateSetup) -> None:
     Parent on both sides, a partition in source only (parent survives) -> DROP TABLE the
     partition.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
         src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
         dst=[],
@@ -121,7 +121,7 @@ def test_partitioned_table_attach(gen_setup: GenerateSetup) -> None:
     """
     A table that is standalone in source but a partition in target -> ATTACH PARTITION.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
         src=["CREATE TABLE events_2024 (id integer)"],
         dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
@@ -134,7 +134,7 @@ def test_partitioned_table_detach(gen_setup: GenerateSetup) -> None:
     A table that is a partition in source but standalone in target -> DETACH PARTITION
     (the table itself survives).
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
         src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
         dst=["CREATE TABLE events_2024 (id integer)"],
@@ -147,7 +147,7 @@ def test_partitioned_table_reparent(gen_setup: GenerateSetup) -> None:
     A partition attached to a different parent across the diff -> DETACH from the source
     parent, then ATTACH to the target parent.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[
             "CREATE TABLE p1 (id integer) PARTITION BY RANGE (id)",
             "CREATE TABLE p2 (id integer) PARTITION BY RANGE (id)",
@@ -167,7 +167,7 @@ def test_partitioned_table_index_on_parent(gen_setup: GenerateSetup) -> None:
     cascades to partitions; the auto-created child mirror index is not re-emitted, so the
     migration converges.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[
             "CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)",
             "CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)",
@@ -183,7 +183,7 @@ def test_partitioned_table_primary_key_on_parent(gen_setup: GenerateSetup) -> No
     A primary key declared on a partitioned parent is emitted once and cascades to
     partitions; the inherited child constraint is not re-emitted.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[
             "CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)",
             "CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)",
@@ -199,7 +199,7 @@ def test_partitioned_table_cross_schema(gen_setup: GenerateSetup) -> None:
     A partition living in a different schema than its parent is created (and referenced)
     with fully qualified names.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE SCHEMA parts",

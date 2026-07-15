@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 import shpyx
 
+from pgmig._db import DbConnection
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import PytestDbConnection, get_unique_postgres_name
+from tests.fixtures.db_utils import ADMIN_DB_DSN, get_unique_postgres_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -47,7 +48,7 @@ def _unique_key() -> str:
 
 
 @pytest.fixture(scope="session")
-def _admin_conn(request: pytest.FixtureRequest) -> Iterator[PytestDbConnection]:
+async def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
@@ -62,34 +63,33 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[PytestDbConnection]:
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
     # Open a single connection to the admin database for the whole session.
-    admin_conn = PytestDbConnection("postgres")
+    admin_conn = DbConnection(dsn=ADMIN_DB_DSN)
 
-    try:
+    async with DbConnection.connect(ADMIN_DB_DSN) as admin_conn:
         yield admin_conn
-    finally:
-        admin_conn.close()
 
-        # Stop the database server, unless asked to leave it running.
-        # Keeping it running is useful when developing locally and running tests frequently.
-        if request.config.getoption("--stop-docker"):
-            shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
+    # Stop the database server, unless asked to leave it running.
+    # Keeping it running is useful when developing locally and running tests frequently.
+    if request.config.getoption("--stop-docker"):
+        shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
 @pytest.fixture(scope="function")
-def gen_setup(
-    _admin_conn: PytestDbConnection,
+async def gen_setup(
+    _admin_conn: DbConnection,
     _unique_key: str,
 ) -> Iterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
-    # Create the source and target databases via the shared admin connection.
-    src_conn = PytestDbConnection(get_unique_postgres_name("pgmig_src", _unique_key), admin_conn=_admin_conn)
-    dst_conn = PytestDbConnection(get_unique_postgres_name("pgmig_dst", _unique_key), admin_conn=_admin_conn)
+    src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
+    dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
 
-    # Provide the utility class for the test.
-    try:
-        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=_unique_key)
-    finally:
-        src_conn.close()
-        dst_conn.close()
+    # Recreate the DBs before each test.
+    await _admin_conn.recreate_database()
+    await _admin_conn.recreate_database()
+
+    # Create DB connections and yield for the test.
+    async with DbConnection(src_db_name) as src_conn:
+        async with DbConnection(dst_db_name) as dst_conn:
+            yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=_unique_key)

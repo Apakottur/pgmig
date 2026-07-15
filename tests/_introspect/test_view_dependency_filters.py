@@ -9,9 +9,9 @@ async def test_view_dependencies_exclude_system_and_extension_referenced_views(g
     edge on the referenced side: those relations are not in the model, so an edge to them is
     bogus state that would mislead the ordering and recreate logic.
     """
-    gen_setup.src.execute("CREATE EXTENSION pg_stat_statements")
-    gen_setup.src.execute("CREATE VIEW v_sys AS SELECT pid FROM pg_stat_activity")
-    gen_setup.src.execute("CREATE VIEW v_ext AS SELECT userid FROM pg_stat_statements")
+    await gen_setup.src.execute("CREATE EXTENSION pg_stat_statements")
+    await gen_setup.src.execute("CREATE VIEW v_sys AS SELECT pid FROM pg_stat_activity")
+    await gen_setup.src.execute("CREATE VIEW v_ext AS SELECT userid FROM pg_stat_statements")
 
     info = await introspect_db(gen_setup.src.dsn)
 

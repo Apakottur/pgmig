@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig import PgmigUnsupportedError, generate
-from tests.fixtures.db_utils import PytestDbConnection
+from pgmig._db import DbConnection
 
 
 class GenerateSetup:
@@ -9,7 +9,7 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, *, src_conn: PytestDbConnection, dst_conn: PytestDbConnection, unique_key: str) -> None:
+    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, unique_key: str) -> None:
         # Database connections.
         self.src = src_conn
         self.dst = dst_conn
@@ -25,7 +25,7 @@ class GenerateSetup:
         (row,) = self.src.execute("SHOW server_version_num")
         return int(row[0]) // 10000
 
-    def assert_diff(
+    async def assert_diff(
         self,
         *,
         src: list[str],
@@ -60,8 +60,8 @@ class GenerateSetup:
                 raise ValueError("Remove trailing newlines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
-        self.src.execute(";\n".join(src))
-        self.dst.execute(";\n".join(dst))
+        await self.src.execute(";\n".join(src))
+        await self.dst.execute(";\n".join(dst))
 
         # Normalize to the "\n"-joined form that `generate` returns.
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
@@ -80,7 +80,7 @@ class GenerateSetup:
         # Apply the migration to the source and confirm it converges: after applying,
         # source should match target, so a second generate must produce nothing.
         if apply and result:
-            self.src.execute(result)
+            await self.src.execute(result)
             residual = generate(
                 source=self.src.dsn,
                 target=self.dst.dsn,
@@ -89,7 +89,7 @@ class GenerateSetup:
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
-    def assert_unsupported(
+    async def assert_unsupported(
         self,
         *,
         src: list[str],
@@ -102,7 +102,7 @@ class GenerateSetup:
         PgmigUnsupportedError (a documented limitation, not a bug).
         """
         with pytest.raises(PgmigUnsupportedError, match=match):
-            self.assert_diff(
+            await self.assert_diff(
                 src=src,
                 dst=dst,
                 both=both,

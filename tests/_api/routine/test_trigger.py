@@ -18,7 +18,7 @@ def test_trigger_create(gen_setup: GenerateSetup) -> None:
     """
     Trigger present in target but missing in source -> CREATE TRIGGER.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_setup_cmds(),
         src=[],
         dst=[_TRIGGER],
@@ -33,7 +33,7 @@ def test_trigger_drop(gen_setup: GenerateSetup) -> None:
     """
     Trigger present in source but missing in target -> DROP TRIGGER.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_setup_cmds(),
         src=[_TRIGGER],
         dst=[],
@@ -45,7 +45,7 @@ def test_trigger_rename(gen_setup: GenerateSetup) -> None:
     """
     Same definition on both sides, only the name differs -> ALTER TRIGGER RENAME.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_setup_cmds(),
         src=["CREATE TRIGGER audit_old AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()"],
         dst=["CREATE TRIGGER audit_new AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()"],
@@ -59,7 +59,7 @@ def test_trigger_rename_clears_comment(gen_setup: GenerateSetup) -> None:
     not: RENAME preserves the comment, so COMMENT ... IS NULL must also be emitted, else the
     migration does not converge.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_setup_cmds(),
         src=[
             "CREATE TRIGGER audit_old AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()",
@@ -77,7 +77,7 @@ def test_trigger_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP TRIGGER then CREATE TRIGGER.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_setup_cmds(),
         src=[_TRIGGER],
         dst=["CREATE TRIGGER person_audit AFTER UPDATE ON person FOR EACH ROW EXECUTE FUNCTION log_change()"],
@@ -93,7 +93,7 @@ def test_trigger_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical trigger on both sides -> no migration SQL.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[*_setup_cmds(), _TRIGGER],
         src=[],
         dst=[],
@@ -105,7 +105,7 @@ def test_trigger_internal_ignored(gen_setup: GenerateSetup) -> None:
     """
     A foreign key's internal RI trigger is not diffed as a user trigger.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[
             "CREATE TABLE team (id integer NOT NULL, CONSTRAINT team_pkey PRIMARY KEY (id))",
             "CREATE TABLE person (team_id integer)",
@@ -121,7 +121,7 @@ def test_trigger_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Identical trigger both sides, comment only on target -> COMMENT ON TRIGGER.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[*_setup_cmds(), _TRIGGER],
         src=[],
         dst=["COMMENT ON TRIGGER person_audit ON person IS 'audit'"],
@@ -133,7 +133,7 @@ def test_trigger_comment_changed(gen_setup: GenerateSetup) -> None:
     """
     Same trigger both sides with differing comments -> COMMENT ON TRIGGER with target's.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[*_setup_cmds(), _TRIGGER],
         src=["COMMENT ON TRIGGER person_audit ON person IS 'old'"],
         dst=["COMMENT ON TRIGGER person_audit ON person IS 'new'"],
@@ -145,7 +145,7 @@ def test_trigger_comment_removed(gen_setup: GenerateSetup) -> None:
     """
     Comment on source trigger but none on target -> COMMENT ON TRIGGER ... IS NULL.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[*_setup_cmds(), _TRIGGER],
         src=["COMMENT ON TRIGGER person_audit ON person IS 'audit'"],
         dst=[],
@@ -169,7 +169,7 @@ def test_trigger_on_partitioned_parent_create(gen_setup: GenerateSetup) -> None:
     A trigger declared on a partitioned parent is emitted once against the parent, not
     once per partition clone: Postgres cascades the parent declaration to every partition.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_partition_setup_cmds(),
         src=[],
         dst=["CREATE TRIGGER events_audit AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION log_change()"],
@@ -185,7 +185,7 @@ def test_trigger_on_partitioned_parent_drop(gen_setup: GenerateSetup) -> None:
     Dropping a partitioned parent's trigger emits a single DROP against the parent. The
     per-partition clones must not be diffed: Postgres refuses to drop them directly.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=_partition_setup_cmds(),
         src=["CREATE TRIGGER events_audit AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION log_change()"],
         dst=[],
@@ -197,7 +197,7 @@ def test_trigger_comment_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same trigger and same comment on both sides -> no migration SQL.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=[*_setup_cmds(), _TRIGGER, "COMMENT ON TRIGGER person_audit ON person IS 'audit'"],
         src=[],
         dst=[],

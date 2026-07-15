@@ -6,7 +6,7 @@ def test_function_drop_used_by_column_default(gen_setup: GenerateSetup) -> None:
     Dropping a function a column default depends on: the DROP DEFAULT (TABLE phase) is
     emitted before the DROP FUNCTION (late phase), so the migration is valid and converges.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
             "CREATE TABLE t (x integer DEFAULT f())",
@@ -24,7 +24,7 @@ def test_function_drop_used_by_check_constraint(gen_setup: GenerateSetup) -> Non
     Dropping a function a check constraint depends on: DROP CONSTRAINT (CONSTRAINT phase)
     precedes DROP FUNCTION (late phase).
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION positive(v integer) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$SELECT v > 0$$",
             "CREATE TABLE t (x integer, CONSTRAINT t_chk CHECK (positive(x)))",
@@ -42,7 +42,7 @@ def test_function_drop_used_by_expression_index(gen_setup: GenerateSetup) -> Non
     Dropping a function an expression index depends on: DROP INDEX (INDEX phase) precedes
     DROP FUNCTION (late phase).
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION lower_x(v text) RETURNS text LANGUAGE sql IMMUTABLE AS $$SELECT lower(v)$$",
             "CREATE TABLE t (x text)",
@@ -62,7 +62,7 @@ def test_function_drop_chain_ordered(gen_setup: GenerateSetup) -> None:
     dropped: the un-depended-upon top drops early, and the depended-upon mid and leaf drop
     late, topologically ordered (mid before leaf).
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION leaf() RETURNS integer LANGUAGE sql BEGIN ATOMIC SELECT 1; END",
             "CREATE FUNCTION mid() RETURNS integer LANGUAGE sql BEGIN ATOMIC SELECT leaf(); END",
@@ -83,7 +83,7 @@ def test_function_drop_diamond_ordered(gen_setup: GenerateSetup) -> None:
     by two late routines, so it is dropped only after both, exercising the multi-dependent
     ordering.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION leaf() RETURNS integer LANGUAGE sql BEGIN ATOMIC SELECT 1; END",
             "CREATE FUNCTION mid1() RETURNS integer LANGUAGE sql BEGIN ATOMIC SELECT leaf(); END",

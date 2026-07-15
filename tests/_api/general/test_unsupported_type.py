@@ -44,7 +44,7 @@ def test_view_return_rule_not_reported(gen_setup: GenerateSetup) -> None:
     A view's own auto _RETURN rule is not a user rule: a plain view diffs normally, without
     the rule guard tripping.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=["CREATE VIEW v AS SELECT 1 AS n"],
         diff=['CREATE VIEW "public"."v" AS SELECT 1 AS n'],
@@ -96,7 +96,7 @@ def test_enum_array_type_not_reported(gen_setup: GenerateSetup) -> None:
     A user type auto-creates an array type (typtype 'b', typcategory 'A'). That array must
     not be mistaken for an unsupported base type: a plain enum diffs normally.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=["CREATE TYPE color AS ENUM ('r', 'g')"],
         diff=["CREATE TYPE \"public\".\"color\" AS ENUM ('r', 'g')"],

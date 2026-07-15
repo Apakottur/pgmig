@@ -9,8 +9,8 @@ from tests._api.generate_setup import GenerateSetup
 _runner = CliRunner()
 
 
-def test_generate_to_stdout(gen_setup: GenerateSetup) -> None:
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+async def test_generate_to_stdout(gen_setup: GenerateSetup) -> None:
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
 
     result = _runner.invoke(app, ["generate", "--source", gen_setup.src.dsn, "--target", gen_setup.dst.dsn])
 
@@ -18,8 +18,8 @@ def test_generate_to_stdout(gen_setup: GenerateSetup) -> None:
     assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
 
 
-def test_generate_to_file(gen_setup: GenerateSetup, tmp_path: Path) -> None:
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+async def test_generate_to_file(gen_setup: GenerateSetup, tmp_path: Path) -> None:
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
     out = tmp_path / "migration.sql"
 
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-o", str(out)])
@@ -69,11 +69,11 @@ def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
     assert "ValueError" in result.output
 
 
-def test_generate_unsupported_change_is_clean(gen_setup: GenerateSetup) -> None:
+async def test_generate_unsupported_change_is_clean(gen_setup: GenerateSetup) -> None:
     # A documented limitation (UnsupportedChangeError) is a known failure: clean message,
     # no traceback and no "internal error, open an issue" prompt.
-    gen_setup.src.execute("CREATE DOMAIN d AS integer")
-    gen_setup.dst.execute("CREATE DOMAIN d AS text")
+    await gen_setup.src.execute("CREATE DOMAIN d AS integer")
+    await gen_setup.dst.execute("CREATE DOMAIN d AS text")
 
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn])
 
@@ -83,9 +83,9 @@ def test_generate_unsupported_change_is_clean(gen_setup: GenerateSetup) -> None:
     assert "internal error" not in result.output.lower()
 
 
-def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
+async def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
     # --check turns a non-empty diff into a non-zero exit (CI gate) while still showing it.
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
 
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--check"])
 
@@ -102,11 +102,11 @@ def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
     assert result.stdout == ""
 
 
-def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
+async def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
     # --index-concurrently emits CONCURRENTLY index statements.
-    gen_setup.src.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
-    gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
+    await gen_setup.src.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE INDEX person_name_idx ON person (name)")
 
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "--index-concurrently"])
 
@@ -114,9 +114,9 @@ def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
     assert result.stdout == "CREATE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);\n"
 
 
-def test_generate_dsn_from_env_vars(gen_setup: GenerateSetup) -> None:
+async def test_generate_dsn_from_env_vars(gen_setup: GenerateSetup) -> None:
     # With no --source/--target flags, the DSNs are read from PGMIG_SOURCE/PGMIG_TARGET.
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
 
     result = _runner.invoke(
         app, ["generate"], env={"PGMIG_SOURCE": gen_setup.src.dsn, "PGMIG_TARGET": gen_setup.dst.dsn}
@@ -126,9 +126,9 @@ def test_generate_dsn_from_env_vars(gen_setup: GenerateSetup) -> None:
     assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
 
 
-def test_generate_flag_overrides_env_var(gen_setup: GenerateSetup) -> None:
+async def test_generate_flag_overrides_env_var(gen_setup: GenerateSetup) -> None:
     # An explicit flag wins over the environment variable.
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
 
     result = _runner.invoke(
         app,
@@ -156,9 +156,9 @@ def test_version() -> None:
     assert result.stdout.strip() != ""
 
 
-def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp_path: Path) -> None:
+async def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp_path: Path) -> None:
     # --output pointing into a nonexistent directory is a clean write failure, not a traceback.
-    gen_setup.dst.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
     out = tmp_path / "nope" / "migration.sql"
 
     result = _runner.invoke(app, ["generate", "-s", gen_setup.src.dsn, "-t", gen_setup.dst.dsn, "-o", str(out)])

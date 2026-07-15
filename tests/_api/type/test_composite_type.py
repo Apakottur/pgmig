@@ -5,7 +5,7 @@ def test_composite_type_create(gen_setup: GenerateSetup) -> None:
     """
     Composite type present in target but missing in source -> CREATE TYPE.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=["CREATE TYPE pair AS (a integer, b integer)"],
         diff=['CREATE TYPE "public"."pair" AS ("a" integer, "b" integer)'],
@@ -18,7 +18,7 @@ def test_composite_type_create_empty(gen_setup: GenerateSetup) -> None:
     be seen and created -- the introspection join must not drop the zero-field type, or
     the diff silently claims convergence while the type is missing.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=["CREATE TYPE empty AS ()"],
         diff=['CREATE TYPE "public"."empty" AS ()'],
@@ -29,7 +29,7 @@ def test_composite_type_drop(gen_setup: GenerateSetup) -> None:
     """
     Composite type present in source but missing in target -> DROP TYPE.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=["CREATE TYPE pair AS (a integer, b integer)"],
         dst=[],
         diff=['DROP TYPE "public"."pair"'],
@@ -40,7 +40,7 @@ def test_composite_type_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical composite type on both sides -> no migration SQL.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         both=["CREATE TYPE pair AS (a integer, b integer)"],
         src=[],
         dst=[],
@@ -64,7 +64,7 @@ def test_composite_type_comment(gen_setup: GenerateSetup) -> None:
     """
     A composite type comment is synced with COMMENT ON TYPE.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE TYPE pair AS (a integer, b integer)",

@@ -21,7 +21,7 @@ def test_view_over_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None
     type change leaves the view definition unchanged, so only the view-on-column edge drags
     the view into the recreate set.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=["CREATE TABLE t (id int, val integer)", "CREATE VIEW v AS SELECT val FROM t"],
         dst=["CREATE TABLE t (id int, val bigint)", "CREATE VIEW v AS SELECT val FROM t"],
         diff=[
@@ -38,7 +38,7 @@ def test_view_on_view_over_retyped_column_cascades(gen_setup: GenerateSetup) -> 
     transitively reads that view. Neither view's definition changes, so the whole recreate
     set comes from the column edge plus the view-on-view closure.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE TABLE t (val integer)",
             "CREATE VIEW base AS SELECT val FROM t",
@@ -65,7 +65,7 @@ def test_view_over_unchanged_column_not_recreated(gen_setup: GenerateSetup) -> N
     `val` is retyped is left untouched. Postgres allows altering `val` while the view reads
     only `keep`, so recreating the view would be needless churn.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=["CREATE TABLE t (keep int, val integer)", "CREATE VIEW v AS SELECT keep FROM t"],
         dst=["CREATE TABLE t (keep int, val bigint)", "CREATE VIEW v AS SELECT keep FROM t"],
         diff=['ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint'],
@@ -77,7 +77,7 @@ def test_view_over_retyped_column_cross_schema(gen_setup: GenerateSetup) -> None
     The view-on-column recreate spans schemas: a view in one schema reading a retyped column
     of a table in another is dropped and recreated around the alter.
     """
-    gen_setup.assert_diff(
+   await gen_setup.assert_diff(
         src=[
             "CREATE SCHEMA data",
             "CREATE SCHEMA api",

@@ -24,7 +24,8 @@ class DbConnection:
     All DB interaction is done through this class to avoid the DB driver leaking into other modules.
     """
 
-    def __init__(self, conn: psycopg.AsyncConnection[Any]) -> None:
+    def __init__(self, *, dsn: str, conn: psycopg.AsyncConnection[Any]) -> None:
+        self.dsn = dsn
         self.driver_conn = conn
 
     @classmethod
@@ -39,7 +40,7 @@ class DbConnection:
             raise _PgmigError(f"Could not connect to database: {error}") from error
 
         async with conn:
-            yield cls(conn)
+            yield cls(dsn=dsn, conn=conn)
 
     async def execute(self, statement: str) -> psycopg.AsyncCursor[Any]:
         """
