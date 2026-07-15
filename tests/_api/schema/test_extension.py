@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-from pgmig import generate
+from pgmig import agenerate
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import DbConnection
 
@@ -246,7 +246,9 @@ async def test_ignore_extension_version_list_matching_suppresses_update(gen_setu
     await gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))
     await gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))
 
-    sql_out = generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name])
+    sql_out = await agenerate(
+        source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name]
+    )
 
     assert sql_out == ""
 
@@ -259,7 +261,7 @@ async def test_ignore_extension_version_list_non_matching_still_updates(gen_setu
     await gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))
     await gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))
 
-    sql_out = generate(
+    sql_out = await agenerate(
         source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=["some_other_extension"]
     )
 
