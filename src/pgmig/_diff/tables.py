@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs
+from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_single_comment
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
@@ -284,11 +284,11 @@ def _table_comment_statements(schema_name: str, src_table: Table | None, dst_tab
     """
     Emit COMMENT ON TABLE when the comment differs (absent source table = no comment).
     """
-    src_comment = src_table.comment if src_table else None
-    dst_comment = dst_table.comment
-    if src_comment == dst_comment:
-        return []
-    return [comment_on("TABLE", qualified(schema_name, dst_table.name), dst_comment)]
+    return diff_single_comment(
+        src_table,
+        dst_table,
+        render=lambda table: comment_on("TABLE", qualified(schema_name, table.name), table.comment),
+    )
 
 
 def _column_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:

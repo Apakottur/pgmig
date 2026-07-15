@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement
+from pgmig._diff._core import Phase, Statement, diff_single_comment
 from pgmig._sql import comment_on, ident, literal
 
 
@@ -44,5 +44,9 @@ def generate() -> Iterator[Statement]:
                 )
             # A newly created extension already carries its control-file comment, so
             # comments are synced only for an extension present on both sides.
-            if src_ext.comment != dst_ext.comment:
-                yield Statement(Phase.EXTENSION_CREATE, comment_on("EXTENSION", ident(dst_ext.name), dst_ext.comment))
+            for sql in diff_single_comment(
+                src_ext,
+                dst_ext,
+                render=lambda ext: comment_on("EXTENSION", ident(ext.name), ext.comment),
+            ):
+                yield Statement(Phase.EXTENSION_CREATE, sql)
