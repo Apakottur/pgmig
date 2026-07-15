@@ -1,6 +1,6 @@
 import pytest
 
-from pgmig import PgmigUnsupportedError, generate
+from pgmig import PgmigUnsupportedError, agenerate
 from tests.fixtures.db_utils import DbConnection
 
 
@@ -25,7 +25,7 @@ class GenerateSetup:
         (row,) = self.src.execute("SHOW server_version_num")
         return int(row[0]) // 10000
 
-    def assert_diff(
+    async def assert_diff(
         self,
         *,
         src: list[str],
@@ -67,7 +67,7 @@ class GenerateSetup:
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
 
         # Generate the migration SQL.
-        result = generate(
+        result = await agenerate(
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
@@ -81,7 +81,7 @@ class GenerateSetup:
         # source should match target, so a second generate must produce nothing.
         if apply and result:
             self.src.execute(result)  # ty: ignore[invalid-argument-type]
-            residual = generate(
+            residual = await agenerate(
                 source=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
@@ -89,7 +89,7 @@ class GenerateSetup:
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
-    def assert_unsupported(
+    async def assert_unsupported(
         self,
         *,
         src: list[str],
@@ -102,7 +102,7 @@ class GenerateSetup:
         PgmigUnsupportedError (a documented limitation, not a bug).
         """
         with pytest.raises(PgmigUnsupportedError, match=match):
-            self.assert_diff(
+            await self.assert_diff(
                 src=src,
                 dst=dst,
                 both=both,

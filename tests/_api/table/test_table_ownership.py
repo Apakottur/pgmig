@@ -21,14 +21,14 @@ def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
     return name
 
 
-def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
     """
     Same table both sides owned by different roles -> ALTER TABLE ... OWNER TO target's.
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = _ensure_role(gen_setup, "pgmig_owner_b")
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             f"ALTER TABLE person OWNER TO {role_a}",
@@ -41,14 +41,14 @@ def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
     """
     Owners differ, but --ignore-owner suppresses the ALTER TABLE ... OWNER TO entirely.
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = _ensure_role(gen_setup, "pgmig_owner_b")
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             f"ALTER TABLE person OWNER TO {role_a}",
@@ -62,12 +62,12 @@ def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same table and same owner on both sides -> no migration SQL.
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             f"ALTER TABLE person OWNER TO {role_a}",
