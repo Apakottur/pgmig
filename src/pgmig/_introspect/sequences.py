@@ -19,11 +19,11 @@ class _SequenceRow(_QueryRow):
     seq_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
     """
     Sequences (standalone only; sequences owned by a serial/identity column are excluded).
     """
-    for seq_row in _run_query(conn, "sequences.sql", _SequenceRow):
+    for seq_row in await _run_query(conn, "sequences.sql", _SequenceRow):
         db_info.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = Sequence(
             name=seq_row.seq_name,
             data_type=seq_row.seq_type,

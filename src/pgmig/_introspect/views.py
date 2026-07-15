@@ -16,8 +16,8 @@ class _ViewRow(_QueryRow):
     view_comment: str | None
 
 
-def _load_views(
-    conn: psycopg.Connection[Any],
+async def _load_views(
+    conn: psycopg.AsyncConnection[Any],
     db_info: DbInfo,
     query_file: str,
     select_target: Callable[[Schema], dict[str, _T]],
@@ -30,7 +30,7 @@ def _load_views(
     parsing lives in one place. `select_target` picks the schema's view/matview mapping;
     `build` turns (name, definition, comment) into the object to store.
     """
-    for row in _run_query(conn, query_file, _ViewRow):
+    for row in await _run_query(conn, query_file, _ViewRow):
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()
@@ -39,11 +39,11 @@ def _load_views(
         )
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
     """
     Views (user views only; extension-owned ones are excluded).
     """
-    _load_views(
+    await _load_views(
         conn,
         db_info,
         "views.sql",

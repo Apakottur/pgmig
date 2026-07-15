@@ -16,12 +16,12 @@ class _ConstraintRow(_QueryRow):
     con_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
     """
     Constraints (primary key, unique, and check). Foreign keys are routed to their own
     bucket on the table.
     """
-    for con_row in _run_query(conn, "constraints.sql", _ConstraintRow):
+    for con_row in await _run_query(conn, "constraints.sql", _ConstraintRow):
         constraint = Constraint(
             name=con_row.con_name,
             definition=con_row.con_def,

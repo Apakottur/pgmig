@@ -6,11 +6,11 @@ from pgmig._introspect.views import _load_views
 from pgmig._models import DbInfo, MaterializedView
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
     """
     Materialized views (user matviews only; extension-owned ones are excluded).
     """
-    _load_views(
+    await _load_views(
         conn,
         db_info,
         "materialized_views.sql",

@@ -24,7 +24,7 @@ class _QueryRow(BaseModel):
 _RowT = TypeVar("_RowT", bound=_QueryRow)
 
 
-def _run_query(conn: psycopg.Connection[Any], file_name: str, model: type[_RowT]) -> list[_RowT]:
+async def _run_query(conn: psycopg.AsyncConnection[Any], file_name: str, model: type[_RowT]) -> list[_RowT]:
     """
     Load a bundled SQL query from the queries directory, run it, and parse each row
     into the given Pydantic model (by SELECT column alias). Validation happens at parse
@@ -32,8 +32,9 @@ def _run_query(conn: psycopg.Connection[Any], file_name: str, model: type[_RowT]
     """
     file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
     query = cast("LiteralString", file_path.read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
-    with conn.cursor(row_factory=class_row(model)) as cur:
-        return cur.execute(query).fetchall()
+    async with conn.cursor(row_factory=class_row(model)) as cur:
+        await cur.execute(query)
+        return await cur.fetchall()
 
 
 class Loader(Protocol):
@@ -43,7 +44,7 @@ class Loader(Protocol):
     and tables before the objects that attach to them).
     """
 
-    def __call__(self, conn: psycopg.Connection[Any], db_info: DbInfo) -> None: ...
+    async def __call__(self, conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None: ...
 
 
 class Guard(Protocol):
@@ -54,4 +55,4 @@ class Guard(Protocol):
     collected and reported together so the user sees all problems at once.
     """
 
-    def __call__(self, conn: psycopg.Connection[Any]) -> list[str]: ...
+    async def __call__(self, conn: psycopg.AsyncConnection[Any]) -> list[str]: ...

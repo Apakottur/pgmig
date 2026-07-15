@@ -12,7 +12,7 @@ class _InvalidIndexRow(_QueryRow):
     index_name: str
 
 
-def check(conn: psycopg.Connection[Any]) -> list[str]:
+async def check(conn: psycopg.AsyncConnection[Any]) -> list[str]:
     """
     Guard: report invalid indexes (pg_index.indisvalid = FALSE). An invalid index is
     indistinguishable from a valid one in its deparsed definition, so a diff over it is
@@ -21,7 +21,7 @@ def check(conn: psycopg.Connection[Any]) -> list[str]:
     only suggests the most common one (a failed CREATE INDEX CONCURRENTLY).
     """
     findings: list[str] = []
-    for row in _run_query(conn, "invalid_indexes.sql", _InvalidIndexRow):
+    for row in await _run_query(conn, "invalid_indexes.sql", _InvalidIndexRow):
         index = qualified(row.schema_name, row.index_name)
         table = qualified(row.schema_name, row.table_name)
         findings.append(

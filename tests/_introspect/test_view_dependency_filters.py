@@ -1,3 +1,5 @@
+import asyncio
+
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
 
@@ -13,7 +15,7 @@ def test_view_dependencies_exclude_system_and_extension_referenced_views(gen_set
     gen_setup.src.execute("CREATE VIEW v_sys AS SELECT pid FROM pg_stat_activity")
     gen_setup.src.execute("CREATE VIEW v_ext AS SELECT userid FROM pg_stat_statements")
 
-    info = introspect_db(gen_setup.src.dsn)
+    info = asyncio.run(introspect_db(gen_setup.src.dsn))
 
     # Every referenced view across all recorded edges lives in a managed (non-system) schema.
     referenced = {ref for refs in info.view_dependencies.values() for ref in refs}

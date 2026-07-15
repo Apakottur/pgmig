@@ -15,11 +15,11 @@ class _TriggerRow(_QueryRow):
     trigger_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load(conn: psycopg.AsyncConnection[Any], db_info: DbInfo) -> None:
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
     """
-    for trigger_row in _run_query(conn, "triggers.sql", _TriggerRow):
+    for trigger_row in await _run_query(conn, "triggers.sql", _TriggerRow):
         table = db_info.schema_by_name[trigger_row.schema_name].table_by_name[trigger_row.table_name]
         table.trigger_by_name[trigger_row.trigger_name] = Trigger(
             name=trigger_row.trigger_name,
