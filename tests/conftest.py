@@ -6,7 +6,7 @@ import pytest
 import shpyx
 
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection, get_db_key_from_git_branch, get_unique_db_name
+from tests.fixtures.db_utils import DbConnection, get_db_key_from_git_branch, get_unique_postgres_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -45,13 +45,13 @@ def db_key() -> str:
 @pytest.fixture(scope="session")
 def src_db_name(db_key: str) -> str:
     """Name of the per-branch source database."""
-    return get_unique_db_name("pgmig_src", db_key)
+    return get_unique_postgres_name("pgmig_src", db_key)
 
 
 @pytest.fixture(scope="session")
 def dst_db_name(db_key: str) -> str:
     """Name of the per-branch target database."""
-    return get_unique_db_name("pgmig_dst", db_key)
+    return get_unique_postgres_name("pgmig_dst", db_key)
 
 
 @pytest.fixture(scope="session")
@@ -99,7 +99,7 @@ def gen_setup(
 
     # Provide the utility class for the test.
     try:
-        yield GenerateSetup(src_conn, dst_conn, unique_key=db_key)
+        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=db_key)
     finally:
         src_conn.close()
         dst_conn.close()

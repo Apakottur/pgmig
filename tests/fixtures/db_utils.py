@@ -31,9 +31,9 @@ def get_db_key_from_git_branch() -> str:
 _MAX_IDENTIFIER_LEN = 63
 
 
-def get_unique_db_name(base: str, key: str) -> str:
+def get_unique_postgres_name(base: str, key: str) -> str:
     """
-    Build a valid, unique Postgres database name from a base and a free-form key(e.g. a git branch name).
+    Build a valid, unique Postgres entity name from a base and a free-form key(e.g. a git branch name).
     Useful for developing on multiple branches in parallel.
     """
     # Simple name - cleaned key and base.
