@@ -1,5 +1,5 @@
 -- Views (user views only; extension-owned ones are excluded).
--- Mirror of materialized_views.sql; the two differ only in the relkind ('v' here, 'm' there). Keep in sync.
+-- Executable body matches materialized_views.sql but for the relkind; test_view_query_lockstep enforces it.
 SELECT
     n.nspname AS schema_name,
     c.relname AS view_name,

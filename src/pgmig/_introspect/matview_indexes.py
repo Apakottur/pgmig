@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Index
 
 
-class _MatviewIndexRow(BaseModel):
+class _MatviewIndexRow(_QueryRow):
     schema_name: str
     view_name: str
     index_name: str

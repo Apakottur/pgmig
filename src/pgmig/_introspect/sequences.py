@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Sequence
 
 
-class _SequenceRow(BaseModel):
+class _SequenceRow(_QueryRow):
     schema_name: str
     seq_name: str
     seq_type: str

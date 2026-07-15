@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Extension
 
 
-class _ExtensionRow(BaseModel):
+class _ExtensionRow(_QueryRow):
     name: str
     version: str
     extension_schema: str

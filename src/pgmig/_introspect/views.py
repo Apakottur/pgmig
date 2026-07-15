@@ -2,15 +2,14 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Schema, View
 
 _T = TypeVar("_T")
 
 
-class _ViewRow(BaseModel):
+class _ViewRow(_QueryRow):
     schema_name: str
     view_name: str
     view_definition: str

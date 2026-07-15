@@ -94,8 +94,8 @@ class GenerateSetup:
         match: str | None = None,
     ) -> None:
         """
-        Wrapper around `assert_diff` that asserts the migration refuses the change with an
-        UnsupportedChangeError (a documented limitation, not a bug).
+        Wrapper around `assert_diff` that asserts the migration refuses the change with a
+        PgmigUnsupportedError (a documented limitation, not a bug).
         """
         with pytest.raises(PgmigUnsupportedError, match=match):
             self.assert_diff(

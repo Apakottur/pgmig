@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, EnumType
 
 
-class _EnumRow(BaseModel):
+class _EnumRow(_QueryRow):
     schema_name: str
     enum_name: str
     enum_values: list[str]

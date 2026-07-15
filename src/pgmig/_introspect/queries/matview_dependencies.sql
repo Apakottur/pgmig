@@ -4,7 +4,6 @@
 -- matviews are not folded into that sort yet, so a matview-involving pair is reported
 -- rather than emitted in a possibly-wrong order. A dependency on a plain table is fine
 -- (tables are created before, and dropped after, the view phases).
--- Twin of view_dependencies.sql; this query adds a predicate requiring one side to be a matview. Keep in sync.
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,
     dependent.relname AS dependent_view,
