@@ -41,7 +41,7 @@ def get_unique_postgres_name(base: str, key: str) -> str:
 class DbConnection:
     def __init__(self, db_name: str, admin_conn: "DbConnection | None" = None) -> None:
         # Database name and DSN.
-        self._db_name = db_name
+        self.db_name = db_name
         self.dsn = f"{_DSN_PREFIX}/{db_name}"
         self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
 
@@ -54,13 +54,6 @@ class DbConnection:
 
         # Open a single connection, reused for every query on this database.
         self._conn = self._connect()
-
-    @property
-    def db_name(self) -> str:
-        """
-        Name of the database this connection targets.
-        """
-        return self._db_name
 
     def _recreate_database(self) -> None:
         """
