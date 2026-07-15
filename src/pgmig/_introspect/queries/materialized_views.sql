@@ -1,4 +1,5 @@
 -- Materialized views (user matviews only; extension-owned ones are excluded).
+-- Mirror of views.sql; the two differ only in the relkind ('m' here, 'v' there). Keep in sync.
 SELECT
     n.nspname AS schema_name,
     c.relname AS view_name,
