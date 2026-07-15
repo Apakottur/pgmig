@@ -86,20 +86,20 @@ def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
     raise AssertionError("no extension with multiple versions available")
 
 
-def test_extension_create(gen_setup: GenerateSetup) -> None:
+async def test_extension_create(gen_setup: GenerateSetup) -> None:
     """
     Extension present in target but missing in source -> CREATE EXTENSION.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[_create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema)],
         diff=[f'CREATE EXTENSION IF NOT EXISTS "{ext_info.name}" SCHEMA "{ext_info.schema}" CASCADE'],
     )
 
 
-def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
+async def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     """
     A table an extension owns directly (as PostGIS owns spatial_ref_sys in public) must
     not be re-emitted: CREATE EXTENSION already creates it, plus its indexes and
@@ -114,7 +114,7 @@ def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     # A table with a primary key and a secondary index. Extension membership is
     # recorded on the table; the constraint and index are excluded because their
     # owning table is extension-owned, exercising all three query exclusions.
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[
             _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
@@ -126,7 +126,7 @@ def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None:
+async def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None:
     """
     A user trigger on a table an extension owns (as an audit trigger on PostGIS
     spatial_ref_sys would be) must be excluded: the owning table is extension-managed
@@ -138,7 +138,7 @@ def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[
             _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
@@ -153,7 +153,7 @@ def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -> None
     )
 
 
-def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
+async def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
     """
     A user function inside a schema an extension owns must be excluded: the schema is
     extension-managed and dropped from the model, so functions.sql needs the
@@ -161,7 +161,7 @@ def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> No
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[
             _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
@@ -173,7 +173,7 @@ def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup) -> No
     )
 
 
-def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
+async def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
     """
     A user enum inside a schema an extension owns must be excluded: the schema is
     extension-managed and dropped from the model, so enums.sql needs the namespace-level
@@ -181,7 +181,7 @@ def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[
             _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
@@ -193,7 +193,7 @@ def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> None:
+async def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> None:
     """
     A standalone sequence an extension owns directly must be excluded: CREATE EXTENSION
     recreates it, so re-emitting CREATE SEQUENCE would fail. The sequence lives in a user
@@ -201,7 +201,7 @@ def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> Non
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[
             _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema),
@@ -212,26 +212,26 @@ def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) -> Non
     )
 
 
-def test_extension_drop(gen_setup: GenerateSetup) -> None:
+async def test_extension_drop(gen_setup: GenerateSetup) -> None:
     """
     Extension present in source but missing in target -> DROP EXTENSION.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[_create_extension(ext_info.name)],
         dst=[],
         diff=[f'DROP EXTENSION "{ext_info.name}"'],
     )
 
 
-def test_extension_version_update(gen_setup: GenerateSetup) -> None:
+async def test_extension_version_update(gen_setup: GenerateSetup) -> None:
     """
     Extension present in both but with different versions -> ALTER EXTENSION UPDATE.
     """
     ext_info = _pick_multi_version_extension(gen_setup.src)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[_create_extension(ext_info.name, version=ext_info.min_version)],
         dst=[_create_extension(ext_info.name, version=ext_info.max_version)],
         diff=[f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}'"],
@@ -266,13 +266,13 @@ def test_ignore_extension_version_list_non_matching_still_updates(gen_setup: Gen
     assert sql_out == f"ALTER EXTENSION \"{ext_info.name}\" UPDATE TO '{ext_info.max_version}';"
 
 
-def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
+async def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
     """
     Extension present in both but in different schemas -> ALTER EXTENSION SET SCHEMA.
     """
     ext_info = _get_installable_extension(gen_setup.dst)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         # Create the target schema on both sides so only the extension move is diffed.
         both=["CREATE SCHEMA other"],
         src=[_create_extension(ext_info.name)],
@@ -281,13 +281,13 @@ def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> None:
+async def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> None:
     """
     A table uses a type provided by an extension, and both are dropped. DROP EXTENSION
     must run after DROP TABLE -- dropping the extension first fails because the table's
     column still depends on it ("other objects depend on it").
     """
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE EXTENSION citext", "CREATE TABLE u (e citext)"],
         dst=[],
         diff=[
@@ -297,7 +297,7 @@ def test_extension_dropped_after_dependent_table(gen_setup: GenerateSetup) -> No
     )
 
 
-def test_extension_comment_changed(gen_setup: GenerateSetup) -> None:
+async def test_extension_comment_changed(gen_setup: GenerateSetup) -> None:
     """
     Extension present on both sides with differing comments -> COMMENT ON EXTENSION with
     the target's. (A newly created extension already carries its control-file comment, so
@@ -306,7 +306,7 @@ def test_extension_comment_changed(gen_setup: GenerateSetup) -> None:
     ext_info = _get_installable_extension(gen_setup.dst)
     create = _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
-    gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[create],
         dst=[create, f"COMMENT ON EXTENSION {ext_info.name} IS 'custom'"],
         diff=[f"COMMENT ON EXTENSION \"{ext_info.name}\" IS 'custom'"],
