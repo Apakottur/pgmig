@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 
-import pgmig._diff._engine as diff_engine
+from pgmig._diff._engine import get_diff
 from pgmig._introspect._engine import introspect_db
 
 
@@ -17,7 +17,7 @@ async def _generate(
     source_db_info, target_db_info = await asyncio.gather(introspect_db(source), introspect_db(target))
 
     # Generate migration SQL.
-    return diff_engine.get_diff(
+    return get_diff(
         source_db_info=source_db_info,
         target_db_info=target_db_info,
         index_concurrently=index_concurrently,

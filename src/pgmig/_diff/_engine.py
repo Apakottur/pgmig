@@ -18,7 +18,7 @@ from pgmig._diff import (
 )
 from pgmig._diff._context import context
 from pgmig._diff._core import Generator, Phase
-from pgmig._models import DbInfo
+from pgmig._models import DbIntrospectionResult
 
 # Cross-phase ordering is decided by each statement's phase, but WITHIN a single phase
 # statements keep this registration order (the collection loop is a stable sort). So this
@@ -49,8 +49,8 @@ _GENERATORS: tuple[Generator, ...] = (
 
 def get_diff(
     *,
-    source_db_info: DbInfo,
-    target_db_info: DbInfo,
+    source_db_info: DbIntrospectionResult,
+    target_db_info: DbIntrospectionResult,
     index_concurrently: bool,
     ignore_extension_version: Sequence[str],
     ignore_owner: bool,

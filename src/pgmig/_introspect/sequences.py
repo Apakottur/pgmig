@@ -1,5 +1,6 @@
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import DbInfo, Sequence
+from pgmig._models import Sequence
 
 
 class _SequenceRow(_QueryRow):
@@ -15,12 +16,12 @@ class _SequenceRow(_QueryRow):
     seq_comment: str | None
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Sequences (standalone only; sequences owned by a serial/identity column are excluded).
     """
     for seq_row in await _run_query("sequences.sql", _SequenceRow):
-        db_info.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = Sequence(
+        context.db_info.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = Sequence(
             name=seq_row.seq_name,
             data_type=seq_row.seq_type,
             start=seq_row.seq_start,

@@ -1,5 +1,6 @@
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import Constraint, DbInfo
+from pgmig._models import Constraint
 
 
 class _ConstraintRow(_QueryRow):
@@ -12,7 +13,7 @@ class _ConstraintRow(_QueryRow):
     con_comment: str | None
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Constraints (primary key, unique, and check). Foreign keys are routed to their own
     bucket on the table.
@@ -25,7 +26,7 @@ async def load(db_info: DbInfo) -> None:
             columns=con_row.con_columns or [],
             comment=con_row.con_comment,
         )
-        table = db_info.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
+        table = context.db_info.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
         if constraint.is_foreign_key:
             table.foreign_key_by_name[con_row.con_name] = constraint
         else:

@@ -1,5 +1,6 @@
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import ColumnKey, DbInfo, ViewKey
+from pgmig._models import ColumnKey, ViewKey
 
 
 class _ViewColumnDependencyRow(_QueryRow):
@@ -10,7 +11,7 @@ class _ViewColumnDependencyRow(_QueryRow):
     column_name: str
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     View-on-column edges: record, for each view or materialized view, the set of table
     columns it reads. The view and matview diffs use these to drop and recreate a (mat)view
@@ -20,4 +21,4 @@ async def load(db_info: DbInfo) -> None:
     for row in await _run_query("view_column_dependencies.sql", _ViewColumnDependencyRow):
         view = ViewKey(row.view_schema, row.view_name)
         column = ColumnKey(row.table_schema, row.table_name, row.column_name)
-        db_info.view_column_dependencies.setdefault(view, set()).add(column)
+        context.db_info.view_column_dependencies.setdefault(view, set()).add(column)

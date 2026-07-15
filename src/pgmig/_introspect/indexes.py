@@ -1,5 +1,6 @@
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import DbInfo, Index
+from pgmig._models import Index
 
 
 class _IndexRow(_QueryRow):
@@ -11,12 +12,12 @@ class _IndexRow(_QueryRow):
     index_comment: str | None
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Indexes (standalone only; constraint-backed indexes are excluded).
     """
     for index_row in await _run_query("indexes.sql", _IndexRow):
-        table = db_info.schema_by_name[index_row.schema_name].table_by_name[index_row.table_name]
+        table = context.db_info.schema_by_name[index_row.schema_name].table_by_name[index_row.table_name]
         table.index_by_name[index_row.index_name] = Index(
             name=index_row.index_name,
             definition=index_row.index_def,

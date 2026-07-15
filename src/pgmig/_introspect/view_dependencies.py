@@ -1,5 +1,6 @@
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import DbInfo, ViewKey
+from pgmig._models import ViewKey
 from pgmig._sql import qualified
 
 # pg_class.relkind -> the object noun used in the finding message.
@@ -22,7 +23,7 @@ class _MatviewDependencyRow(_QueryRow):
     referenced_kind: str
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     View-on-view edges: record, for each plain view that reads another plain view, the set
     of views it reads from. The view diff uses these to topologically order CREATE
@@ -32,7 +33,7 @@ async def load(db_info: DbInfo) -> None:
     for row in await _run_query("view_dependencies.sql", _ViewDependencyRow):
         dependent = ViewKey(row.dependent_schema, row.dependent_view)
         referenced = ViewKey(row.referenced_schema, row.referenced_view)
-        db_info.view_dependencies.setdefault(dependent, set()).add(referenced)
+        context.db_info.view_dependencies.setdefault(dependent, set()).add(referenced)
 
 
 async def check() -> list[str]:

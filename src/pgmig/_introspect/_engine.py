@@ -22,7 +22,7 @@ from pgmig._introspect import (
 )
 from pgmig._introspect._context import context
 from pgmig._introspect._core import Guard, Loader
-from pgmig._models import DbInfo
+from pgmig._models import DbIntrospectionResult
 
 # Preconditions run before any loader. Each guard reports every object it finds that
 # pgmig cannot process; all findings are collected and reported together, so the user
@@ -56,11 +56,11 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-async def introspect_db(dsn: str) -> DbInfo:
+async def introspect_db(dsn: str) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
     """
-    db_info = DbInfo(
+    db_info = DbIntrospectionResult(
         schema_by_name={},
         extension_by_name={},
         view_dependencies={},
@@ -71,6 +71,7 @@ async def introspect_db(dsn: str) -> DbInfo:
         # Run within the introspection context.
         with context.context_scope(
             conn=conn,
+            db_info=db_info,
         ):
             # Use an empty search path to make introspection independent of the database's own search path.
             await conn.execute("SET LOCAL search_path = ''")
@@ -84,6 +85,6 @@ async def introspect_db(dsn: str) -> DbInfo:
                 raise PgmigUnsupportedError(message)
 
             for load in _LOADERS:
-                await load(db_info)
+                await load()
 
     return db_info

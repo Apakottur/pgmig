@@ -1,5 +1,6 @@
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import Column, DbInfo, Table
+from pgmig._models import Column, Table
 
 
 class _TableRow(_QueryRow):
@@ -26,12 +27,12 @@ class _TableRow(_QueryRow):
     partition_parent_name: str | None
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Tables (and their columns, in physical order).
     """
     for table_row in await _run_query("tables.sql", _TableRow):
-        schema = db_info.schema_by_name[table_row.schema_name]
+        schema = context.db_info.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:
             # A partition has both a parent schema and name (the query sets them together).

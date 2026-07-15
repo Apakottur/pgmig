@@ -351,9 +351,9 @@ class Extension:
 
 
 @dataclass
-class DbInfo:
+class DbIntrospectionResult:
     """
-    Full structure of a database.
+    Full result of a database introspection.
     """
 
     schema_by_name: dict[str, Schema]

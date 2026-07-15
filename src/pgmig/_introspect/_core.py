@@ -4,7 +4,6 @@ from typing import Protocol, TypeVar
 from pydantic import BaseModel, ConfigDict
 
 from pgmig._introspect._context import context
-from pgmig._models import DbInfo
 
 
 class _QueryRow(BaseModel):
@@ -39,7 +38,7 @@ class Loader(Protocol):
     and tables before the objects that attach to them).
     """
 
-    async def __call__(self, db_info: DbInfo) -> None: ...
+    async def __call__(self) -> None: ...
 
 
 class Guard(Protocol):

@@ -1,8 +1,9 @@
 from collections.abc import Callable
 from typing import TypeVar
 
+from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import DbInfo, Schema, View
+from pgmig._models import Schema, View
 
 _T = TypeVar("_T")
 
@@ -15,7 +16,6 @@ class _ViewRow(_QueryRow):
 
 
 async def _load_views(
-    db_info: DbInfo,
     query_file: str,
     select_target: Callable[[Schema], dict[str, _T]],
     build: Callable[[str, str, str | None], _T],
@@ -31,17 +31,16 @@ async def _load_views(
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()
-        select_target(db_info.schema_by_name[row.schema_name])[row.view_name] = build(
+        select_target(context.db_info.schema_by_name[row.schema_name])[row.view_name] = build(
             row.view_name, definition, row.view_comment
         )
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Views (user views only; extension-owned ones are excluded).
     """
     await _load_views(
-        db_info,
         "views.sql",
         lambda schema: schema.view_by_name,
         lambda name, definition, comment: View(name=name, definition=definition, comment=comment),

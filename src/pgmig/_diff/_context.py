@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from pgmig._models import DbInfo
+from pgmig._models import DbIntrospectionResult
 
 
 @dataclass(frozen=True)
@@ -13,8 +13,8 @@ class _ContextData:
     """
 
     # Databases.
-    source: DbInfo
-    target: DbInfo
+    source: DbIntrospectionResult
+    target: DbIntrospectionResult
 
     # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
     # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
@@ -35,16 +35,15 @@ _context: ContextVar[_ContextData] = ContextVar("pgmig_context")
 
 class _Context:
     """
-    Proxy over the context var. Generators import the `context` singleton and read
-    `context.source` etc.; each access fetches the value set for the running diff.
+    Singleton class for the diff context.
     """
 
     @contextmanager
     def context_scope(
         self,
         *,
-        source: DbInfo,
-        target: DbInfo,
+        source: DbIntrospectionResult,
+        target: DbIntrospectionResult,
         index_concurrently: bool,
         ignore_extension_version: Sequence[str],
         ignore_owner: bool,
@@ -64,11 +63,11 @@ class _Context:
             _context.reset(token)
 
     @property
-    def source(self) -> DbInfo:
+    def source(self) -> DbIntrospectionResult:
         return _context.get().source
 
     @property
-    def target(self) -> DbInfo:
+    def target(self) -> DbIntrospectionResult:
         return _context.get().target
 
     @property

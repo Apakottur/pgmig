@@ -1,13 +1,12 @@
 from pgmig._introspect.views import _load_views
-from pgmig._models import DbInfo, MaterializedView
+from pgmig._models import MaterializedView
 
 
-async def load(db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Materialized views (user matviews only; extension-owned ones are excluded).
     """
     await _load_views(
-        db_info,
         "materialized_views.sql",
         lambda schema: schema.materialized_view_by_name,
         lambda name, definition, comment: MaterializedView(
