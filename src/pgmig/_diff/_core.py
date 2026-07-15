@@ -65,6 +65,26 @@ def _diff_comments(
     return statements
 
 
+def diff_single_comment(
+    src_obj: _CommentedT | None,
+    dst_obj: _CommentedT,
+    *,
+    render: Callable[[_CommentedT], str],
+) -> list[str]:
+    """
+    Single-object counterpart to _diff_comments: render a COMMENT ON for `dst_obj` when
+    its comment differs from `src_obj` (an absent source object counts as no comment),
+    else nothing. Wraps the pair in a one-entry mapping and defers to _diff_comments so
+    the "absent source = None" rule lives in exactly one place, rather than being
+    hand-copied as `(src.comment if src else None) != dst.comment` per object kind.
+    """
+    return _diff_comments(
+        {} if src_obj is None else {"": src_obj},
+        {"": dst_obj},
+        render=lambda _name, obj: render(obj),
+    )
+
+
 def diff_comment_statements(
     schema_name: str,
     src: Mapping[str, _CommentedT],
