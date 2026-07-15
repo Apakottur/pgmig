@@ -243,8 +243,8 @@ def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: Gen
     A list naming the extension suppresses only that extension's version update.
     """
     ext_info = _pick_multi_version_extension(gen_setup.src)
-    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))  # ty: ignore[invalid-argument-type]
-    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))  # ty: ignore[invalid-argument-type]
+    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))
+    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))
 
     sql_out = generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name])
 
@@ -256,8 +256,8 @@ def test_ignore_extension_version_list_non_matching_still_updates(gen_setup: Gen
     A list that does not name the extension leaves its version update in place.
     """
     ext_info = _pick_multi_version_extension(gen_setup.src)
-    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))  # ty: ignore[invalid-argument-type]
-    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))  # ty: ignore[invalid-argument-type]
+    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))
+    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))
 
     sql_out = generate(
         source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=["some_other_extension"]

@@ -56,8 +56,8 @@ class GenerateSetup:
                 raise ValueError("Remove trailing newlines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
-        self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
-        self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
+        self.src.execute(";\n".join(src))
+        self.dst.execute(";\n".join(dst))
 
         # Normalize to the "\n"-joined form that `generate` returns.
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
@@ -76,7 +76,7 @@ class GenerateSetup:
         # Apply the migration to the source and confirm it converges: after applying,
         # source should match target, so a second generate must produce nothing.
         if apply and result:
-            self.src.execute(result)  # ty: ignore[invalid-argument-type]
+            self.src.execute(result)
             residual = generate(
                 source=self.src.dsn,
                 target=self.dst.dsn,

@@ -5,8 +5,6 @@ from typing import Any
 import psycopg
 import shpyx
 import tenacity
-from psycopg import sql
-from typing_extensions import LiteralString
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
@@ -100,12 +98,10 @@ class DbConnection:
         # Drop the database, if exists. WITH (FORCE) atomically terminates any
         # lingering backends and drops the database, avoiding the race between a
         # separate pg_terminate_backend call and the drop.
-        self._admin_conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self._db_name))
-        )
+        self._admin_conn.execute(f"DROP DATABASE IF EXISTS {self._db_name} WITH (FORCE)")
 
         # Create the database.
-        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self._db_name)))
+        self._admin_conn.execute(f"CREATE DATABASE {self._db_name}")
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
@@ -124,7 +120,7 @@ class DbConnection:
         """
         self._conn.close()
 
-    def execute(self, query: LiteralString | sql.Composed) -> list[tuple[Any, ...]]:
+    def execute(self, query: str) -> list[tuple[Any, ...]]:
         """
         Execute a SQL statement against this database on the reused connection.
         """

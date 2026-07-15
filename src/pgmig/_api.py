@@ -1,10 +1,29 @@
 import asyncio
 from collections.abc import Sequence
 
-from pgmig._diff._context import context
-from pgmig._diff._engine import generate_migration_sql
+import pgmig._diff._engine as diff_engine
 from pgmig._introspect._engine import introspect_db
-from pgmig._models import DbInfo
+
+
+async def _generate(
+    *,
+    source: str,
+    target: str,
+    index_concurrently: bool,
+    ignore_extension_version: Sequence[str],
+    ignore_owner: bool,
+) -> str:
+    # Introspect both databases concurrently.
+    source_db_info, target_db_info = await asyncio.gather(introspect_db(source), introspect_db(target))
+
+    # Generate migration SQL.
+    return diff_engine.get_diff(
+        source_db_info=source_db_info,
+        target_db_info=target_db_info,
+        index_concurrently=index_concurrently,
+        ignore_extension_version=ignore_extension_version,
+        ignore_owner=ignore_owner,
+    )
 
 
 def generate(
@@ -28,15 +47,12 @@ def generate(
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
     """
-    # Introspect both databases concurrently.
-    source_db_info, target_db_info = asyncio.gather(introspect_db(source), introspect_db(target))
-
-    # Generate migration SQL.
-    with context.context_scope(
-        source=source_db_info,
-        target=target_db_info,
-        index_concurrently=index_concurrently,
-        ignore_extension_version=ignore_extension_version,
-        ignore_owner=ignore_owner,
-    ):
-        return generate_migration_sql()
+    return asyncio.run(
+        _generate(
+            source=source,
+            target=target,
+            index_concurrently=index_concurrently,
+            ignore_extension_version=ignore_extension_version,
+            ignore_owner=ignore_owner,
+        )
+    )
