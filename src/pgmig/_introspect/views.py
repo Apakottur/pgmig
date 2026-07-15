@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._models import Schema, View
 
 _T = TypeVar("_T")
@@ -27,7 +27,7 @@ async def _load_views(
     parsing lives in one place. `select_target` picks the schema's view/matview mapping;
     `build` turns (name, definition, comment) into the object to store.
     """
-    for row in await _run_query(query_file, _ViewRow):
+    for row in await run_introspection_query(query_file, _ViewRow):
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()

@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._models import Column, Table
 
 
@@ -31,7 +31,7 @@ async def load() -> None:
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in await _run_query("tables.sql", _TableRow):
+    for table_row in await run_introspection_query("tables.sql", _TableRow):
         schema = context.db_info.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:

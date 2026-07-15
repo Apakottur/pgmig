@@ -2,21 +2,12 @@ import hashlib
 import re
 from typing import Any
 
-import psycopg
 import shpyx
 import tenacity
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 _ADMIN_DB_NAME = "postgres"
-
-
-class UniqueViolation(Exception):
-    """
-    Raised by DbConnection.execute when a statement violates a unique constraint. Tests
-    assert on this instead of the driver's own exception, so psycopg stays confined to
-    this module.
-    """
 
 
 @tenacity.retry(wait=tenacity.wait_fixed(0.5), stop=tenacity.stop_after_delay(15), reraise=True)
@@ -119,18 +110,3 @@ class DbConnection:
         Close the connection.
         """
         self._conn.close()
-
-    def execute(self, query: str) -> list[tuple[Any, ...]]:
-        """
-        Execute a SQL statement against this database on the reused connection.
-        """
-        try:
-            result = self._conn.execute(query)
-        except psycopg.errors.UniqueViolation as error:
-            raise UniqueViolation(str(error)) from error
-
-        # Fetch query results.
-        if result.description is None:
-            return []
-        else:
-            return result.fetchall()

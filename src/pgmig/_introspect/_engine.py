@@ -67,7 +67,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         view_column_dependencies={},
     )
 
-    async with await DbConnection.connect(dsn) as conn:
+    async with DbConnection.connect(dsn) as conn:
         # Run within the introspection context.
         with context.context_scope(
             conn=conn,

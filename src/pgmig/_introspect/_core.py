@@ -18,19 +18,6 @@ class _QueryRow(BaseModel):
     )
 
 
-_RowT = TypeVar("_RowT", bound=_QueryRow)
-
-
-async def _run_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
-    """
-    Load a bundled SQL query from the queries directory and run it on the current
-    introspection connection, parsing each row into the given Pydantic model.
-    """
-    file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
-    query = file_path.read_text(encoding="utf-8")
-    return await context.conn.fetch_models(query, model)
-
-
 class Loader(Protocol):
     """
     The shared shape of every object-kind loader: read from the connection and populate
@@ -50,3 +37,16 @@ class Guard(Protocol):
     """
 
     async def __call__(self) -> list[str]: ...
+
+
+_RowT = TypeVar("_RowT", bound=_QueryRow)
+
+
+async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
+    """
+    Load a bundled SQL query from the queries directory and run it on the current
+    introspection connection, parsing each row into the given Pydantic model.
+    """
+    file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
+    query = file_path.read_text(encoding="utf-8")
+    return await context.conn.execute(query, model)

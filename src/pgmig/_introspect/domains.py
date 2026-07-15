@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._models import Domain
 
 
@@ -17,7 +17,7 @@ async def load() -> None:
     """
     Domain types (user domains only; extension-owned ones are excluded).
     """
-    for domain_row in await _run_query("domains.sql", _DomainRow):
+    for domain_row in await run_introspection_query("domains.sql", _DomainRow):
         context.db_info.schema_by_name[domain_row.schema_name].domain_by_name[domain_row.domain_name] = Domain(
             name=domain_row.domain_name,
             data_type=domain_row.data_type,

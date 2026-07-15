@@ -1,4 +1,4 @@
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._sql import qualified
 
 # Human-readable name per unsupported kind, keyed by (catalog, code). The same single-char
@@ -39,7 +39,7 @@ async def check() -> list[str]:
     objects differ on one side, falsely claiming convergence.
     """
     findings = []
-    for row in await _run_query("unsupported.sql", _UnsupportedRow):
+    for row in await run_introspection_query("unsupported.sql", _UnsupportedRow):
         name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
         parts = [row.schema_name, row.obj_name] if row.schema_name is not None else [row.obj_name]
         findings.append(f"{name} {qualified(*parts)} is not supported yet")

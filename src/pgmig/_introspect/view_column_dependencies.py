@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._models import ColumnKey, ViewKey
 
 
@@ -18,7 +18,7 @@ async def load() -> None:
     around a change (type change, drop) to a column it depends on, since Postgres refuses to
     alter or drop a column a view or matview reads.
     """
-    for row in await _run_query("view_column_dependencies.sql", _ViewColumnDependencyRow):
+    for row in await run_introspection_query("view_column_dependencies.sql", _ViewColumnDependencyRow):
         view = ViewKey(row.view_schema, row.view_name)
         column = ColumnKey(row.table_schema, row.table_name, row.column_name)
         context.db_info.view_column_dependencies.setdefault(view, set()).add(column)

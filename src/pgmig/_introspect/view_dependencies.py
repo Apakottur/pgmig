@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._models import ViewKey
 from pgmig._sql import qualified
 
@@ -30,7 +30,7 @@ async def load() -> None:
     (dependencies first) and DROP (dependents first) within the view phases. Dependencies
     involving a materialized view are rejected by `check`, not ordered.
     """
-    for row in await _run_query("view_dependencies.sql", _ViewDependencyRow):
+    for row in await run_introspection_query("view_dependencies.sql", _ViewDependencyRow):
         dependent = ViewKey(row.dependent_schema, row.dependent_view)
         referenced = ViewKey(row.referenced_schema, row.referenced_view)
         context.db_info.view_dependencies.setdefault(dependent, set()).add(referenced)
@@ -44,7 +44,7 @@ async def check() -> list[str]:
     reported rather than emitted in a possibly-wrong order.
     """
     findings: list[str] = []
-    for row in await _run_query("matview_dependencies.sql", _MatviewDependencyRow):
+    for row in await run_introspection_query("matview_dependencies.sql", _MatviewDependencyRow):
         dependent = qualified(row.dependent_schema, row.dependent_view)
         referenced = qualified(row.referenced_schema, row.referenced_view)
         dependent_label = _KIND_LABEL[row.dependent_kind]

@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, _run_query
+from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._models import Trigger
 
 
@@ -16,7 +16,7 @@ async def load() -> None:
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
     """
-    for trigger_row in await _run_query("triggers.sql", _TriggerRow):
+    for trigger_row in await run_introspection_query("triggers.sql", _TriggerRow):
         table = context.db_info.schema_by_name[trigger_row.schema_name].table_by_name[trigger_row.table_name]
         table.trigger_by_name[trigger_row.trigger_name] = Trigger(
             name=trigger_row.trigger_name,
