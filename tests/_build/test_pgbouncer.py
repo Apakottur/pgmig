@@ -2,7 +2,7 @@ import psycopg
 import tenacity
 
 from pgmig._build._engine import build_db_info
-from tests.api.generate_setup import GenerateSetup
+from tests._api.generate_setup import GenerateSetup
 
 
 @tenacity.retry(wait=tenacity.wait_fixed(0.5), stop=tenacity.stop_after_delay(15), reraise=True)

@@ -5,8 +5,8 @@ from typing import Annotated
 
 import typer
 
+from pgmig._api import generate as generate_migration
 from pgmig._errors import PgmigError
-from pgmig.api import generate as generate_migration
 
 app = typer.Typer(
     no_args_is_help=True,
