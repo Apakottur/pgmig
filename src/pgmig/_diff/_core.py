@@ -269,6 +269,31 @@ def retyped_column_readers() -> set[ViewKey]:
     return {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
 
 
+def recreated_matview_keys() -> set[ViewKey]:
+    """
+    Materialized views present on both sides that the migration drops and recreates: either the
+    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW) or the matview reads a
+    table column whose type changes (Postgres refuses ALTER COLUMN ... TYPE while the column is
+    read, and the type change leaves the definition text unchanged, so only the column edge
+    catches it).
+
+    The single source of truth for the recreate decision, consumed by both the matview diff
+    (which drops and recreates) and the matview-index differ (a recreated matview loses its
+    indexes, so every target index is created fresh). A matview present on only one side is a
+    plain create or drop, not a recreate, and is absent here.
+    """
+    column_readers = retyped_column_readers()
+    keys: set[ViewKey] = set()
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_views = src_schema.materialized_view_by_name if src_schema else {}
+        dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
+        for name in src_views.keys() & dst_views.keys():
+            key = ViewKey(schema_name, name)
+            if src_views[name].definition != dst_views[name].definition or key in column_readers:
+                keys.add(key)
+    return keys
+
+
 def diff_renamable(
     src: dict[str, _Renamable],
     dst: dict[str, _Renamable],
