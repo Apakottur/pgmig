@@ -1,5 +1,5 @@
 from pgmig._build._engine import build_db_info
-from tests.api.generate_setup import GenerateSetup
+from tests._api.generate_setup import GenerateSetup
 
 
 def test_view_dependencies_exclude_system_and_extension_referenced_views(gen_setup: GenerateSetup) -> None:
