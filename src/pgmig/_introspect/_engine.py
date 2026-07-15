@@ -2,7 +2,8 @@ from typing import Any
 
 import psycopg
 
-from pgmig._build import (
+from pgmig._errors import PgmigError
+from pgmig._introspect import (
     composite_types,
     constraints,
     domains,
@@ -22,8 +23,7 @@ from pgmig._build import (
     view_dependencies,
     views,
 )
-from pgmig._build._core import Guard, Loader
-from pgmig._errors import PgmigError
+from pgmig._introspect._core import Guard, Loader
 from pgmig._models import DbInfo
 
 # Preconditions run before any loader. Each guard reports every object it finds that
@@ -79,7 +79,7 @@ def _connect(dsn: str) -> psycopg.Connection[Any]:
     return conn
 
 
-def build_db_info(dsn: str) -> DbInfo:
+def introspect_db(dsn: str) -> DbInfo:
     """
     Build the full structure of the given database.
     """
@@ -97,9 +97,7 @@ def build_db_info(dsn: str) -> DbInfo:
                 "pgmig cannot process this database:\n" + "\n".join(f"  - {problem}" for problem in problems)
             )
 
-        db_info = DbInfo(
-            schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}
-        )
+        db_info = DbInfo(schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={})
         for load in _LOADERS:
             load(conn, db_info)
     return db_info
