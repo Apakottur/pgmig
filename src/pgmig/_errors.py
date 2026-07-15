@@ -1,4 +1,4 @@
-class PgmigError(Exception):
+class _PgmigError(Exception):
     """
     A known, user-facing pgmig error (e.g. an invalid connection string).
 
@@ -11,7 +11,7 @@ class PgmigError(Exception):
         super().__init__(message)
 
 
-class UnsupportedChangeError(PgmigError):
+class PgmigUnsupportedError(_PgmigError):
     """
-    A change pgmig deliberately does not support (a documented limitation, not a bug).
+    The database is in a state that pgmig does not yet support.
     """

@@ -2,7 +2,6 @@ from collections.abc import Iterator
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, retyped_column_readers
-from pgmig._errors import PgmigError
 from pgmig._models import DbInfo, View, ViewKey
 from pgmig._sql import qualified
 
@@ -47,7 +46,7 @@ def _topological_order(nodes: set[ViewKey], edges: _Edges) -> list[ViewKey]:
 
     if len(order) != len(nodes):
         cyclic = sorted(node for node in nodes if node not in set(order))
-        raise PgmigError(
+        raise AssertionError(
             f"view dependency cycle detected among: {', '.join(qualified(node.schema, node.name) for node in cyclic)}"
         )
     return order

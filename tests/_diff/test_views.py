@@ -1,6 +1,5 @@
 import pytest
 
-from pgmig import PgmigError
 from pgmig._diff.views import _dependents_closure, _topological_order
 from pgmig._models import ViewKey
 
@@ -33,7 +32,7 @@ def test_topological_order_diamond() -> None:
 
 
 def test_topological_order_cycle_raises() -> None:
-    with pytest.raises(PgmigError, match="cycle"):
+    with pytest.raises(AssertionError, match="cycle"):
         _topological_order({A, B}, {A: {B}, B: {A}})
 
 

@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_object_pairs, ctx_iter_schema_pairs
-from pgmig._errors import UnsupportedChangeError
+from pgmig._errors import PgmigUnsupportedError
 from pgmig._models import Function, FunctionKey, RelationKey
 from pgmig._sql import comment_on, qualified
 
@@ -19,10 +19,10 @@ def _recreate_drop_sql(schema_name: str, function: Function) -> str:
     return type, so the routine must be dropped and recreated. A routine that other objects
     depend on cannot be dropped while those dependents still reference it (they remain in the
     target), so refuse -- recreating a depended-upon routine would need dropping and
-    restoring the dependents too, which is not implemented.
+    restoring the dependents too, which is not supported.
     """
     if function.has_dependents:
-        raise UnsupportedChangeError(
+        raise PgmigUnsupportedError(
             f"Recreating {qualified(schema_name, function.name)}({function.identity_arguments}) "
             f"(return-type change) is not supported: another object depends on it."
         )
@@ -39,7 +39,7 @@ def _check_not_circular(schema_name: str, function: Function, dropped_relations:
     circular = sorted(function.depends_on_relations & dropped_relations)
     if circular:
         relation = circular[0]
-        raise UnsupportedChangeError(
+        raise PgmigUnsupportedError(
             f"Dropping {qualified(schema_name, function.name)}({function.identity_arguments}) is not supported: "
             f"it depends on {qualified(relation.schema, relation.name)}, which is also dropped this run "
             f"(a circular dependency that needs a manual CASCADE)."

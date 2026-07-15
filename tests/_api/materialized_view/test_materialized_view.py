@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import PgmigError, generate
 from tests._api.generate_setup import GenerateSetup
 
 
@@ -109,8 +106,11 @@ def test_materialized_view_on_materialized_view_raises(gen_setup: GenerateSetup)
     A materialized view that reads from another materialized view is not supported yet
     (dependency ordering within the shared view phases).
     """
-    gen_setup.dst.execute("CREATE MATERIALIZED VIEW base AS SELECT 1 AS x")
-    gen_setup.dst.execute("CREATE MATERIALIZED VIEW derived AS SELECT x FROM base")
-
-    with pytest.raises(PgmigError, match="materialized view"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_unsupported(
+        src=[],
+        dst=[
+            "CREATE MATERIALIZED VIEW base AS SELECT 1 AS x",
+            "CREATE MATERIALIZED VIEW derived AS SELECT x FROM base",
+        ],
+        match="materialized view",
+    )

@@ -6,7 +6,7 @@ from typing import Annotated
 import typer
 
 from pgmig._api import generate as generate_migration
-from pgmig._errors import PgmigError
+from pgmig._errors import _PgmigError
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -107,8 +107,8 @@ def generate(
             ignore_extension_version=ignore_extension_version or [],
             ignore_owner=ignore_owner,
         )
-    except PgmigError as error:
-        # Known error - print message without traceback.
+    except _PgmigError as error:
+        # Expected error - print message without traceback.
         typer.echo(error.message, err=True)
         raise typer.Exit(code=1) from error
     except Exception as error:

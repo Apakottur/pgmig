@@ -49,7 +49,7 @@ def test_generate_empty_diff_truncates_stale_output(gen_setup: GenerateSetup, tm
 
 
 def test_generate_connection_error_is_clean() -> None:
-    # A bad connection string is a known (PgmigError) failure: clean message, no traceback.
+    # A bad connection string is an expected failure: clean message, no traceback.
     result = _runner.invoke(app, ["generate", "-s", "not-a-dsn", "-t", "not-a-dsn"])
 
     assert result.exit_code == 1
