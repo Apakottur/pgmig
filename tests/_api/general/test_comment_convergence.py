@@ -1,13 +1,13 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def test_index_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
+async def test_index_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
     """
     An index redefined on both sides but carrying the same comment must have its comment
     re-emitted: the drop-and-recreate resets it to NULL, so skipping COMMENT ON would
     leave a residual diff (convergence violation).
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE t (a integer, b integer)",
             "CREATE INDEX my_idx ON t (a)",
@@ -26,12 +26,12 @@ def test_index_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) 
     )
 
 
-def test_constraint_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
+async def test_constraint_redefinition_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
     """
     A check constraint redefined on both sides with the same comment must re-emit it;
     the drop-and-recreate resets it.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE t (a integer)"],
         src=[
             "ALTER TABLE t ADD CONSTRAINT c_pos CHECK (a > 0)",
@@ -49,13 +49,13 @@ def test_constraint_redefinition_reemits_identical_comment(gen_setup: GenerateSe
     )
 
 
-def test_function_return_type_change_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
+async def test_function_return_type_change_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
     """
     A routine whose return type changes is dropped and recreated (CREATE OR REPLACE
     cannot change the return type), which resets its comment; an identical comment on
     both sides must still be re-emitted.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION g() RETURNS integer LANGUAGE sql AS 'SELECT 1'",
             "COMMENT ON FUNCTION g() IS 'hi'",

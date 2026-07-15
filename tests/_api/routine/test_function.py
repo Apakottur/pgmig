@@ -1,23 +1,23 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def test_aggregate_raises_not_supported(gen_setup: GenerateSetup) -> None:
+async def test_aggregate_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     A user-defined aggregate (pg_proc prokind 'a') is not modelled yet and must raise
     rather than be silently dropped by the function query's prokind filter.
     """
-    gen_setup.assert_unsupported(
+    await gen_setup.assert_unsupported(
         src=[],
         dst=["CREATE AGGREGATE mysum (integer) (sfunc = int4pl, stype = integer, initcond = '0')"],
         match=r"aggregate .* is not supported",
     )
 
 
-def test_function_create(gen_setup: GenerateSetup) -> None:
+async def test_function_create(gen_setup: GenerateSetup) -> None:
     """
     Function present in target but missing in source -> CREATE (from pg_get_functiondef).
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
         diff=[
@@ -29,22 +29,22 @@ def test_function_create(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_function_drop(gen_setup: GenerateSetup) -> None:
+async def test_function_drop(gen_setup: GenerateSetup) -> None:
     """
     Function present in source but missing in target -> DROP ROUTINE with signature.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
         dst=[],
         diff=['DROP FUNCTION "public"."add"(a integer, b integer)'],
     )
 
 
-def test_function_body_change(gen_setup: GenerateSetup) -> None:
+async def test_function_body_change(gen_setup: GenerateSetup) -> None:
     """
     Same signature and return type, different body -> single CREATE OR REPLACE.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE FUNCTION calc(a integer) RETURNS integer LANGUAGE sql AS $$SELECT a + 1$$"],
         dst=["CREATE FUNCTION calc(a integer) RETURNS integer LANGUAGE sql AS $$SELECT a + 2$$"],
         diff=[
@@ -56,11 +56,11 @@ def test_function_body_change(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_function_return_type_change(gen_setup: GenerateSetup) -> None:
+async def test_function_return_type_change(gen_setup: GenerateSetup) -> None:
     """
     Same signature, different return type -> DROP ROUTINE then CREATE (OR REPLACE cannot change it).
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE FUNCTION calc(a integer) RETURNS integer LANGUAGE sql AS $$SELECT a$$"],
         dst=["CREATE FUNCTION calc(a integer) RETURNS bigint LANGUAGE sql AS $$SELECT a::bigint$$"],
         diff=[
@@ -73,11 +73,11 @@ def test_function_return_type_change(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_function_overload_added(gen_setup: GenerateSetup) -> None:
+async def test_function_overload_added(gen_setup: GenerateSetup) -> None:
     """
     Adding an overload (same name, different args) leaves the existing one untouched.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE FUNCTION f(a integer) RETURNS integer LANGUAGE sql AS $$SELECT a$$"],
         dst=[
             "CREATE FUNCTION f(a integer) RETURNS integer LANGUAGE sql AS $$SELECT a$$",
@@ -89,44 +89,44 @@ def test_function_overload_added(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_procedure_create(gen_setup: GenerateSetup) -> None:
+async def test_procedure_create(gen_setup: GenerateSetup) -> None:
     """
     A procedure is created from its definition.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=["CREATE PROCEDURE noop() LANGUAGE sql AS $$SELECT 1$$"],
         diff=["CREATE OR REPLACE PROCEDURE public.noop()\n LANGUAGE sql\nAS $procedure$SELECT 1$procedure$"],
     )
 
 
-def test_procedure_drop(gen_setup: GenerateSetup) -> None:
+async def test_procedure_drop(gen_setup: GenerateSetup) -> None:
     """
     A procedure present only in source is dropped via DROP PROCEDURE.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE PROCEDURE noop() LANGUAGE sql AS $$SELECT 1$$"],
         dst=[],
         diff=['DROP PROCEDURE "public"."noop"()'],
     )
 
 
-def test_function_unchanged(gen_setup: GenerateSetup) -> None:
+async def test_function_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical function on both sides -> no migration SQL.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
         dst=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
         diff=[],
     )
 
 
-def test_function_comment_added(gen_setup: GenerateSetup) -> None:
+async def test_function_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a function present on both sides -> COMMENT ON FUNCTION.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
         src=[],
         dst=["COMMENT ON FUNCTION add(integer, integer) IS 'adds'"],

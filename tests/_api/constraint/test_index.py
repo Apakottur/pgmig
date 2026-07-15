@@ -1,11 +1,11 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def test_index_create(gen_setup: GenerateSetup) -> None:
+async def test_index_create(gen_setup: GenerateSetup) -> None:
     """
     Index present in target but missing in source -> CREATE INDEX.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (name text)"],
         src=[],
         dst=["CREATE INDEX person_name_idx ON person (name)"],
@@ -13,11 +13,11 @@ def test_index_create(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_drop(gen_setup: GenerateSetup) -> None:
+async def test_index_drop(gen_setup: GenerateSetup) -> None:
     """
     Index present in source but missing in target -> DROP INDEX.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_idx ON person (name)",
@@ -27,11 +27,11 @@ def test_index_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_rename(gen_setup: GenerateSetup) -> None:
+async def test_index_rename(gen_setup: GenerateSetup) -> None:
     """
     Same definition on both sides, only the name differs -> ALTER INDEX RENAME.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_old ON person (name)",
@@ -44,7 +44,7 @@ def test_index_rename(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_create_reusing_renamed_away_name_emits_comment(gen_setup: GenerateSetup) -> None:
+async def test_index_create_reusing_renamed_away_name_emits_comment(gen_setup: GenerateSetup) -> None:
     """
     Source has index `shared_idx`; target has `shared_idx` (redefined) plus `renamed_idx`
     whose definition matches source `shared_idx`. The differ renames shared_idx -> renamed_idx
@@ -54,7 +54,7 @@ def test_index_create_reusing_renamed_away_name_emits_comment(gen_setup: Generat
     suppress it, leaving a residual diff. A create reusing a vacated name is treated as
     recreated for comment purposes.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE t (a int, b int)"],
         src=[
             "CREATE INDEX shared_idx ON t (a)",
@@ -74,13 +74,13 @@ def test_index_create_reusing_renamed_away_name_emits_comment(gen_setup: Generat
     )
 
 
-def test_index_rename_clears_comment(gen_setup: GenerateSetup) -> None:
+async def test_index_rename_clears_comment(gen_setup: GenerateSetup) -> None:
     """
     An index renamed (same definition) whose source carries a comment but whose target does
     not: RENAME preserves the comment, so COMMENT ... IS NULL must also be emitted, else the
     renamed index keeps the stale comment and the migration does not converge.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (name text)"],
         src=[
             "CREATE INDEX person_name_old ON person (name)",
@@ -94,11 +94,11 @@ def test_index_rename_clears_comment(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_unchanged(gen_setup: GenerateSetup) -> None:
+async def test_index_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical name and definition on both sides -> no migration SQL.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_idx ON person (name)",
@@ -111,11 +111,11 @@ def test_index_unchanged(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_definition_changed(gen_setup: GenerateSetup) -> None:
+async def test_index_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP INDEX then CREATE INDEX.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text, age integer)",
             "CREATE INDEX person_idx ON person (name)",
@@ -131,11 +131,11 @@ def test_index_definition_changed(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_unique(gen_setup: GenerateSetup) -> None:
+async def test_index_unique(gen_setup: GenerateSetup) -> None:
     """
     Unique index round-trips as CREATE UNIQUE INDEX.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (name text)"],
         src=[],
         dst=["CREATE UNIQUE INDEX person_name_idx ON person (name)"],
@@ -143,11 +143,11 @@ def test_index_unique(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_partial(gen_setup: GenerateSetup) -> None:
+async def test_index_partial(gen_setup: GenerateSetup) -> None:
     """
     Partial index (WHERE predicate) is created with its predicate.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (name text)"],
         src=[],
         dst=["CREATE INDEX person_name_idx ON person (name) WHERE name IS NOT NULL"],
@@ -155,11 +155,11 @@ def test_index_partial(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_on_created_table(gen_setup: GenerateSetup) -> None:
+async def test_index_on_created_table(gen_setup: GenerateSetup) -> None:
     """
     Table created on target with an index -> CREATE TABLE then CREATE INDEX.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[],
         dst=[
             "CREATE TABLE person (name text)",
@@ -172,11 +172,11 @@ def test_index_on_created_table(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_dropped_with_table(gen_setup: GenerateSetup) -> None:
+async def test_index_dropped_with_table(gen_setup: GenerateSetup) -> None:
     """
     Table (with an index) dropped -> DROP TABLE only; the index rides along.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_idx ON person (name)",
@@ -186,14 +186,14 @@ def test_index_dropped_with_table(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) -> None:
+async def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) -> None:
     """
     The indexes backing a PRIMARY KEY / UNIQUE constraint are handled via the
     constraint (ADD CONSTRAINT), never emitted as standalone CREATE INDEX.
     """
     # `id` is NOT NULL on both sides so only the constraint differs, isolating the
     # index behavior from the NOT NULL that a PRIMARY KEY would otherwise imply.
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (id integer NOT NULL, email text)"],
         src=[],
         dst=["ALTER TABLE person ADD PRIMARY KEY (id)", "ALTER TABLE person ADD UNIQUE (email)"],
@@ -204,11 +204,11 @@ def test_index_constraint_backed_not_created_as_index(gen_setup: GenerateSetup) 
     )
 
 
-def test_index_comment_added(gen_setup: GenerateSetup) -> None:
+async def test_index_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to an index present on both sides -> COMMENT ON INDEX.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_idx ON person (name)",
@@ -219,11 +219,11 @@ def test_index_comment_added(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_comment_removed(gen_setup: GenerateSetup) -> None:
+async def test_index_comment_removed(gen_setup: GenerateSetup) -> None:
     """
     Comment removed from an index -> COMMENT ON INDEX ... IS NULL.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_idx ON person (name)",
@@ -234,11 +234,11 @@ def test_index_comment_removed(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_create_concurrently(gen_setup: GenerateSetup) -> None:
+async def test_index_create_concurrently(gen_setup: GenerateSetup) -> None:
     """
     With index_concurrently, a created index carries CONCURRENTLY.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (name text)"],
         src=[],
         dst=["CREATE INDEX person_name_idx ON person (name)"],
@@ -247,11 +247,11 @@ def test_index_create_concurrently(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_create_unique_concurrently(gen_setup: GenerateSetup) -> None:
+async def test_index_create_unique_concurrently(gen_setup: GenerateSetup) -> None:
     """
     With index_concurrently, a created unique index carries CONCURRENTLY after UNIQUE.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE person (name text)"],
         src=[],
         dst=["CREATE UNIQUE INDEX person_name_idx ON person (name)"],
@@ -260,11 +260,11 @@ def test_index_create_unique_concurrently(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_drop_concurrently(gen_setup: GenerateSetup) -> None:
+async def test_index_drop_concurrently(gen_setup: GenerateSetup) -> None:
     """
     With index_concurrently, a dropped index carries CONCURRENTLY.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_idx ON person (name)",
@@ -275,11 +275,11 @@ def test_index_drop_concurrently(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_index_rename_not_concurrent(gen_setup: GenerateSetup) -> None:
+async def test_index_rename_not_concurrent(gen_setup: GenerateSetup) -> None:
     """
     A rename is ALTER INDEX and cannot be CONCURRENTLY; the flag leaves it unchanged.
     """
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             "CREATE INDEX person_name_old ON person (name)",

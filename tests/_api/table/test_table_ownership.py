@@ -4,7 +4,7 @@ from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import get_unique_postgres_name
 
 
-async def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
+def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
     """
     Create a cluster-wide role for the test and return its name.
 
@@ -16,8 +16,8 @@ async def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
     this cluster, don't race on the same role.
     """
     name = get_unique_postgres_name(base, gen_setup.unique_key)
-    await gen_setup.src.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(name)))
-    await gen_setup.src.execute(sql.SQL("CREATE ROLE {}").format(sql.Identifier(name)))
+    gen_setup.src.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(name)))
+    gen_setup.src.execute(sql.SQL("CREATE ROLE {}").format(sql.Identifier(name)))
     return name
 
 
@@ -28,7 +28,7 @@ async def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = _ensure_role(gen_setup, "pgmig_owner_b")
 
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             f"ALTER TABLE person OWNER TO {role_a}",
@@ -41,14 +41,14 @@ async def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
     """
     Owners differ, but --ignore-owner suppresses the ALTER TABLE ... OWNER TO entirely.
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = _ensure_role(gen_setup, "pgmig_owner_b")
 
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             f"ALTER TABLE person OWNER TO {role_a}",
@@ -62,12 +62,12 @@ def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same table and same owner on both sides -> no migration SQL.
     """
     role_a = _ensure_role(gen_setup, "pgmig_owner_a")
-   await gen_setup.assert_diff(
+    await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",
             f"ALTER TABLE person OWNER TO {role_a}",

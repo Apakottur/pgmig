@@ -1,7 +1,7 @@
 import pytest
 
-from pgmig import PgmigUnsupportedError, generate
-from pgmig._db import DbConnection
+from pgmig import PgmigUnsupportedError, agenerate
+from tests.fixtures.db_utils import DbConnection
 
 
 class GenerateSetup:
@@ -67,7 +67,7 @@ class GenerateSetup:
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
 
         # Generate the migration SQL.
-        result = generate(
+        result = await agenerate(
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
@@ -81,7 +81,7 @@ class GenerateSetup:
         # source should match target, so a second generate must produce nothing.
         if apply and result:
             await self.src.execute(result)
-            residual = generate(
+            residual = await agenerate(
                 source=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
