@@ -1,9 +1,6 @@
-from typing import Any
-
-import psycopg
-
-from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import DbInfo, Schema
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import Schema
 
 
 class _SchemaRow(_QueryRow):
@@ -11,12 +8,12 @@ class _SchemaRow(_QueryRow):
     schema_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+def load() -> None:
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in _run_query(conn, "schemas.sql", _SchemaRow):
-        db_info.schema_by_name[schema_row.schema_name] = Schema(
+    for schema_row in run_introspection_query("schemas.sql", _SchemaRow):
+        context.db_info.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,
             table_by_name={},

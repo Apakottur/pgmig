@@ -9,13 +9,13 @@ from pgmig._diff._core import (
     retyped_column_readers,
     topological_sort,
 )
-from pgmig._models import DbInfo, View, ViewKey
+from pgmig._models import DbIntrospectionResult, View, ViewKey
 from pgmig._sql import qualified
 
 _Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
 
 
-def _collect_views(db_info: DbInfo) -> dict[ViewKey, View]:
+def _collect_views(db_info: DbIntrospectionResult) -> dict[ViewKey, View]:
     """
     Flatten every schema's views into one (schema, name) -> View map. View-on-view
     ordering is global because a dependency can cross schemas.

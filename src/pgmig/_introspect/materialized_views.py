@@ -1,18 +1,12 @@
-from typing import Any
-
-import psycopg
-
 from pgmig._introspect.views import _load_views
-from pgmig._models import DbInfo, MaterializedView
+from pgmig._models import MaterializedView
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+def load() -> None:
     """
     Materialized views (user matviews only; extension-owned ones are excluded).
     """
     _load_views(
-        conn,
-        db_info,
         "materialized_views.sql",
         lambda schema: schema.materialized_view_by_name,
         lambda name, definition, comment: MaterializedView(
