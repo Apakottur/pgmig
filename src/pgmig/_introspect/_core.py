@@ -3,12 +3,25 @@ from typing import Any, Protocol, TypeVar, cast
 
 import psycopg
 from psycopg.rows import class_row
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing_extensions import LiteralString
 
 from pgmig._models import DbInfo
 
-_RowT = TypeVar("_RowT", bound=BaseModel)
+
+class _QueryRow(BaseModel):
+    """
+    Base for every model parsed from a bundled SQL query -- a top-level row, or a nested
+    jsonb object a query builds.
+    """
+
+    model_config = ConfigDict(
+        # Ensure queries dont fetch unused columns.
+        extra="forbid",
+    )
+
+
+_RowT = TypeVar("_RowT", bound=_QueryRow)
 
 
 def _run_query(conn: psycopg.Connection[Any], file_name: str, model: type[_RowT]) -> list[_RowT]:

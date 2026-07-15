@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Domain
 
 
-class _DomainRow(BaseModel):
+class _DomainRow(_QueryRow):
     schema_name: str
     domain_name: str
     data_type: str

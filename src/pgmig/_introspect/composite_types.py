@@ -1,18 +1,17 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import CompositeField, CompositeType, DbInfo
 
 
-class _CompositeFieldRow(BaseModel):
+class _CompositeFieldRow(_QueryRow):
     name: str
     type: str
 
 
-class _CompositeTypeRow(BaseModel):
+class _CompositeTypeRow(_QueryRow):
     schema_name: str
     type_name: str
     type_comment: str | None

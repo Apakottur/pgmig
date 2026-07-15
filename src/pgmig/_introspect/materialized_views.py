@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, MaterializedView
 
 
-class _MaterializedViewRow(BaseModel):
+class _MaterializedViewRow(_QueryRow):
     schema_name: str
     view_name: str
     view_definition: str

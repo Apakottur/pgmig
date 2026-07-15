@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Function, FunctionKey, RelationKey
 
 
-class _FunctionDep(BaseModel):
+class _FunctionDep(_QueryRow):
     """A routine another routine hard-depends on (jsonb object from functions.sql)."""
 
     schema_name: str
@@ -15,14 +14,14 @@ class _FunctionDep(BaseModel):
     args: str  # pg_get_function_identity_arguments
 
 
-class _RelationDep(BaseModel):
+class _RelationDep(_QueryRow):
     """A table/view/matview a routine hard-depends on (jsonb object from functions.sql)."""
 
     schema_name: str
     name: str
 
 
-class _FunctionRow(BaseModel):
+class _FunctionRow(_QueryRow):
     schema_name: str
     func_name: str
     func_args: str

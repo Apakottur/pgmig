@@ -1,9 +1,8 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, ViewKey
 from pgmig._sql import qualified
 
@@ -11,14 +10,14 @@ from pgmig._sql import qualified
 _KIND_LABEL = {"v": "view", "m": "materialized view"}
 
 
-class _ViewDependencyRow(BaseModel):
+class _ViewDependencyRow(_QueryRow):
     dependent_schema: str
     dependent_view: str
     referenced_schema: str
     referenced_view: str
 
 
-class _MatviewDependencyRow(BaseModel):
+class _MatviewDependencyRow(_QueryRow):
     dependent_schema: str
     dependent_view: str
     dependent_kind: str
