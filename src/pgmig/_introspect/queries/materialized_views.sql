@@ -1,5 +1,5 @@
 -- Materialized views (user matviews only; extension-owned ones are excluded).
--- Executable body matches views.sql but for the relkind; test_view_query_lockstep enforces it.
+-- Mirror of views.sql; the two differ only in the relkind ('m' here, 'v' there). Keep in sync.
 SELECT
     n.nspname AS schema_name,
     c.relname AS view_name,
