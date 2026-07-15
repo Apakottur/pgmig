@@ -27,12 +27,14 @@ async def agenerate(
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
     """
     # Introspect both databases concurrently.
-    source_db_info, target_db_info = await asyncio.gather(introspect_db(source), introspect_db(target))
+    source_db_introspect_result, target_db_introspect_result = await asyncio.gather(
+        introspect_db(source), introspect_db(target)
+    )
 
     # Generate migration SQL.
     return get_diff(
-        source_db_info=source_db_info,
-        target_db_info=target_db_info,
+        source_db_introspect_result=source_db_introspect_result,
+        target_db_introspect_result=target_db_introspect_result,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
         ignore_owner=ignore_owner,

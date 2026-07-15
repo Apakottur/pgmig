@@ -49,8 +49,8 @@ _GENERATORS: tuple[Generator, ...] = (
 
 def get_diff(
     *,
-    source_db_info: DbIntrospectionResult,
-    target_db_info: DbIntrospectionResult,
+    source: DbIntrospectionResult,
+    target: DbIntrospectionResult,
     index_concurrently: bool,
     ignore_extension_version: Sequence[str],
     ignore_owner: bool,
@@ -63,8 +63,8 @@ def get_diff(
 
     # Run within the diff context.
     with context.context_scope(
-        source=source_db_info,
-        target=target_db_info,
+        source=source,
+        target=target,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
         ignore_owner=ignore_owner,

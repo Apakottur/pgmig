@@ -21,7 +21,7 @@ class _QueryRow(BaseModel):
 class Loader(Protocol):
     """
     The shared shape of every object-kind loader: read from the connection and populate
-    the DbInfo being assembled. Loaders run in a dependency-significant order (schemas
+    the DB introspection result being assembled. Loaders run in a dependency-significant order (schemas
     and tables before the objects that attach to them).
     """
 
