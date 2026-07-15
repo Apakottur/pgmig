@@ -16,11 +16,11 @@ class _SequenceRow(_QueryRow):
     seq_comment: str | None
 
 
-def load() -> None:
+async def load() -> None:
     """
     Sequences (standalone only; sequences owned by a serial/identity column are excluded).
     """
-    for seq_row in run_introspection_query("sequences.sql", _SequenceRow):
+    for seq_row in await run_introspection_query("sequences.sql", _SequenceRow):
         context.db_introspection_result.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = (
             Sequence(
                 name=seq_row.seq_name,

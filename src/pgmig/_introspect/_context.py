@@ -16,7 +16,7 @@ class _ContextData:
     """
 
     # DB connection.
-    conn: psycopg.Connection[Any]
+    conn: psycopg.AsyncConnection[Any]
 
     # Result being assembled by the loaders.
     db_introspection_result: DbIntrospectionResult
@@ -35,7 +35,7 @@ class _Context:
     def context_scope(
         self,
         *,
-        conn: psycopg.Connection[Any],
+        conn: psycopg.AsyncConnection[Any],
         db_introspection_result: DbIntrospectionResult,
     ) -> Iterator[None]:
         token = _context.set(
@@ -50,7 +50,7 @@ class _Context:
             _context.reset(token)
 
     @property
-    def conn(self) -> psycopg.Connection[Any]:
+    def conn(self) -> psycopg.AsyncConnection[Any]:
         return _context.get().conn
 
     @property

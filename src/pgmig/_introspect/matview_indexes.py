@@ -12,12 +12,12 @@ class _MatviewIndexRow(_QueryRow):
     index_comment: str | None
 
 
-def load() -> None:
+async def load() -> None:
     """
     Indexes on materialized views (standalone; matviews carry no constraint-backed indexes).
     Must run after materialized_views.load so the owning matview exists in the model.
     """
-    for row in run_introspection_query("matview_indexes.sql", _MatviewIndexRow):
+    for row in await run_introspection_query("matview_indexes.sql", _MatviewIndexRow):
         matview = context.db_introspection_result.schema_by_name[row.schema_name].materialized_view_by_name[
             row.view_name
         ]

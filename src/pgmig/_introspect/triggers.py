@@ -12,11 +12,11 @@ class _TriggerRow(_QueryRow):
     trigger_comment: str | None
 
 
-def load() -> None:
+async def load() -> None:
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
     """
-    for trigger_row in run_introspection_query("triggers.sql", _TriggerRow):
+    for trigger_row in await run_introspection_query("triggers.sql", _TriggerRow):
         table = context.db_introspection_result.schema_by_name[trigger_row.schema_name].table_by_name[
             trigger_row.table_name
         ]

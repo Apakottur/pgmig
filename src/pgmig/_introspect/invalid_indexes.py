@@ -8,7 +8,7 @@ class _InvalidIndexRow(_QueryRow):
     index_name: str
 
 
-def check() -> list[str]:
+async def check() -> list[str]:
     """
     Guard: report invalid indexes (pg_index.indisvalid = FALSE). An invalid index is
     indistinguishable from a valid one in its deparsed definition, so a diff over it is
@@ -17,7 +17,7 @@ def check() -> list[str]:
     only suggests the most common one (a failed CREATE INDEX CONCURRENTLY).
     """
     findings: list[str] = []
-    for row in run_introspection_query("invalid_indexes.sql", _InvalidIndexRow):
+    for row in await run_introspection_query("invalid_indexes.sql", _InvalidIndexRow):
         index = qualified(row.schema_name, row.index_name)
         table = qualified(row.schema_name, row.table_name)
         findings.append(

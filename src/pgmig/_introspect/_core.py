@@ -27,7 +27,7 @@ class Loader(Protocol):
     order (schemas and tables before the objects that attach to them).
     """
 
-    def __call__(self) -> None: ...
+    async def __call__(self) -> None: ...
 
 
 class Guard(Protocol):
@@ -38,13 +38,13 @@ class Guard(Protocol):
     collected and reported together so the user sees all problems at once.
     """
 
-    def __call__(self) -> list[str]: ...
+    async def __call__(self) -> list[str]: ...
 
 
 _RowT = TypeVar("_RowT", bound=_QueryRow)
 
 
-def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
+async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
     """
     Load a bundled SQL query from the queries directory, run it on the current introspection
     connection, and parse each row into the given Pydantic model (by SELECT column alias).
@@ -53,5 +53,6 @@ def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
     """
     file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
     query = cast("LiteralString", file_path.read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
-    with context.conn.cursor(row_factory=class_row(model)) as cur:
-        return cur.execute(query).fetchall()
+    async with context.conn.cursor(row_factory=class_row(model)) as cur:
+        await cur.execute(query)
+        return await cur.fetchall()
