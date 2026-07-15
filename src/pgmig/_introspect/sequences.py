@@ -1,9 +1,6 @@
-from typing import Any
-
-import psycopg
-
-from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import DbInfo, Sequence
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import Sequence
 
 
 class _SequenceRow(_QueryRow):
@@ -19,19 +16,21 @@ class _SequenceRow(_QueryRow):
     seq_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+def load() -> None:
     """
     Sequences (standalone only; sequences owned by a serial/identity column are excluded).
     """
-    for seq_row in _run_query(conn, "sequences.sql", _SequenceRow):
-        db_info.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = Sequence(
-            name=seq_row.seq_name,
-            data_type=seq_row.seq_type,
-            start=seq_row.seq_start,
-            increment=seq_row.seq_inc,
-            min_value=seq_row.seq_min,
-            max_value=seq_row.seq_max,
-            cache=seq_row.seq_cache,
-            cycle=seq_row.seq_cycle,
-            comment=seq_row.seq_comment,
+    for seq_row in run_introspection_query("sequences.sql", _SequenceRow):
+        context.db_introspection_result.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = (
+            Sequence(
+                name=seq_row.seq_name,
+                data_type=seq_row.seq_type,
+                start=seq_row.seq_start,
+                increment=seq_row.seq_inc,
+                min_value=seq_row.seq_min,
+                max_value=seq_row.seq_max,
+                cache=seq_row.seq_cache,
+                cycle=seq_row.seq_cycle,
+                comment=seq_row.seq_comment,
+            )
         )

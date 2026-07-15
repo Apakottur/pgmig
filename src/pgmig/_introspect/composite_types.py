@@ -1,9 +1,6 @@
-from typing import Any
-
-import psycopg
-
-from pgmig._introspect._core import _QueryRow, _run_query
-from pgmig._models import CompositeField, CompositeType, DbInfo
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import CompositeField, CompositeType
 
 
 class _CompositeFieldRow(_QueryRow):
@@ -18,12 +15,12 @@ class _CompositeTypeRow(_QueryRow):
     fields: list[_CompositeFieldRow]
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+def load() -> None:
     """
     Standalone composite types (user types only; extension-owned ones are excluded).
     """
-    for row in _run_query(conn, "composite_types.sql", _CompositeTypeRow):
+    for row in run_introspection_query("composite_types.sql", _CompositeTypeRow):
         fields = [CompositeField(name=field.name, type=field.type) for field in row.fields]
-        db_info.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = CompositeType(
-            name=row.type_name, fields=fields, comment=row.type_comment
+        context.db_introspection_result.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = (
+            CompositeType(name=row.type_name, fields=fields, comment=row.type_comment)
         )
