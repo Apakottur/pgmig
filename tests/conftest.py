@@ -6,7 +6,7 @@ import pytest
 import shpyx
 
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DST_DB, SRC_DB, DbConnection
+from tests.fixtures.db_utils import DbConnection, get_db_key_from_git_branch, get_unique_db_name
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -30,6 +30,28 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "Falls back to the PGMIG_TEST_PG_VERSION env var, then 18."
         ),
     )
+
+
+@pytest.fixture(scope="session")
+def db_key() -> str:
+    """
+    Branch-derived key used to namespace the per-branch test databases (and other
+    cluster-wide objects). Resolved once per session so git runs at most once, and only
+    when a database-backed test actually needs it.
+    """
+    return get_db_key_from_git_branch()
+
+
+@pytest.fixture(scope="session")
+def src_db_name(db_key: str) -> str:
+    """Name of the per-branch source database."""
+    return get_unique_db_name("pgmig_src", db_key)
+
+
+@pytest.fixture(scope="session")
+def dst_db_name(db_key: str) -> str:
+    """Name of the per-branch target database."""
+    return get_unique_db_name("pgmig_dst", db_key)
 
 
 @pytest.fixture(scope="session")
@@ -62,17 +84,22 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
 
 
 @pytest.fixture(scope="function")
-def gen_setup(_admin_conn: DbConnection) -> Iterator[GenerateSetup]:
+def gen_setup(
+    _admin_conn: DbConnection,
+    src_db_name: str,
+    dst_db_name: str,
+    db_key: str,
+) -> Iterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
     # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(SRC_DB, admin_conn=_admin_conn)
-    dst_conn = DbConnection(DST_DB, admin_conn=_admin_conn)
+    src_conn = DbConnection(src_db_name, admin_conn=_admin_conn)
+    dst_conn = DbConnection(dst_db_name, admin_conn=_admin_conn)
 
     # Provide the utility class for the test.
     try:
-        yield GenerateSetup(src_conn, dst_conn)
+        yield GenerateSetup(src_conn, dst_conn, unique_key=db_key)
     finally:
         src_conn.close()
         dst_conn.close()

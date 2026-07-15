@@ -13,7 +13,7 @@ _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 _ADMIN_DB_NAME = "postgres"
 
 
-def _get_unique_db_key_from_git_branch() -> str:
+def get_db_key_from_git_branch() -> str:
     """
     Get a unique identifier for DB naming, based on the current git branch.
     """
@@ -52,11 +52,6 @@ def get_unique_db_name(base: str, key: str) -> str:
     return f"{base}_{slug_trunc}_{digest}"
 
 
-_KEY = _get_unique_db_key_from_git_branch()
-SRC_DB = get_unique_db_name("pgmig_src", _KEY)
-DST_DB = get_unique_db_name("pgmig_dst", _KEY)
-
-
 class DbConnection:
     def __init__(self, db_name: str, admin_conn: "DbConnection | None" = None) -> None:
         # Database name and DSN.
@@ -73,6 +68,13 @@ class DbConnection:
 
         # Open a single connection, reused for every query on this database.
         self._conn = self._connect()
+
+    @property
+    def db_name(self) -> str:
+        """
+        Name of the database this connection targets.
+        """
+        return self._db_name
 
     def _recreate_database(self) -> None:
         """

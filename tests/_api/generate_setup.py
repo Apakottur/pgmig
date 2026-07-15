@@ -9,9 +9,11 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, src_conn: DbConnection, dst_conn: DbConnection) -> None:
+    def __init__(self, src_conn: DbConnection, dst_conn: DbConnection, unique_key: str) -> None:
         self.src = src_conn
         self.dst = dst_conn
+        # Branch-derived key used to namespace cluster-wide objects (e.g. roles) per branch.
+        self.unique_key = unique_key
 
     @property
     def pg_major(self) -> int:
