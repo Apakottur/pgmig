@@ -1,18 +1,8 @@
 import asyncio
 
-import psycopg
-import tenacity
-
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
-
-
-@tenacity.retry(wait=tenacity.wait_fixed(0.5), stop=tenacity.stop_after_delay(15), reraise=True)
-def _wait_for_pgbouncer(dsn: str) -> None:
-    """
-    Wait until pgbouncer is accepting connections (it starts alongside Postgres).
-    """
-    psycopg.connect(dsn).close()
+from tests.fixtures.db_utils import wait_until_accepting_connections
 
 
 def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
@@ -23,7 +13,7 @@ def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
     gen_setup.src.execute("CREATE TABLE widget (id integer)")
 
     # Wait for pgbouncer to start accepting connections.
-    _wait_for_pgbouncer(gen_setup.src.pgbouncer_dsn)
+    wait_until_accepting_connections(gen_setup.src.pgbouncer_dsn)
 
     # Introspect the database through pgbouncer.
     info = asyncio.run(introspect_db(gen_setup.src.pgbouncer_dsn))

@@ -1,8 +1,5 @@
-from typing import Any
-
-import psycopg
-
-from pgmig._errors import PgmigUnsupportedError, _PgmigError
+from pgmig._db import DbConnection
+from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
     composite_types,
     constraints,
@@ -59,30 +56,11 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-async def _connect(dsn: str) -> psycopg.AsyncConnection[Any]:
-    """
-    Create the introspection connection.
-    """
-    try:
-        conn = await psycopg.AsyncConnection.connect(dsn)
-    except psycopg.Error as error:
-        raise _PgmigError(f"Could not connect to database: {error}") from error
-
-    # Force all subsequent transactions to be read-only.
-    await conn.set_read_only(True)
-
-    # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
-    await conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
-
-    # Return the connection.
-    return conn
-
-
 async def introspect_db(dsn: str) -> DbInfo:
     """
     Build the full structure of the given database.
     """
-    async with await _connect(dsn) as conn:
+    async with await DbConnection.connect(dsn) as conn:
         # Expose the connection to loaders and guards via the introspection context, so they
         # read it from `context.conn` rather than receiving it as a parameter.
         with context.context_scope(conn=conn):

@@ -2,9 +2,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
 
-import psycopg
+from pgmig._db import DbConnection
 
 
 @dataclass(frozen=True)
@@ -14,7 +13,7 @@ class _ContextData:
     """
 
     # Connection the introspection runs on.
-    conn: psycopg.AsyncConnection[Any]
+    conn: DbConnection
 
 
 # Context of the current introspection.
@@ -30,7 +29,7 @@ class _Context:
     """
 
     @contextmanager
-    def context_scope(self, *, conn: psycopg.AsyncConnection[Any]) -> Iterator[None]:
+    def context_scope(self, *, conn: DbConnection) -> Iterator[None]:
         token = _context.set(_ContextData(conn=conn))
         try:
             yield
@@ -38,7 +37,7 @@ class _Context:
             _context.reset(token)
 
     @property
-    def conn(self) -> psycopg.AsyncConnection[Any]:
+    def conn(self) -> DbConnection:
         return _context.get().conn
 
 

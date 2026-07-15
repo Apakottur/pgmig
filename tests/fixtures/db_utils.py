@@ -13,6 +13,23 @@ _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 _ADMIN_DB_NAME = "postgres"
 
 
+class UniqueViolation(Exception):
+    """
+    Raised by DbConnection.execute when a statement violates a unique constraint. Tests
+    assert on this instead of the driver's own exception, so psycopg stays confined to
+    this module.
+    """
+
+
+@tenacity.retry(wait=tenacity.wait_fixed(0.5), stop=tenacity.stop_after_delay(15), reraise=True)
+def wait_until_accepting_connections(dsn: str) -> None:
+    """
+    Block until the given DSN accepts a connection, retrying while it is not ready (e.g.
+    waiting for pgbouncer to come up alongside Postgres).
+    """
+    psycopg.connect(dsn).close()
+
+
 def _get_unique_db_key_from_git_branch() -> str:
     """
     Get a unique identifier for DB naming, based on the current git branch.
@@ -111,10 +128,21 @@ class DbConnection:
         """
         Execute a SQL statement against this database on the reused connection.
         """
-        result = self._conn.execute(query)
+        try:
+            result = self._conn.execute(query)
+        except psycopg.errors.UniqueViolation as error:
+            raise UniqueViolation(str(error)) from error
 
         # Fetch query results.
         if result.description is None:
             return []
         else:
             return result.fetchall()
+
+    def execute_formatted(self, template: LiteralString, *identifiers: str) -> list[tuple[Any, ...]]:
+        """
+        Execute a statement whose `{}` placeholders are filled with the given identifiers
+        (role names, etc.), each safely quoted. Lets callers interpolate identifiers without
+        building psycopg SQL objects themselves.
+        """
+        return self.execute(sql.SQL(template).format(*(sql.Identifier(identifier) for identifier in identifiers)))

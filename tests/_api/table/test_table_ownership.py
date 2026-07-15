@@ -1,5 +1,3 @@
-from psycopg import sql
-
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import _KEY, get_unique_db_name
 
@@ -16,8 +14,8 @@ def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
     this cluster, don't race on the same role.
     """
     name = get_unique_db_name(base, _KEY)
-    gen_setup.src.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(name)))
-    gen_setup.src.execute(sql.SQL("CREATE ROLE {}").format(sql.Identifier(name)))
+    gen_setup.src.execute_formatted("DROP ROLE IF EXISTS {}", name)
+    gen_setup.src.execute_formatted("CREATE ROLE {}", name)
     return name
 
 
