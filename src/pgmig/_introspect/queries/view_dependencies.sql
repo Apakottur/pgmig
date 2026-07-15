@@ -1,16 +1,14 @@
--- Dependencies among (materialized) views: a user view or matview whose definition reads
--- from another view or matview. A view's rewrite rule (pg_rewrite) depends (pg_depend) on
--- the relations it reads; a dependency on another view/matview means ordering the
--- create/drop needs a topological sort within the shared view phases, which is not
--- supported yet, so such a pair must be reported rather than mis-ordered. A dependency
--- on a plain table is fine (tables are created before, and dropped after, the view phases).
+-- Dependencies among plain views: a user view whose definition reads from another plain
+-- view. A view's rewrite rule (pg_rewrite) depends (pg_depend) on the relations it reads;
+-- a dependency on another view means ordering the create/drop needs a topological sort
+-- within the view phases (see view_dependencies.py load). Matview-involving pairs are
+-- excluded here and handled by matview_dependencies.sql instead. A dependency on a plain
+-- table is fine (tables are created before, and dropped after, the view phases).
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,
     dependent.relname AS dependent_view,
-    dependent.relkind AS dependent_kind,
     referenced_ns.nspname AS referenced_schema,
-    referenced.relname AS referenced_view,
-    referenced.relkind AS referenced_kind
+    referenced.relname AS referenced_view
 FROM
     pg_depend d
     JOIN pg_rewrite r ON r.oid = d.objid
@@ -19,8 +17,8 @@ FROM
     JOIN pg_class referenced ON referenced.oid = d.refobjid
     JOIN pg_namespace referenced_ns ON referenced_ns.oid = referenced.relnamespace
 WHERE
-    dependent.relkind IN ('v', 'm')
-    AND referenced.relkind IN ('v', 'm')
+    dependent.relkind = 'v'
+    AND referenced.relkind = 'v'
     AND dependent.oid <> referenced.oid
     -- Only edges among managed objects belong here: an edge to a view pgmig does not model
     -- (a system view, or an extension-owned one in a user schema) is bogus state that would

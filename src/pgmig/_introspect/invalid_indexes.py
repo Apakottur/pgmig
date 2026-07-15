@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._sql import qualified
 
 
-class _InvalidIndexRow(BaseModel):
+class _InvalidIndexRow(_QueryRow):
     schema_name: str
     table_name: str
     index_name: str

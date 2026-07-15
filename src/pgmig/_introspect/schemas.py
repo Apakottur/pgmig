@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import DbInfo, Schema
 
 
-class _SchemaRow(BaseModel):
+class _SchemaRow(_QueryRow):
     schema_name: str
     schema_comment: str | None
 

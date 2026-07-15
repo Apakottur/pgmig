@@ -1,13 +1,12 @@
 from typing import Any
 
 import psycopg
-from pydantic import BaseModel
 
-from pgmig._introspect._core import _run_query
+from pgmig._introspect._core import _QueryRow, _run_query
 from pgmig._models import ColumnKey, DbInfo, ViewKey
 
 
-class _ViewColumnDependencyRow(BaseModel):
+class _ViewColumnDependencyRow(_QueryRow):
     view_schema: str
     view_name: str
     table_schema: str
