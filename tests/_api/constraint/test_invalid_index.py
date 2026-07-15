@@ -1,8 +1,7 @@
 import psycopg
 import pytest
 
-from pgmig import generate
-from pgmig._errors import PgmigCorruptedIndexError
+from pgmig import PgmigUnsupportedError, generate
 from tests._api.generate_setup import GenerateSetup
 
 
@@ -19,7 +18,7 @@ def test_invalid_index_is_rejected(gen_setup: GenerateSetup) -> None:
     with pytest.raises(psycopg.errors.UniqueViolation):
         gen_setup.src.execute("CREATE UNIQUE INDEX CONCURRENTLY u ON t (a)")
 
-    with pytest.raises(PgmigCorruptedIndexError, match="invalid index"):
+    with pytest.raises(PgmigUnsupportedError, match="invalid index"):
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
@@ -33,7 +32,7 @@ def test_multiple_invalid_indexes_are_all_listed(gen_setup: GenerateSetup) -> No
         with pytest.raises(psycopg.errors.UniqueViolation):
             gen_setup.src.execute(f"CREATE UNIQUE INDEX CONCURRENTLY {index} ON {table} (a)")
 
-    with pytest.raises(PgmigCorruptedIndexError) as excinfo:
+    with pytest.raises(PgmigUnsupportedError) as excinfo:
         generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
     message = str(excinfo.value)
