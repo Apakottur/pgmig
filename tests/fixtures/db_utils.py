@@ -4,8 +4,6 @@ from typing import Any
 
 import psycopg
 import tenacity
-from psycopg import sql
-from typing_extensions import LiteralString
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
@@ -38,38 +36,28 @@ def get_unique_postgres_name(base: str, key: str) -> str:
     return f"{base}_{slug_trunc}_{digest}"
 
 
+async def recreate_database(admin_conn: "DbConnection", db_name: str) -> None:
+    """
+    Recreate the database.
+    """
+    # Drop the database, if exists. WITH (FORCE) atomically terminates any
+    # lingering backends and drops the database, avoiding the race between a
+    # separate pg_terminate_backend call and the drop.
+    await admin_conn.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")
+
+    # Create the database.
+    await admin_conn.execute(f"CREATE DATABASE {db_name}")
+
+
 class DbConnection:
-    def __init__(self, db_name: str, admin_conn: "DbConnection | None" = None) -> None:
+    def __init__(self, db_name: str) -> None:
         # Database name and DSN.
         self.db_name = db_name
         self.dsn = f"{_DSN_PREFIX}/{db_name}"
         self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
 
-        # Admin connection.
-        self._admin_conn = admin_conn
-
-        # Recreate the database (if not admin DB).
-        if db_name != _ADMIN_DB_NAME:
-            self._recreate_database()
-
         # Open a single connection, reused for every query on this database.
         self._conn = self._connect()
-
-    def _recreate_database(self) -> None:
-        """
-        Recreate the database.
-        """
-        assert self._admin_conn is not None
-
-        # Drop the database, if exists. WITH (FORCE) atomically terminates any
-        # lingering backends and drops the database, avoiding the race between a
-        # separate pg_terminate_backend call and the drop.
-        self._admin_conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self.db_name))
-        )
-
-        # Create the database.
-        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
@@ -88,11 +76,11 @@ class DbConnection:
         """
         self._conn.close()
 
-    def execute(self, query: LiteralString | sql.Composed) -> list[tuple[Any, ...]]:
+    async def execute(self, query: str) -> list[tuple[Any, ...]]:
         """
         Execute a SQL statement against this database on the reused connection.
         """
-        result = self._conn.execute(query)
+        result = self._conn.execute(query)  # ty: ignore[no-matching-overload]
 
         # Fetch query results.
         if result.description is None:

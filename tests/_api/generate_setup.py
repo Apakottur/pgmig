@@ -9,21 +9,16 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, unique_key: str) -> None:
+    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, pg_major: int, unique_key: str) -> None:
         # Database connections.
         self.src = src_conn
         self.dst = dst_conn
 
+        # Postgres major version.
+        self.pg_major = pg_major
+
         # Unique key for the test session.
         self.unique_key = unique_key
-
-    @property
-    def pg_major(self) -> int:
-        """
-        Get the Postgres major version of the server under test (e.g. 16).
-        """
-        (row,) = self.src.execute("SHOW server_version_num")
-        return int(row[0]) // 10000
 
     async def assert_diff(
         self,
@@ -60,8 +55,8 @@ class GenerateSetup:
                 raise ValueError("Remove trailing newlines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
-        self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
-        self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
+        await self.src.execute(";\n".join(src))
+        await self.dst.execute(";\n".join(dst))
 
         # Normalize to the "\n"-joined form that `generate` returns.
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
@@ -80,7 +75,7 @@ class GenerateSetup:
         # Apply the migration to the source and confirm it converges: after applying,
         # source should match target, so a second generate must produce nothing.
         if apply and result:
-            self.src.execute(result)  # ty: ignore[invalid-argument-type]
+            await self.src.execute(result)
             residual = await agenerate(
                 source=self.src.dsn,
                 target=self.dst.dsn,
