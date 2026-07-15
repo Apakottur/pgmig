@@ -1,5 +1,3 @@
-import asyncio
-
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import wait_until_accepting_connections
