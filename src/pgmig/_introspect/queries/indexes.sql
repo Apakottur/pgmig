@@ -3,17 +3,20 @@ SELECT
     n.nspname AS schema_name,
     c.relname AS table_name,
     ic.relname AS index_name,
-    -- A partitioned-parent index deparses as "... ON ONLY parent ..."; strip ONLY so the
-    -- emitted CREATE INDEX cascades to (and stays valid across) all partitions.
-    replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON ') AS index_def,
-    replace(replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON '), 'INDEX ' ||
-	quote_ident(ic.relname) || ' ON ', 'INDEX ON ') AS index_canonical,
+    stripped.def AS index_def,
+    replace(stripped.def, 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ') AS index_canonical,
     obj_description(i.indexrelid, 'pg_class') AS index_comment
 FROM
     pg_index i
     JOIN pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_class c ON c.oid = i.indrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
+    -- A partitioned-parent index deparses as "... ON ONLY parent ..."; strip ONLY once here so
+    -- the emitted CREATE INDEX cascades to (and stays valid across) all partitions, and
+    -- index_canonical derives from the same stripped definition.
+    CROSS JOIN LATERAL (
+        SELECT
+            replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON ') AS def) stripped
 WHERE
     c.relkind IN ('r', 'p')
     AND n.nspname NOT LIKE 'pg_%'
