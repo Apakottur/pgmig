@@ -23,17 +23,22 @@ from pgmig._build import (
     views,
 )
 from pgmig._build._core import Guard, Loader
-from pgmig._errors import PgmigError
+from pgmig._errors import PgmigError, UnsupportedChangeError
 from pgmig._models import DbInfo
 
 # Preconditions run before any loader. Each guard reports every object it finds that
 # pgmig cannot process; all findings are collected and reported together, so the user
 # sees every problem at once instead of one per re-run.
-_GUARDS: tuple[Guard, ...] = (
+#
+# Guards are split by what their findings mean. An unsupported guard reports a documented
+# limitation (an object kind pgmig does not model yet) and raises UnsupportedChangeError.
+# An error guard reports a hard precondition the user must fix (e.g. a leftover invalid
+# index) -- not a limitation -- and raises the plain PgmigError.
+_UNSUPPORTED_GUARDS: tuple[Guard, ...] = (
     unsupported.check,
-    invalid_indexes.check,
     view_dependencies.check,
 )
+_ERROR_GUARDS: tuple[Guard, ...] = (invalid_indexes.check,)
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
 # the objects that attach to them (indexes, constraints, triggers). Extensions are
@@ -91,11 +96,17 @@ def build_db_info(dsn: str) -> DbInfo:
 
         # Run every guard first and collect all findings, so a database with several
         # problems reports them together rather than one failure per re-run.
-        problems = [finding for guard in _GUARDS for finding in guard(conn)]
+        error_problems = [finding for guard in _ERROR_GUARDS for finding in guard(conn)]
+        unsupported_problems = [finding for guard in _UNSUPPORTED_GUARDS for finding in guard(conn)]
+        problems = error_problems + unsupported_problems
         if problems:
-            raise PgmigError(
-                "pgmig cannot process this database:\n" + "\n".join(f"  - {problem}" for problem in problems)
-            )
+            message = "pgmig cannot process this database:\n" + "\n".join(f"  - {problem}" for problem in problems)
+            # A hard precondition error takes precedence: it is not a limitation, so the
+            # combined report surfaces as a plain PgmigError. A database whose only problems
+            # are unsupported objects raises the more specific UnsupportedChangeError.
+            if error_problems:
+                raise PgmigError(message)
+            raise UnsupportedChangeError(message)
 
         db_info = DbInfo(
             schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}

@@ -1,6 +1,3 @@
-import pytest
-
-from pgmig import PgmigError, generate
 from tests.api.generate_setup import GenerateSetup
 
 
@@ -9,10 +6,11 @@ def test_aggregate_raises_not_supported(gen_setup: GenerateSetup) -> None:
     A user-defined aggregate (pg_proc prokind 'a') is not modelled yet and must raise
     rather than be silently dropped by the function query's prokind filter.
     """
-    gen_setup.dst.execute("CREATE AGGREGATE mysum (integer) (sfunc = int4pl, stype = integer, initcond = '0')")
-
-    with pytest.raises(PgmigError, match=r"aggregate .* is not supported"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+    gen_setup.assert_unsupported(
+        src=[],
+        dst=["CREATE AGGREGATE mysum (integer) (sfunc = int4pl, stype = integer, initcond = '0')"],
+        match=r"aggregate .* is not supported",
+    )
 
 
 def test_function_create(gen_setup: GenerateSetup) -> None:
