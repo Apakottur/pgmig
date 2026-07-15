@@ -3,7 +3,6 @@ import re
 from typing import Any
 
 import psycopg
-import shpyx
 import tenacity
 from psycopg import sql
 from typing_extensions import LiteralString
@@ -13,27 +12,14 @@ _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 _ADMIN_DB_NAME = "postgres"
 
 
-def _get_unique_db_key_from_git_branch() -> str:
-    """
-    Get a unique identifier for DB naming, based on the current git branch.
-    """
-    result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
-    branch = result.stdout.strip()
-    if result.return_code == 0 and branch and branch != "HEAD":
-        return branch
-
-    # Default if git branch is not available.
-    return "unknown"
-
-
 # Postgres truncates identifiers past this length, which would silently collapse
 # distinct long branch names to the same database name.
 _MAX_IDENTIFIER_LEN = 63
 
 
-def get_unique_db_name(base: str, key: str) -> str:
+def get_unique_postgres_name(base: str, key: str) -> str:
     """
-    Build a valid, unique Postgres database name from a base and a free-form key(e.g. a git branch name).
+    Build a valid, unique Postgres entity name from a base and a free-form key(e.g. a git branch name).
     Useful for developing on multiple branches in parallel.
     """
     # Simple name - cleaned key and base.
@@ -52,15 +38,10 @@ def get_unique_db_name(base: str, key: str) -> str:
     return f"{base}_{slug_trunc}_{digest}"
 
 
-_KEY = _get_unique_db_key_from_git_branch()
-SRC_DB = get_unique_db_name("pgmig_src", _KEY)
-DST_DB = get_unique_db_name("pgmig_dst", _KEY)
-
-
 class DbConnection:
     def __init__(self, db_name: str, admin_conn: "DbConnection | None" = None) -> None:
         # Database name and DSN.
-        self._db_name = db_name
+        self.db_name = db_name
         self.dsn = f"{_DSN_PREFIX}/{db_name}"
         self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
 
@@ -84,11 +65,11 @@ class DbConnection:
         # lingering backends and drops the database, avoiding the race between a
         # separate pg_terminate_backend call and the drop.
         self._admin_conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self._db_name))
+            sql.SQL("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)").format(db_name=sql.Identifier(self.db_name))
         )
 
         # Create the database.
-        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self._db_name)))
+        self._admin_conn.execute(sql.SQL("CREATE DATABASE {db_name}").format(db_name=sql.Identifier(self.db_name)))
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(0.5),
