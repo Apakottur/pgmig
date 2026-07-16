@@ -34,6 +34,16 @@ class RelationKey:
 
 
 @dataclass(frozen=True, order=True)
+class CompositeTypeKey:
+    """
+    Full identifier of a standalone composite type within a database.
+    """
+
+    schema: str
+    name: str
+
+
+@dataclass(frozen=True, order=True)
 class ColumnKey:
     """
     Full identifier of a table column within a database.
@@ -364,3 +374,7 @@ class DbIntrospectionResult:
 
     # Mapping from a view to the set of table columns it reads.
     view_column_dependencies: dict[ViewKey, set[ColumnKey]]
+
+    # Mapping from a composite type to the set of composite types it depends on (a field
+    # whose type -- or, for an array field, whose element type -- is another composite type).
+    composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]

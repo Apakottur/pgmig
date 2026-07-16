@@ -1,6 +1,7 @@
 from pgmig._db import DbReadOnlyConnection
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
+    composite_type_dependencies,
     composite_types,
     constraints,
     domains,
@@ -52,6 +53,7 @@ _LOADERS: tuple[Loader, ...] = (
     matview_indexes.load,
     domains.load,
     composite_types.load,
+    composite_type_dependencies.load,
     extensions.load,
 )
 
@@ -65,6 +67,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         extension_by_name={},
         view_dependencies={},
         view_column_dependencies={},
+        composite_type_dependencies={},
     )
 
     async with DbReadOnlyConnection.connect(dsn=dsn) as conn:
