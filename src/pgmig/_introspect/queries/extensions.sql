@@ -1,0 +1,11 @@
+-- Extensions (database-level).
+SELECT
+    e.extname AS name,
+    e.extversion AS version,
+    n.nspname AS extension_schema,
+    obj_description(e.oid, 'pg_extension') AS extension_comment
+FROM
+    pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+ORDER BY
+    e.extname;

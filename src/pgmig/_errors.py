@@ -1,4 +1,4 @@
-class PgmigError(Exception):
+class _PgmigError(Exception):
     """
     A known, user-facing pgmig error (e.g. an invalid connection string).
 
@@ -9,3 +9,9 @@ class PgmigError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(message)
+
+
+class PgmigUnsupportedError(_PgmigError):
+    """
+    The database is in a state that pgmig does not yet support.
+    """

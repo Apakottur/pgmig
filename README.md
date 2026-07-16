@@ -14,14 +14,18 @@ the SQL that turns the source into the target.
 `pgmig` connects **read-only** to both databases and never
 runs the generated SQL for you: you review it and apply it yourself.
 
+pgmig officially supports **Postgres 14–18** — the majors currently maintained upstream — and is
+tested against each in CI. Other versions may work but are not tested.
+
 This project is currently in active development, see [Roadmap](https://github.com/Apakottur/pgmig/issues/8).
 
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
 2. [Configuration](#configuration)
-3. [Contributing](#contributing)
-4. [License](#license)
+3. [FAQ](#faq)
+4. [Contributing](#contributing)
+5. [License](#license)
 
 ## Getting Started
 
@@ -85,13 +89,31 @@ print(sql)  # the migration SQL
 
 `pgmig` has no configuration file — everything is passed on the command line (or as arguments to `pgmig.generate`).
 
-`pgmig generate` accepts:
+The CLI (`pgmig generate`) and the library (`pgmig.generate`) share the same options; the CLI
+adds a few more (`—` in the library column):
 
-| Option           | Description                                             |
-| ---------------- | ------------------------------------------------------- |
-| `--source`, `-s` | DSN of the source (current) database. **Required.**     |
-| `--target`, `-t` | DSN of the target (desired) database. **Required.**     |
-| `--output`, `-o` | Write the migration SQL to this file instead of stdout. |
+| CLI option               | Library argument     | Description                                             |
+| ------------------------ | -------------------- | ------------------------------------------------------- |
+| `--source`, `-s`         | `source`             | DSN of the source (current) database. Falls back to the `PGMIG_SOURCE` environment variable. |
+| `--target`, `-t`         | `target`             | DSN of the target (desired) database. Falls back to the `PGMIG_TARGET` environment variable. |
+| `--index-concurrently`, `-C` | `index_concurrently` | Whether to emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`. Using `CONCURRENTLY` avoids blocking index read/write operations, but takes longer to execute and cannot be run inside a transaction block. |
+| `--ignore-extension-version` | `ignore_extension_version` | Names of extensions whose version mismatch is ignored: no `ALTER EXTENSION ... UPDATE TO` is emitted for them. Repeatable on the CLI; a list of names in the library. |
+| `--ignore-owner`         | `ignore_owner`       | Suppress all `ALTER ... OWNER TO` statements. |
+| `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
+| `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
+
+### Connections
+
+Each DSN can be passed as a flag or through its environment variable; an explicit flag wins.
+Command-line arguments are visible in `ps` output and shell history, so prefer the environment
+variables for anything containing secrets — for example, in CI:
+
+```yaml
+- run: pgmig generate --check
+  env:
+    PGMIG_SOURCE: ${{ secrets.PROD_DATABASE_URL }}
+    PGMIG_TARGET: postgresql://postgres:postgres@localhost:5432/desired
+```
 
 Other commands:
 
@@ -102,6 +124,17 @@ Other commands:
 
 A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
 e.g. `postgresql://user:pass@host:5432/dbname`.
+
+## FAQ
+
+### Do I need libpq installed?
+
+By default, yes — pgmig requires the Postgres client library (libpq) on the machine. For
+standalone / CLI use you can skip that by installing the `binary` extra, which bundles it:
+
+```shell
+pip install 'pgmig[binary]'
+```
 
 ## Contributing
 

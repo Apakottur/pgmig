@@ -5,8 +5,8 @@ from typing import Annotated
 
 import typer
 
-from pgmig._errors import PgmigError
-from pgmig.api import generate as generate_migration
+from pgmig._api import generate as generate_migration
+from pgmig._errors import _PgmigError
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -16,32 +16,103 @@ app = typer.Typer(
 )
 
 
+def _require_dsn(value: str | None, *, flag: str, env_var: str) -> str:
+    """
+    Return the DSN, failing with a usage error when neither the flag nor its
+    environment variable provided one.
+    """
+    if value is None:
+        typer.echo(f"Missing option '{flag}' (or set the {env_var} environment variable).", err=True)
+        raise typer.Exit(code=2)
+    return value
+
+
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(version("pgmig"))
         raise typer.Exit
 
 
+def _write_to_file(text: str, output: Path) -> None:
+    """
+    Write text to a file.
+    """
+    try:
+        output.write_text(text, encoding="utf-8")
+    except OSError as error:
+        typer.echo(f"Could not write to file: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+
 @app.command()
 def generate(
-    source: Annotated[str, typer.Option("--source", "-s", help="DSN of the source (current) database.")],
-    target: Annotated[str, typer.Option("--target", "-t", help="DSN of the target (desired) database.")],
+    source: Annotated[
+        str | None,
+        typer.Option("--source", "-s", envvar="PGMIG_SOURCE", help="DSN of the source (current) database."),
+    ] = None,
+    target: Annotated[
+        str | None,
+        typer.Option("--target", "-t", envvar="PGMIG_TARGET", help="DSN of the target (desired) database."),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Write the migration SQL to this file instead of stdout."),
     ] = None,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            "-c",
+            help="Exit with a non-zero status if the databases differ. Useful as a CI gate; "
+            "the migration is still emitted so the drift is visible.",
+        ),
+    ] = False,
+    index_concurrently: Annotated[
+        bool,
+        typer.Option(
+            "--index-concurrently",
+            help="Emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY, so "
+            "index maintenance takes no blocking lock. These statements cannot run inside a "
+            "transaction block -- apply them outside BEGIN/COMMIT.",
+        ),
+    ] = False,
+    ignore_extension_version: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--ignore-extension-version",
+            help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
+        ),
+    ] = None,
+    ignore_owner: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-owner",
+            help="Suppress all ALTER ... OWNER TO statements.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
     """
-    # Diffing: a PgmigError is an expected failure (clean message); anything else is a
-    # bug in pgmig (full traceback plus an issue prompt).
+    # Get the DSNs.
+    source = _require_dsn(source, flag="--source", env_var="PGMIG_SOURCE")
+    target = _require_dsn(target, flag="--target", env_var="PGMIG_TARGET")
+
+    # Generate the migration SQL.
     try:
-        sql = generate_migration(source=source, target=target)
-    except PgmigError as error:
+        sql = generate_migration(
+            source=source,
+            target=target,
+            index_concurrently=index_concurrently,
+            ignore_extension_version=ignore_extension_version or [],
+            ignore_owner=ignore_owner,
+        )
+    except _PgmigError as error:
+        # Expected error - print message without traceback.
         typer.echo(error.message, err=True)
         raise typer.Exit(code=1) from error
     except Exception as error:
+        # Internal error - print traceback and issue prompt.
         typer.echo(traceback.format_exc(), err=True)
         typer.echo(
             "This is an internal error in pgmig. Please open an issue with the traceback above:\n"
@@ -50,19 +121,25 @@ def generate(
         )
         raise typer.Exit(code=1) from error
 
-    if not sql:
-        return
+    if sql:
+        # Schemas are not in sync.
 
-    if output is None:
-        typer.echo(sql)
-        return
+        # Write to file/stdout.
+        if output:
+            _write_to_file(f"{sql}\n", output)
+        else:
+            typer.echo(sql)
 
-    # Writing: an unwritable --output path is a clean error, not a traceback.
-    try:
-        output.write_text(f"{sql}\n", encoding="utf-8")
-    except OSError as error:
-        typer.echo(f"Could not write migration output: {error}", err=True)
-        raise typer.Exit(code=1) from error
+        # Exit with a non-zero status if the databases differ.
+        if check:
+            typer.echo("Databases differ: a migration is required.", err=True)
+            raise typer.Exit(code=1)
+    else:
+        # Schemas are in sync.
+
+        # Truncate the file if it exists.
+        if output:
+            _write_to_file("", output)
 
 
 @app.callback()

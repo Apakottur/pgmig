@@ -1,15 +1,14 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _iter_schema_pairs
-from pgmig._models import DbInfo
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_single_comment
 from pgmig._sql import comment_on, ident
 
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of schemas.
     """
-    for name, src_schema, dst_schema in _iter_schema_pairs(source, target):
+    for name, src_schema, dst_schema in ctx_iter_schema_pairs():
         # Present in source only: drop it.
         if dst_schema is None:
             yield Statement(Phase.SCHEMA_DROP, f"DROP SCHEMA {ident(name)};")
@@ -18,6 +17,9 @@ def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
         if src_schema is None:
             yield Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};")
         # Sync comment.
-        src_comment = src_schema.comment if src_schema else None
-        if src_comment != dst_schema.comment:
-            yield Statement(Phase.SCHEMA_CREATE, comment_on("SCHEMA", ident(name), dst_schema.comment))
+        for sql in diff_single_comment(
+            src_schema,
+            dst_schema,
+            render=lambda schema: comment_on("SCHEMA", ident(schema.name), schema.comment),
+        ):
+            yield Statement(Phase.SCHEMA_CREATE, sql)

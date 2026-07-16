@@ -1,5 +1,48 @@
 from dataclasses import dataclass
 
+from pgmig._errors import PgmigUnsupportedError
+
+
+@dataclass(frozen=True, order=True)
+class ViewKey:
+    """
+    Full view identifier within a database.
+    """
+
+    schema: str
+    name: str
+
+
+@dataclass(frozen=True, order=True)
+class FunctionKey:
+    """
+    Full function identifier within a database (schema plus overload signature).
+    """
+
+    schema: str
+    signature: str  # "name(identity_arguments)"
+
+
+@dataclass(frozen=True, order=True)
+class RelationKey:
+    """
+    Full identifier of a table, view, or materialized view within a database.
+    """
+
+    schema: str
+    name: str
+
+
+@dataclass(frozen=True, order=True)
+class ColumnKey:
+    """
+    Full identifier of a table column within a database.
+    """
+
+    schema: str
+    table: str
+    column: str
+
 
 @dataclass(frozen=True)
 class Column:
@@ -14,6 +57,8 @@ class Column:
     comment: str | None
     identity: str  # pg_attribute.attidentity ('' for a non-identity column)
     serial_sequence: str | None  # sequence owned via a nextval() default, else None
+    generated: str  # pg_attribute.attgenerated ('' none, 's' stored, 'v' virtual)
+    generation_expression: str | None  # generation expression, kept separate from `default`
 
     @property
     def serial_type(self) -> str | None:
@@ -33,7 +78,33 @@ class Column:
             case "bigint":
                 return "bigserial"
             case _:
-                raise NotImplementedError(f"Unknown integer type: {self.type}")
+                raise PgmigUnsupportedError(f"Unknown integer type: {self.type}")
+
+    @property
+    def identity_kind(self) -> str | None:
+        """
+        The identity generation kind ("ALWAYS" / "BY DEFAULT") for an identity column,
+        or None for a non-identity column.
+
+        Decodes pg_attribute.attidentity: 'a' -> ALWAYS, 'd' -> BY DEFAULT, '' -> None.
+        """
+        match self.identity:
+            case "":
+                return None
+            case "a":
+                return "ALWAYS"
+            case "d":
+                return "BY DEFAULT"
+            case _:
+                raise PgmigUnsupportedError(f"Unknown identity kind: {self.identity!r}")
+
+    @property
+    def identity_clause(self) -> str | None:
+        """
+        The GENERATED ... AS IDENTITY clause for an identity column, or None.
+        """
+        kind = self.identity_kind
+        return None if kind is None else f"GENERATED {kind} AS IDENTITY"
 
 
 @dataclass(frozen=True)
@@ -63,7 +134,7 @@ class Trigger:
     comment: str | None
 
 
-@dataclass(frozen=True)
+@dataclass
 class Constraint:
     """
     A Postgres primary key, unique, check, or foreign key constraint, owned by a table.
@@ -85,19 +156,39 @@ class Constraint:
         return self.contype == "f"
 
 
-@dataclass(frozen=True)
+@dataclass
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
     """
 
+    # Core
     name: str
     columns: list[Column]
     comment: str | None
+    owner: str
+
+    # Declarative partitioning metadata.
+    partition_strategy: str | None
+    partition_key: str | None
+    partition_bound: str | None
+    partition_parent: tuple[str, str] | None
+
+    # Relations.
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
     trigger_by_name: dict[str, Trigger]
+
+    @property
+    def is_partitioned(self) -> bool:
+        """Whether this table is a partitioned parent (declared PARTITION BY ...)."""
+        return self.partition_strategy is not None
+
+    @property
+    def is_partition(self) -> bool:
+        """Whether this table is a partition of some parent."""
+        return self.partition_parent is not None
 
     def get_primary_key_columns(self) -> set[str]:
         """
@@ -140,11 +231,17 @@ class Function:
     return_type: str  # format_type(prorettype); "void" for a procedure
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
-    # Whether a non-trigger object (column default, check constraint, expression
-    # index, another routine, ...) depends on this routine. Such a dependent must be
-    # dropped before the routine, which the linear phase ordering can't guarantee, so
-    # dropping a routine with dependents is refused rather than mis-ordered.
+    # Whether a non-trigger object (column default, check constraint, expression index,
+    # another routine, ...) depends on this routine. Drives drop phasing: a routine with
+    # dependents is dropped late (after those dependents), one without stays early.
     has_dependents: bool
+    # Forward hard dependencies of this routine (pg_depend deptype 'n'):
+    #   depends_on_functions -- routines this one depends on; when both are dropped, this
+    #     one drops first (topologically ordered in the late phase).
+    #   depends_on_relations -- tables/views/matviews the body reads; a late drop is refused
+    #     as circular if one of these is also dropped this run.
+    depends_on_functions: frozenset[FunctionKey]
+    depends_on_relations: frozenset[RelationKey]
 
     @property
     def drop_keyword(self) -> str:
@@ -154,7 +251,7 @@ class Function:
         return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
-@dataclass(frozen=True)
+@dataclass
 class EnumType:
     """
     A Postgres enum type, owned by a schema.
@@ -162,6 +259,64 @@ class EnumType:
 
     name: str
     values: list[str]  # labels in enum sort order
+    comment: str | None
+
+
+@dataclass(frozen=True)
+class View:
+    """
+    A Postgres view, owned by a schema.
+    """
+
+    name: str
+    definition: str  # pg_get_viewdef output: the SELECT the view wraps (no trailing semicolon)
+    comment: str | None
+
+
+@dataclass
+class MaterializedView:
+    """
+    A Postgres materialized view, owned by a schema.
+    """
+
+    name: str
+    definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
+    comment: str | None
+    index_by_name: dict[str, Index]
+
+
+@dataclass(frozen=True)
+class CompositeField:
+    """
+    One attribute of a composite type.
+    """
+
+    name: str
+    type: str  # format_type(atttypid, atttypmod)
+
+
+@dataclass
+class CompositeType:
+    """
+    A Postgres standalone composite type (CREATE TYPE ... AS (...)), owned by a schema.
+    """
+
+    name: str
+    fields: list[CompositeField]  # attributes in attribute (attnum) order
+    comment: str | None
+
+
+@dataclass
+class Domain:
+    """
+    A Postgres domain type, owned by a schema.
+    """
+
+    name: str
+    data_type: str  # base type, format_type(typbasetype, typtypmod)
+    default: str | None  # default expression text (pg_type.typdefault), None if absent
+    not_null: bool
+    check_by_name: dict[str, str]  # CHECK constraint name -> pg_get_constraintdef ("CHECK (...)")
     comment: str | None
 
 
@@ -177,6 +332,10 @@ class Schema:
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]
     enum_by_name: dict[str, EnumType]
+    view_by_name: dict[str, View]
+    materialized_view_by_name: dict[str, MaterializedView]
+    domain_by_name: dict[str, Domain]
+    composite_type_by_name: dict[str, CompositeType]
 
 
 @dataclass(frozen=True)
@@ -188,13 +347,20 @@ class Extension:
     name: str
     version: str
     schema: str
+    comment: str | None
 
 
 @dataclass
-class DbInfo:
+class DbIntrospectionResult:
     """
-    Full structure of a database.
+    Full result of a database introspection.
     """
 
     schema_by_name: dict[str, Schema]
     extension_by_name: dict[str, Extension]
+
+    # Mapping from a view to the set of views it depends on.
+    view_dependencies: dict[ViewKey, set[ViewKey]]
+
+    # Mapping from a view to the set of table columns it reads.
+    view_column_dependencies: dict[ViewKey, set[ColumnKey]]

@@ -1,49 +1,71 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
-from pgmig._models import DbInfo, Index
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_comment_statements, diff_renamable
+from pgmig._models import Index
+from pgmig._sql import ident, qualified
+
+
+def _render_create_index(definition: str, *, concurrently: bool) -> str:
+    """
+    Terminate an index definition, inserting CONCURRENTLY after the INDEX keyword when
+    asked. `definition` is opaque pg_get_indexdef output beginning CREATE [UNIQUE] INDEX,
+    so the keyword is the one structured anchor to insert at.
+    """
+    if concurrently:
+        head, _, tail = definition.partition("INDEX ")
+        definition = f"{head}INDEX CONCURRENTLY {tail}"
+    return f"{definition};"
 
 
 def _diff_indexes(
-    *, schema_name: str, src: dict[str, Index], dst: dict[str, Index]
-) -> tuple[list[str], list[str], list[str]]:
+    *,
+    schema_name: str,
+    src: dict[str, Index],
+    dst: dict[str, Index],
+    concurrently: bool,
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff one table's standalone indexes into (drops, renames, creates), using each
-    index's name-independent canonical form as the rename key.
+    index's name-independent canonical form as the rename key. Drops and creates carry
+    CONCURRENTLY when requested; a rename is ALTER INDEX and cannot be concurrent.
     """
-    return _diff_renamable(
+    drop_keyword = "DROP INDEX CONCURRENTLY" if concurrently else "DROP INDEX"
+    return diff_renamable(
         src,
         dst,
         key=lambda index: index.canonical,
-        render_drop=lambda name: f"DROP INDEX {qualified(schema_name, name)};",
+        render_drop=lambda name: f"{drop_keyword} {qualified(schema_name, name)};",
         render_rename=lambda old, new: f"ALTER INDEX {qualified(schema_name, old)} RENAME TO {ident(new)};",
-        render_create=lambda _name, index: f"{index.definition};",
+        render_create=lambda _name, index: _render_create_index(index.definition, concurrently=concurrently),
     )
 
 
-def _index_comment_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
+def diff_index_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
     """
-    Emit COMMENT ON INDEX for target indexes whose comment differs from source.
+    Diff one relation's indexes into ordered migration SQL: drops first (frees names),
+    then renames, then creates, then comment syncs. Honors context.index_concurrently.
+    Shared by the table and materialized-view index generators.
     """
-    return _diff_comments(
-        src, dst, render=lambda name, index: comment_on("INDEX", qualified(schema_name, name), index.comment)
+    drops, renames, creates, recreated, renamed_from = _diff_indexes(
+        schema_name=schema_name, src=src, dst=dst, concurrently=context.index_concurrently
     )
 
+    comments = diff_comment_statements(
+        schema_name, src, dst, kind="INDEX", recreated=recreated, renamed_from=renamed_from
+    )
+    return [*drops, *renames, *creates, *comments]
 
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of standalone indexes (create, drop, rename).
     """
-    for schema_name, _table_name, src_table, dst_table in _iter_table_pairs(source, target):
+    for schema_name, _table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its indexes are dropped with it.
         if dst_table is None:
             continue
 
         src_indexes = src_table.index_by_name if src_table else {}
-        dst_indexes = dst_table.index_by_name
-        drops, renames, creates = _diff_indexes(schema_name=schema_name, src=src_indexes, dst=dst_indexes)
-        comments = _index_comment_statements(schema_name, src_indexes, dst_indexes)
-        # Emit drops first (frees names), then renames, then creates, then comments.
-        for sql in (*drops, *renames, *creates, *comments):
+        for sql in diff_index_statements(schema_name, src_indexes, dst_table.index_by_name):
             yield Statement(Phase.INDEX, sql)

@@ -1,0 +1,60 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+
+import asyncpg
+
+from pgmig._models import DbIntrospectionResult
+
+
+@dataclass(frozen=True)
+class _ContextData:
+    """
+    Context data for the current introspection.
+    """
+
+    # DB connection.
+    conn: asyncpg.Connection
+
+    # Result being assembled by the loaders.
+    db_introspection_result: DbIntrospectionResult
+
+
+# Context of the current introspection.
+_context: ContextVar[_ContextData] = ContextVar("pgmig_introspection_context")
+
+
+class _Context:
+    """
+    Singleton class for the introspection context.
+    """
+
+    @contextmanager
+    def context_scope(
+        self,
+        *,
+        conn: asyncpg.Connection,
+        db_introspection_result: DbIntrospectionResult,
+    ) -> Iterator[None]:
+        token = _context.set(
+            _ContextData(
+                conn=conn,
+                db_introspection_result=db_introspection_result,
+            )
+        )
+        try:
+            yield
+        finally:
+            _context.reset(token)
+
+    @property
+    def conn(self) -> asyncpg.Connection:
+        return _context.get().conn
+
+    @property
+    def db_introspection_result(self) -> DbIntrospectionResult:
+        return _context.get().db_introspection_result
+
+
+context = _Context()

@@ -1,11 +1,54 @@
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Protocol, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
-from pgmig._models import DbInfo, Schema, Table
+from pgmig._diff._context import context
+from pgmig._models import ColumnKey, Schema, Table, ViewKey
+from pgmig._sql import comment_on, ident, qualified
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
 
 _Renamable = TypeVar("_Renamable")
+_ObjT = TypeVar("_ObjT")
+_SortableT = TypeVar("_SortableT", bound="SupportsRichComparison")
+
+
+def topological_sort(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_SortableT]]) -> list[_SortableT]:
+    """
+    Order `nodes` dependencies-first via Kahn's algorithm: a node appears after every node
+    it points to in `edges` that is also in `nodes` (edges leaving the set are ignored).
+    Ties break by sorted node, so the output is deterministic regardless of set iteration
+    order.
+
+    A cycle raises rather than silently dropping the cyclic nodes: cyclic nodes never reach
+    zero remaining dependencies, so a plain Kahn's loop would just omit them -- and a caller
+    that reverses this order to emit DROPs would then produce a non-converging diff with no
+    error. Postgres forbids cycles among views and among SQL-body routines, so this guards a
+    can't-happen case.
+    """
+    deps = {node: {dep for dep in edges.get(node, set()) if dep in nodes} for node in nodes}
+    dependents: dict[_SortableT, set[_SortableT]] = {node: set() for node in nodes}
+    for node, node_deps in deps.items():
+        for dep in node_deps:
+            dependents[dep].add(node)
+
+    ready = sorted(node for node, node_deps in deps.items() if not node_deps)
+    order: list[_SortableT] = []
+    while ready:
+        node = ready.pop(0)
+        order.append(node)
+        for dependent in dependents[node]:
+            deps[dependent].discard(node)
+            if not deps[dependent]:
+                ready.append(dependent)
+        ready.sort()
+
+    if len(order) != len(nodes):
+        cyclic = sorted(nodes - set(order))
+        raise AssertionError(f"dependency cycle detected among: {', '.join(repr(node) for node in cyclic)}")
+    return order
 
 
 class _Commented(Protocol):
@@ -26,6 +69,8 @@ def _diff_comments(
     dst: Mapping[str, _CommentedT],
     *,
     render: Callable[[str, _CommentedT], str],
+    recreated: frozenset[str] | set[str] = frozenset(),
+    renamed_from: Mapping[str, str] | None = None,
 ) -> list[str]:
     """
     Diff comments across two name->object mappings whose objects carry `.comment`.
@@ -35,14 +80,97 @@ def _diff_comments(
     comment). The sorted iteration makes the output deterministic regardless of the
     introspection row order, and gathering the pattern here removes the hand-copied
     "(src.comment if src else None) != dst.comment" checks scattered per object kind.
+
+    A name in `recreated` was dropped and recreated by the migration, which resets its
+    comment to NULL. Its source comment is therefore treated as None so the target
+    comment is always re-emitted; otherwise an unchanged comment would be silently lost
+    and leave a residual diff.
+
+    `renamed_from` maps a target (new) name to its source (old) name for objects renamed
+    this run. A rename preserves the comment, so the source comment is resolved through the
+    old name; without this the lookup by new name misses, the source comment reads as None,
+    and a `COMMENT ... IS NULL` is never emitted when the target dropped the comment -- the
+    renamed object keeps the stale comment and the migration does not converge.
     """
+    renamed_from = renamed_from or {}
     statements: list[str] = []
     for name in sorted(dst):
-        src_obj = src.get(name)
-        src_comment = src_obj.comment if src_obj is not None else None
+        if name in recreated:
+            src_comment = None
+        else:
+            src_obj = src.get(renamed_from.get(name, name))
+            src_comment = src_obj.comment if src_obj is not None else None
         if src_comment != dst[name].comment:
             statements.append(render(name, dst[name]))
     return statements
+
+
+def diff_single_comment(
+    src_obj: _CommentedT | None,
+    dst_obj: _CommentedT,
+    *,
+    render: Callable[[_CommentedT], str],
+) -> list[str]:
+    """
+    Single-object counterpart to _diff_comments: render a COMMENT ON for `dst_obj` when
+    its comment differs from `src_obj` (an absent source object counts as no comment),
+    else nothing. Wraps the pair in a one-entry mapping and defers to _diff_comments so
+    the "absent source = None" rule lives in exactly one place, rather than being
+    hand-copied as `(src.comment if src else None) != dst.comment` per object kind.
+    """
+    return _diff_comments(
+        {} if src_obj is None else {"": src_obj},
+        {"": dst_obj},
+        render=lambda _name, obj: render(obj),
+    )
+
+
+def diff_comment_statements(
+    schema_name: str,
+    src: Mapping[str, _CommentedT],
+    dst: Mapping[str, _CommentedT],
+    *,
+    kind: str,
+    recreated: frozenset[str] | set[str] = frozenset(),
+    renamed_from: Mapping[str, str] | None = None,
+) -> list[str]:
+    """
+    COMMENT ON <kind> for every target object (identified by its schema-qualified name)
+    whose comment differs from source. The render shared by every schema-qualified object
+    kind (types, domains, sequences, indexes, views, ...), gathered here so the per-kind
+    generators name their `kind` rather than each restating the _diff_comments call.
+    """
+    return _diff_comments(
+        src,
+        dst,
+        render=lambda name, obj: comment_on(kind, qualified(schema_name, name), obj.comment),
+        recreated=recreated,
+        renamed_from=renamed_from,
+    )
+
+
+def diff_child_comment_statements(
+    schema_name: str,
+    table_name: str,
+    src: Mapping[str, _CommentedT],
+    dst: Mapping[str, _CommentedT],
+    *,
+    kind: str,
+    recreated: frozenset[str] | set[str] = frozenset(),
+    renamed_from: Mapping[str, str] | None = None,
+) -> list[str]:
+    """
+    COMMENT ON <kind> for a table-owned object addressed as `<name> ON <table>`
+    (constraints, triggers) whose comment differs from source.
+    """
+    table = qualified(schema_name, table_name)
+    return _diff_comments(
+        src,
+        dst,
+        render=lambda name, obj: comment_on(kind, f"{ident(name)} ON {table}", obj.comment),
+        recreated=recreated,
+        renamed_from=renamed_from,
+    )
 
 
 class Phase(Enum):
@@ -54,20 +182,27 @@ class Phase(Enum):
     """
 
     FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
+    VIEW_DROP = auto()  # Before the tables/functions a view/matview reads from are dropped.
     TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
-    EXTENSION = auto()
+    EXTENSION_CREATE = auto()  # Before tables/types that may use what the extension provides.
     TYPE_CREATE = auto()  # Before tables (a column may be of the type) and its ADD VALUE alters.
     SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
     TABLE = auto()
     INDEX = auto()
     CONSTRAINT = auto()
+    COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
+    # After the column defaults / expression indexes / check constraints that depend on a routine.
+    FUNCTION_DROP_LATE = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
+    VIEW_CREATE = auto()  # After the tables/functions a view/matview reads from exist.
+    MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in VIEW_CREATE.
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
     TYPE_DROP = auto()  # After tables whose columns used the type are gone.
+    EXTENSION_DROP = auto()  # After tables/types/functions the extension provided are gone.
     SCHEMA_DROP = auto()
 
 
@@ -83,37 +218,123 @@ class Statement:
 
 class Generator(Protocol):
     """
-    The shared shape of every object-kind generator: keyword-only source and target,
-    yielding phase-tagged statements. Annotating the registry with this enforces one
-    uniform signature (names included) across all generators.
+    The shared shape of every object-kind generator: read the diff `context` and yield
+    phase-tagged statements. Annotating the registry with this enforces one uniform
+    signature across all generators.
     """
 
-    def __call__(self, *, source: DbInfo, target: DbInfo) -> Iterator[Statement]: ...
+    def __call__(self) -> Iterator[Statement]: ...
 
 
-def _iter_schema_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, Schema | None, Schema | None]]:
+def ctx_iter_schema_pairs() -> Iterator[tuple[str, Schema | None, Schema | None]]:
     """
     Yield (schema_name, source_schema, target_schema) for every schema across both
     databases, sorted by name. Either schema is None when absent on that side.
     """
-    for schema_name in sorted(source.schema_by_name.keys() | target.schema_by_name.keys()):
-        yield schema_name, source.schema_by_name.get(schema_name), target.schema_by_name.get(schema_name)
+    for schema_name in sorted(context.source.schema_by_name.keys() | context.target.schema_by_name.keys()):
+        yield (
+            schema_name,
+            context.source.schema_by_name.get(schema_name),
+            context.target.schema_by_name.get(schema_name),
+        )
 
 
-def _iter_table_pairs(source: DbInfo, target: DbInfo) -> Iterator[tuple[str, str, Table | None, Table | None]]:
+def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | None]]:
     """
     Yield (schema_name, table_name, source_table, target_table) for every table across
     both databases, sorted by schema then table. Either table is None when absent on
     that side.
     """
-    for schema_name, src_schema, dst_schema in _iter_schema_pairs(source, target):
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_tables = src_schema.table_by_name if src_schema else {}
         dst_tables = dst_schema.table_by_name if dst_schema else {}
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
 
 
-def _diff_renamable(
+def ctx_iter_object_pairs(
+    select: Callable[[Schema], Mapping[str, _ObjT]],
+) -> Iterator[tuple[str, dict[str, _ObjT], dict[str, _ObjT], list[tuple[str, _ObjT | None, _ObjT | None]]]]:
+    """
+    For every schema across both databases (sorted), yield
+    (schema_name, source_objects, target_objects, pairs), where `select` picks a
+    name->object map off a Schema (empty when the schema is absent on that side) and
+    `pairs` is the (name, source, target) triples over the union of names, sorted by name.
+
+    Captures the create/drop/alter scaffold shared by the schema-scoped object generators:
+    the body iterates `pairs`, while the object maps feed the trailing comment diff.
+    """
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_objs: dict[str, _ObjT] = dict(select(src_schema)) if src_schema else {}
+        dst_objs: dict[str, _ObjT] = dict(select(dst_schema)) if dst_schema else {}
+        pairs = [(name, src_objs.get(name), dst_objs.get(name)) for name in sorted(src_objs.keys() | dst_objs.keys())]
+        yield schema_name, src_objs, dst_objs, pairs
+
+
+def retyped_column_refs() -> set[ColumnKey]:
+    """
+    Columns of tables present on both sides whose type changes between source and target.
+    Postgres refuses ALTER COLUMN ... TYPE while a view reads the column, and -- unlike a
+    dropped column -- a type change leaves the reading view's definition text unchanged, so
+    the view-definition recreate path never catches it. The view diff intersects these with
+    its view-on-column edges to decide which views to drop and recreate around the change.
+
+    Source-side identity (a column read by a source view exists in the source). A serial
+    change keeps the integer `type`, so it does not surface here; that is intentional -- a
+    serial change is unsupported and raised by the table diff before applying.
+    """
+    refs: set[ColumnKey] = set()
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
+        if src_table is None or dst_table is None:
+            continue
+        dst_columns = {column.name: column for column in dst_table.columns}
+        for src_column in src_table.columns:
+            dst_column = dst_columns.get(src_column.name)
+            if dst_column is not None and src_column.type != dst_column.type:
+                refs.add(ColumnKey(schema_name, table_name, src_column.name))
+    return refs
+
+
+def retyped_column_readers() -> set[ViewKey]:
+    """
+    Views and materialized views that read (in the source) a table column whose type changes
+    between source and target. Such a reader must be dropped and recreated around the
+    ALTER COLUMN ... TYPE: Postgres refuses the alter while the column is read, and the type
+    change leaves the reader's definition text unchanged, so only the column edge catches it.
+
+    Shared by the view diff, the matview diff, and the matview-index differ (which must treat
+    such a matview as recreated so its indexes are recreated with it).
+    """
+    retyped_columns = retyped_column_refs()
+    return {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
+
+
+def recreated_matview_keys() -> set[ViewKey]:
+    """
+    Materialized views present on both sides that the migration drops and recreates: either the
+    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW) or the matview reads a
+    table column whose type changes (Postgres refuses ALTER COLUMN ... TYPE while the column is
+    read, and the type change leaves the definition text unchanged, so only the column edge
+    catches it).
+
+    The single source of truth for the recreate decision, consumed by both the matview diff
+    (which drops and recreates) and the matview-index differ (a recreated matview loses its
+    indexes, so every target index is created fresh). A matview present on only one side is a
+    plain create or drop, not a recreate, and is absent here.
+    """
+    column_readers = retyped_column_readers()
+    keys: set[ViewKey] = set()
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_views = src_schema.materialized_view_by_name if src_schema else {}
+        dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
+        for name in src_views.keys() & dst_views.keys():
+            key = ViewKey(schema_name, name)
+            if src_views[name].definition != dst_views[name].definition or key in column_readers:
+                keys.add(key)
+    return keys
+
+
+def diff_renamable(
     src: dict[str, _Renamable],
     dst: dict[str, _Renamable],
     *,
@@ -121,15 +342,22 @@ def _diff_renamable(
     render_drop: Callable[[str], str],
     render_rename: Callable[[str, str], str],
     render_create: Callable[[str, _Renamable], str],
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff two name->object mappings whose objects carry a name-independent `key`,
     detecting renames (same key, different name).
 
     Returns:
-        A 3-tuple (drops, renames, creates) of rendered SQL statements. A shared
-        name is a no-op when the keys match; otherwise objects are dropped,
-        renamed (same key across a name change), or created.
+        A 5-tuple (drops, renames, creates, recreated, renamed_from). The first three are
+        rendered SQL statements; `recreated` is the set of names whose object is freshly
+        created and therefore starts without a comment -- a name dropped and recreated (same
+        name, changed definition) or a create reusing a name a rename vacated this run;
+        `renamed_from` maps each new name to its old name.
+        A shared name is a no-op when the keys match; otherwise objects are dropped, renamed
+        (same key across a name change), or created. `recreated` lets the comment diff force
+        a re-emit (a recreate resets the comment), and `renamed_from` lets it resolve a
+        renamed object's source comment through the old name (a rename preserves the
+        comment, so it must be cleared when the target has none).
     """
     src = dict(src)
     dst = dict(dst)
@@ -149,6 +377,7 @@ def _diff_renamable(
         dst_by_key.setdefault(key(item), []).append(name)
 
     renames: list[str] = []
+    renamed_from: dict[str, str] = {}
     for shared_key in sorted(src_by_key.keys() & dst_by_key.keys()):
         src_names = sorted(src_by_key[shared_key])
         dst_names = sorted(dst_by_key[shared_key])
@@ -156,9 +385,17 @@ def _diff_renamable(
         # pair here is a genuine rename. Counts may differ, so pair up to the shorter.
         for old_name, new_name in zip(src_names, dst_names, strict=False):
             renames.append(render_rename(old_name, new_name))
+            renamed_from[new_name] = old_name
             del src[old_name]
             del dst[new_name]
 
+    # After the no-op and rename passes, a name still in both sides is dropped and
+    # recreated (same name, changed definition). A create whose name was vacated by a rename
+    # this run (the old name of some rename) is a fresh object too: it carries no comment, but
+    # the comment diff would resolve its name back to the renamed-away source object and find a
+    # matching comment, suppressing the COMMENT and leaving a residual diff. Treat it as
+    # recreated so its target comment is always emitted.
+    recreated = (src.keys() & dst.keys()) | (dst.keys() & set(renamed_from.values()))
     drops = [render_drop(name) for name in sorted(src.keys())]
     creates = [render_create(name, dst[name]) for name in sorted(dst.keys())]
-    return drops, renames, creates
+    return drops, renames, creates, recreated, renamed_from

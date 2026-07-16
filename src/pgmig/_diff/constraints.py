@@ -1,19 +1,19 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, _diff_renamable, _iter_table_pairs
-from pgmig._models import Constraint, DbInfo
-from pgmig._sql import comment_on, ident, qualified
+from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_child_comment_statements, diff_renamable
+from pgmig._models import Constraint
+from pgmig._sql import ident, qualified
 
 
 def _diff_constraints(
     *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
     """
     Diff one table's constraints (of a single kind) into (drops, renames, adds).
     The constraint definition (from pg_get_constraintdef) is already name-independent.
     """
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
-    return _diff_renamable(
+    return diff_renamable(
         src,
         dst,
         key=lambda constraint: constraint.definition,
@@ -23,56 +23,50 @@ def _diff_constraints(
     )
 
 
-def _constraint_comment_statements(
-    schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> list[str]:
-    """
-    Emit COMMENT ON CONSTRAINT for target constraints whose comment differs from source.
-    """
-    table = qualified(schema_name, table_name)
-    return _diff_comments(
-        src,
-        dst,
-        render=lambda name, constraint: comment_on("CONSTRAINT", f"{ident(name)} ON {table}", constraint.comment),
-    )
-
-
-def generate(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its constraints are dropped with it.
         if dst_table is None:
             continue
 
         src_constraints = src_table.constraint_by_name if src_table else {}
         dst_constraints = dst_table.constraint_by_name
-        drops, renames, adds = _diff_constraints(
+        drops, renames, adds, recreated, renamed_from = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
             dst=dst_constraints,
         )
-        comments = _constraint_comment_statements(schema_name, table_name, src_constraints, dst_constraints)
+        comments = diff_child_comment_statements(
+            schema_name,
+            table_name,
+            src_constraints,
+            dst_constraints,
+            kind="CONSTRAINT",
+            recreated=recreated,
+            renamed_from=renamed_from,
+        )
         # Drops first (frees names), then renames, then adds, then comments.
         for sql in (*drops, *renames, *adds, *comments):
             yield Statement(Phase.CONSTRAINT, sql)
 
 
-def generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> Iterator[Statement]:
+def generate_foreign_keys() -> Iterator[Statement]:
     """
     Generate the migration SQL of foreign key constraints. Drops are phased before
     referenced objects are dropped; adds (with renames) after referenced tables and
     their keys exist.
     """
-    for schema_name, table_name, src_table, dst_table in _iter_table_pairs(source, target):
+    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         src_fks = src_table.foreign_key_by_name if src_table else {}
         # Table dropped: its foreign keys must still be dropped explicitly, in the
         # FOREIGN_KEY_DROP phase (before any DROP TABLE), so a referenced table can be
         # dropped even while its referencing table's constraint has not yet cascaded away.
         dst_fks = dst_table.foreign_key_by_name if dst_table else {}
-        drops, renames, adds = _diff_constraints(
+        drops, renames, adds, recreated, renamed_from = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_fks,
@@ -81,6 +75,8 @@ def generate_foreign_keys(*, source: DbInfo, target: DbInfo) -> Iterator[Stateme
         for sql in drops:
             yield Statement(Phase.FOREIGN_KEY_DROP, sql)
         # Renames carry no referenced-object dependency, so they ride with the adds.
-        comments = _constraint_comment_statements(schema_name, table_name, src_fks, dst_fks)
+        comments = diff_child_comment_statements(
+            schema_name, table_name, src_fks, dst_fks, kind="CONSTRAINT", recreated=recreated, renamed_from=renamed_from
+        )
         for sql in (*renames, *adds, *comments):
             yield Statement(Phase.FOREIGN_KEY_ADD, sql)

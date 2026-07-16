@@ -6,15 +6,18 @@ requires = ["hatchling", "hatch-vcs"]
 dev = [
   "asyncpg-stubs>=0.31.3",
   "httpx==0.28.1",
-  "mypy==2.2.0",
+  "mypy==2.3.0",
   "pre-commit==4.6.0",
+  "psycopg==3.3.4",
+  "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
+  "pytest-sugar==1.1.1",
   "pytest==9.1.1",
   "ruff==0.15.21",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.58",
+  "ty==0.0.59",
   "typing-extensions==4.16.0",
 ]
 
@@ -23,7 +26,7 @@ name = "pgmig"
 dynamic = ["version"]
 description = "Generate migrations between Postgres databases"
 authors = [{name = "Yossi Rozantsev"}]
-license = {text = "MIT"}
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = ["postgres", "postgresql", "migrations", "database", "schema"]
@@ -32,7 +35,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries",
   "Topic :: Software Development :: Libraries :: Python Modules",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -44,9 +46,15 @@ classifiers = [
 dependencies = [
   "asyncpg>=0.31.0",
   #
-  "psycopg[binary]>=3.3.4",
+  "psycopg>=3.3.4",
   "pydantic>=2",
   "typer>=0.12",
+]
+
+[project.optional-dependencies]
+binary = [
+  #
+  "psycopg[binary]>=3.3.4",
 ]
 
 [project.scripts]
