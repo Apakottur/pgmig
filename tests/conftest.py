@@ -1,12 +1,13 @@
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 import shpyx
 
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection, get_unique_postgres_name
+from tests.fixtures.db_utils import DbConnection, get_unique_postgres_name, recreate_database
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -47,17 +48,29 @@ def _unique_key() -> str:
 
 
 @pytest.fixture(scope="session")
+def _pg_major(request: pytest.FixtureRequest) -> int:
+    """
+    Get the Postgres major version of the server under test (e.g. 16).
+    """
+    config_option = request.config.getoption("--pg-version")
+    env_var = os.environ.get("PGMIG_TEST_PG_VERSION")
+
+    # Construct the final Postgres major version.
+    final_pg_version = config_option or env_var or "18"
+
+    # Export it so that docker compose has it.
+    os.environ["PGMIG_TEST_PG_VERSION"] = final_pg_version
+
+    # Return it.
+    return int(final_pg_version)
+
+
+@pytest.fixture(scope="session")
 def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
     """
-    # Resolve the Postgres major version: --pg-version, then PGMIG_TEST_PG_VERSION, then 18.
-    # Export it so the docker compose image tag (postgres:${PGMIG_TEST_PG_VERSION}) resolves;
-    # the subprocess inherits this environment.
-    pg_version = request.config.getoption("--pg-version") or os.environ.get("PGMIG_TEST_PG_VERSION") or "18"
-    os.environ["PGMIG_TEST_PG_VERSION"] = pg_version
-
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
@@ -75,21 +88,30 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
             shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
-@pytest.fixture(scope="function")
-def gen_setup(
+@pytest_asyncio.fixture(scope="function")
+async def gen_setup(
     _admin_conn: DbConnection,
     _unique_key: str,
-) -> Iterator[GenerateSetup]:
+    _pg_major: int,
+) -> AsyncIterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
-    # Create the source and target databases via the shared admin connection.
-    src_conn = DbConnection(get_unique_postgres_name("pgmig_src", _unique_key), admin_conn=_admin_conn)
-    dst_conn = DbConnection(get_unique_postgres_name("pgmig_dst", _unique_key), admin_conn=_admin_conn)
+    # Construct DB names.
+    src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
+    dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
+
+    # Recreate the databases before each test.
+    await recreate_database(_admin_conn, src_db_name)
+    await recreate_database(_admin_conn, dst_db_name)
+
+    # Create the DB connections.
+    src_conn = DbConnection(src_db_name)
+    dst_conn = DbConnection(dst_db_name)
 
     # Provide the utility class for the test.
     try:
-        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=_unique_key)
+        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, pg_major=_pg_major, unique_key=_unique_key)
     finally:
         src_conn.close()
         dst_conn.close()

@@ -15,7 +15,7 @@ async def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None
 async def test_instead_of_trigger_on_view_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     An INSTEAD OF trigger on a view (pg_trigger on relkind 'v') is not modelled and must raise
-    rather than let generate() silently ignore it.
+    rather than be silently ignored.
     """
     await gen_setup.assert_unsupported(
         src=[],
