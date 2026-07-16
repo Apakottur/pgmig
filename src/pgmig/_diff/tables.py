@@ -49,6 +49,17 @@ def _parenthesize_generation(expression: str) -> str:
     return f"({inner})"
 
 
+def _type_clause(column: Column) -> str:
+    """
+    The column's type, with a COLLATE clause when the column overrides the type's default
+    collation. Introspection only records a collation that differs from the type default, so
+    a non-collated column renders as the bare type.
+    """
+    if column.collation is not None:
+        return f"{column.type} COLLATE {ident(column.collation)}"
+    return column.type
+
+
 def _column_def(column: Column) -> str:
     """
     Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
@@ -70,10 +81,10 @@ def _column_def(column: Column) -> str:
     if column.generated in ("s", "v"):
         expression = _parenthesize_generation(column.generation_expression or "")
         storage = "STORED" if column.generated == "s" else "VIRTUAL"
-        clause = f"{ident(column.name)} {column.type} GENERATED ALWAYS AS {expression} {storage}"
+        clause = f"{ident(column.name)} {_type_clause(column)} GENERATED ALWAYS AS {expression} {storage}"
         return f"{clause} NOT NULL" if column.not_null else clause
 
-    parts = [f"{ident(column.name)} {column.type}"]
+    parts = [f"{ident(column.name)} {_type_clause(column)}"]
     if column.default is not None:
         parts.append(f"DEFAULT {column.default}")
     if column.not_null:
@@ -258,11 +269,13 @@ def _alter_shared_column(
     # A generated column is the exception: Postgres recomputes it from its
     # expression on a type change and refuses USING ("cannot specify USING when
     # altering type of generated column"), so the USING clause is omitted for it.
-    if src_column.type != dst_column.type:
+    if (src_column.type, src_column.collation) != (dst_column.type, dst_column.collation):
         if dst_column.generated != "":
-            statements.append(f"{prefix} TYPE {dst_column.type};")
+            statements.append(f"{prefix} TYPE {_type_clause(dst_column)};")
         else:
-            statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
+            statements.append(
+                f"{prefix} TYPE {_type_clause(dst_column)} USING {ident(column_name)}::{dst_column.type};"
+            )
     # A VIRTUAL generated column's expression is changed in place (PG18+); STORED is rebuilt
     # via DROP + ADD above, which returns early, so only VIRTUAL reaches here.
     if expression_changed:

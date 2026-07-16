@@ -13,6 +13,7 @@ def _generated_column(name: str, *, generated: str, expression: str | None, not_
     return Column(
         name=name,
         type="integer",
+        collation=None,
         not_null=not_null,
         default=None,
         comment=None,

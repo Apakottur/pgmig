@@ -5,6 +5,13 @@ SELECT
     c.relname AS table_name,
     a.attname AS column_name,
     format_type(a.atttypid, a.atttypmod) AS column_type,
+    -- The column's collation, but only when it differs from the type's default collation
+    -- (pg_type.typcollation). Emitting the default for every column that has one would make an
+    -- identical DB diff against itself; a column with no collation has attcollation 0 = the
+    -- type default, so it yields NULL here too.
+    CASE WHEN a.attcollation <> col_type.typcollation THEN
+        co.collname
+    END AS column_collation,
     a.attnotnull AS column_not_null,
     -- A generated column's expression lives in pg_attrdef too, so split by attgenerated:
     -- a plain column's expression is a DEFAULT, a generated column's is its GENERATED clause.
@@ -54,6 +61,8 @@ FROM
         AND NOT a.attisdropped
     LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid
         AND ad.adnum = a.attnum
+    LEFT JOIN pg_type col_type ON col_type.oid = a.atttypid
+    LEFT JOIN pg_collation co ON co.oid = a.attcollation
 WHERE
     c.relkind IN ('r', 'p')
     AND n.nspname NOT LIKE 'pg_%'
