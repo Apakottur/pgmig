@@ -1,5 +1,5 @@
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -7,14 +7,14 @@ import shpyx
 
 from pgmig._db import DbConnection
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import ADMIN_DB_DSN, get_unique_postgres_name
+from tests.fixtures.db_utils import get_dsn, get_unique_postgres_name, recreate_database
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """
-    Custom pytest options
+    Custom pytest options.
     """
     parser.addoption(
         "--stop-docker",
@@ -38,6 +38,7 @@ def _unique_key() -> str:
     """
     Get a unique identifier for the current test session.
     """
+    # Generate a unique key from the git branch.
     result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
     branch = result.stdout.strip()
     if result.return_code == 0 and branch and branch != "HEAD":
@@ -47,6 +48,7 @@ def _unique_key() -> str:
     return "unknown"
 
 
+@pytest.fixture(scope="session")
 def _pg_major(request: pytest.FixtureRequest) -> int:
     """
     Get the Postgres major version of the server under test (e.g. 16).
@@ -65,7 +67,7 @@ def _pg_major(request: pytest.FixtureRequest) -> int:
 
 
 @pytest.fixture(scope="session")
-async def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
+async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
@@ -73,10 +75,11 @@ async def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
-    # Open a single connection to the admin database for the whole session.
-    admin_conn = DbConnection(dsn=ADMIN_DB_DSN)
+    # Get the database DSN.
+    admin_db_dsn = get_dsn("postgres")
 
-    async with DbConnection.connect(ADMIN_DB_DSN) as admin_conn:
+    # Open a single connection to the admin database for the whole session.
+    async with DbConnection.connect(dsn=admin_db_dsn) as admin_conn:
         yield admin_conn
 
     # Stop the database server, unless asked to leave it running.
@@ -87,20 +90,30 @@ async def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
 
 @pytest.fixture(scope="function")
 async def gen_setup(
-    _admin_conn: DbConnection,
     _unique_key: str,
     _pg_major: int,
+    _admin_conn: DbConnection,
 ) -> AsyncIterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
+    # Get the database names and DSNs.
     src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
     dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
+    src_db_dsn = get_dsn(src_db_name)
+    dst_db_dsn = get_dsn(dst_db_name)
 
     # Recreate the DBs before each test.
-    await _admin_conn.recreate_database()
-    await _admin_conn.recreate_database()
+    await recreate_database(_admin_conn, src_db_name)
+    await recreate_database(_admin_conn, dst_db_name)
 
     # Create DB connections and yield for the test.
-    async with DbConnection(src_db_name) as src_conn, DbConnection(dst_db_name) as dst_conn:
-        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, pg_major=_pg_major, unique_key=_unique_key)
+    async with DbConnection.connect(dsn=src_db_dsn) as src_conn, DbConnection.connect(dsn=dst_db_dsn) as dst_conn:
+        yield GenerateSetup(
+            src_db_name=src_db_name,
+            dst_db_name=dst_db_name,
+            src_conn=src_conn,
+            dst_conn=dst_conn,
+            pg_major=_pg_major,
+            unique_key=_unique_key,
+        )

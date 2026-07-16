@@ -1,6 +1,6 @@
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import wait_until_accepting_connections
+from tests.fixtures.db_utils import get_dsn
 
 
 async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
@@ -10,11 +10,9 @@ async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None
     # Create an object on the source database over a direct connection.
     await gen_setup.src.execute("CREATE TABLE widget (id integer)")
 
-    # Wait for pgbouncer to start accepting connections.
-    wait_until_accepting_connections(gen_setup.src.pgbouncer_dsn)
-
     # Introspect the database through pgbouncer.
-    info = await introspect_db(gen_setup.src.pgbouncer_dsn)
+    pgbouncer_dsn = get_dsn(gen_setup.src.dsn, pgbouncer=True)
+    info = await introspect_db(dsn=pgbouncer_dsn)
 
     # Verify the introspection result.
     assert "widget" in info.schema_by_name["public"].table_by_name

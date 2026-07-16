@@ -1,22 +1,10 @@
 import hashlib
 import re
 
-import tenacity
-
 from pgmig._db import DbConnection
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
-ADMIN_DB_DSN = f"{_DSN_PREFIX}/postgres"
-
-
-@tenacity.retry(wait=tenacity.wait_fixed(0.5), stop=tenacity.stop_after_delay(15), reraise=True)
-def wait_until_accepting_connections(dsn: str) -> None:
-    """
-    Block until the given DSN accepts a connection, retrying while it is not ready (e.g.
-    waiting for pgbouncer to come up alongside Postgres).
-    """
-    psycopg.connect(dsn).close()
 
 
 # Postgres truncates identifiers past this length, which would silently collapse
@@ -45,9 +33,19 @@ def get_unique_postgres_name(base: str, key: str) -> str:
     return f"{base}_{slug_trunc}_{digest}"
 
 
-async def recreate_database(db_name: str, admin_conn: DbConnection) -> None:
+def get_dsn(db_name: str, *, pgbouncer: bool = False) -> str:
     """
-    Recreate the database.
+    Get the DSN for a database.
+    """
+    if pgbouncer:
+        return f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
+    else:
+        return f"{_DSN_PREFIX}/{db_name}"
+
+
+async def recreate_database(admin_conn: DbConnection, db_name: str) -> None:
+    """
+    Recreate a database.
     """
     # Drop the database, if exists. WITH (FORCE) atomically terminates any
     # lingering backends and drops the database, avoiding the race between a
@@ -56,14 +54,3 @@ async def recreate_database(db_name: str, admin_conn: DbConnection) -> None:
 
     # Create the database.
     await admin_conn.execute(f"CREATE DATABASE {db_name}")
-
-
-class PytestDbConnection:
-    def __init__(self, db_name: str) -> None:
-        # Database name and DSN.
-        self.db_name = db_name
-        self.dsn = f"{_DSN_PREFIX}/{db_name}"
-        self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
-
-        # Open a single connection, reused for every query on this database.
-        self._conn = self._connect()

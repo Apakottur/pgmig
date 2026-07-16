@@ -9,7 +9,7 @@ async def test_identical_dbs_with_source_search_path_setting(gen_setup: Generate
     await gen_setup.assert_diff(
         src=[
             # Source database pins an empty search_path (a common hardened setup); new connections inherit it.
-            f"ALTER DATABASE {gen_setup.src.db_name} SET search_path = ''",
+            f"ALTER DATABASE {gen_setup.src_db_name} SET search_path = ''",
         ],
         dst=[],
         both=[

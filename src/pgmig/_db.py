@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import Any, TypeVar, cast
 
 import psycopg
-from psycopg.rows import class_row
 from pydantic import BaseModel
 from typing_extensions import LiteralString, Self
 
@@ -30,7 +29,7 @@ class DbConnection:
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, dsn: str) -> AsyncIterator[Self]:
+    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
         """
         Connection context.
         """
@@ -63,7 +62,7 @@ class DbReadOnlyConnection(DbConnection):
         """
         Read-only connection context.
         """
-        async with super().connect(dsn) as conn:
+        async with super().connect(dsn=dsn) as conn:
             # Force all subsequent transactions to be read-only.
             await conn.driver_conn.set_read_only(True)
 
