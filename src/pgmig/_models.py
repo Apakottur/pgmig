@@ -375,6 +375,5 @@ class DbIntrospectionResult:
     # Mapping from a view to the set of table columns it reads.
     view_column_dependencies: dict[ViewKey, set[ColumnKey]]
 
-    # Mapping from a composite type to the set of composite types it depends on (a field
-    # whose type -- or, for an array field, whose element type -- is another composite type).
+    # Mapping from a composite type to the set of composite types it depends on.
     composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]
