@@ -55,7 +55,7 @@ class DbConnection:
         # Fetch the results, if any.
         results: list[tuple[Any, ...]] = []
         if result.description:
-            result = await result.fetchall()
+            results = await result.fetchall()
 
         # Return the results.
         return results

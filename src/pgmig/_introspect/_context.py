@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from pgmig._db import DbConnection, DbReadOnlyConnection
+from pgmig._db import DbReadOnlyConnection
 from pgmig._models import DbIntrospectionResult
 
 
