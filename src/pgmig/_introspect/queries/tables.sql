@@ -17,6 +17,10 @@ SELECT
     col_description(a.attrelid, a.attnum) AS column_comment,
     obj_description(c.oid, 'pg_class') AS table_comment,
     pg_get_userbyid(c.relowner) AS table_owner,
+    -- 'u' = UNLOGGED, 'p' = permanent. Temp tables ('t') live in pg_temp schemas, which
+    -- the schema filter below excludes, and partitioned parents cannot be unlogged, so
+    -- only 'p'/'u' reach the loader.
+    c.relpersistence AS table_persistence,
     a.attidentity AS column_identity,
     a.attgenerated AS column_generated,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,

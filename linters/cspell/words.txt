@@ -175,6 +175,8 @@ pgbouncer
 pooler
 edoburu
 userlist
+relpersistence
+unlogged
 asyncio
 agenerate
 maxfail

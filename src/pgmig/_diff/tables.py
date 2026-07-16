@@ -89,11 +89,15 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
     A partition is created with PARTITION OF (no column list -- columns are inherited from
     the parent); a partitioned parent (or a sub-partitioned partition) carries a trailing
     PARTITION BY clause.
+
+    A partition child may be UNLOGGED independently of its (always-logged) parent, so the
+    keyword is emitted on both the plain and PARTITION OF forms.
     """
+    keyword = "UNLOGGED TABLE" if table.unlogged else "TABLE"
     if table.partition_parent is not None:
         parent_schema, parent_name = table.partition_parent
         statement = (
-            f"CREATE TABLE {qualified(schema_name, table.name)} "
+            f"CREATE {keyword} {qualified(schema_name, table.name)} "
             f"PARTITION OF {qualified(parent_schema, parent_name)} {table.partition_bound}"
         )
         if table.is_partitioned:
@@ -102,7 +106,7 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
 
     columns = ", ".join(_column_def(column) for column in table.columns)
     partition_by = f" PARTITION BY {table.partition_key}" if table.is_partitioned else ""
-    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns}){partition_by};"]
+    return [f"CREATE {keyword} {qualified(schema_name, table.name)} ({columns}){partition_by};"]
 
 
 def _attach_partition(schema_name: str, table_name: str, parent: tuple[str, str], bound: str | None) -> str:
@@ -280,6 +284,18 @@ def _alter_shared_column(
     return statements, deferred_drop_not_null
 
 
+def _persistence_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... SET LOGGED / SET UNLOGGED when a table's durability flips between
+    sides. Applies to plain tables and partition children alike (a partitioned parent is
+    always logged, so it never flips here).
+    """
+    if src_table.unlogged == dst_table.unlogged:
+        return []
+    action = "SET UNLOGGED" if dst_table.unlogged else "SET LOGGED"
+    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} {action};"]
+
+
 def _table_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
     """
     Emit COMMENT ON TABLE when the comment differs (absent source table = no comment).
@@ -396,6 +412,9 @@ def generate() -> Iterator[Statement]:
     # columns are inherited), then owner and comments.
     for schema_name, table_name, src_table, dst_table in alters:
         rendered = _membership_statements(schema_name, table_name, src_table, dst_table)
+        # Persistence flip applies to partition children too, so it is outside the
+        # is_partition column-diff gate below.
+        rendered += _persistence_statements(schema_name, src_table, dst_table)
         deferred_drop_not_null: list[str] = []
         if not dst_table.is_partition:
             column_statements, deferred_drop_not_null = _alter_columns(
