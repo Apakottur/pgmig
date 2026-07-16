@@ -31,6 +31,14 @@ SELECT
     a.attidentity AS column_identity,
     a.attgenerated AS column_generated,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,
+    -- Backing sequence options of an identity column (NULL for every non-identity column).
+    -- The identity sequence is linked to its column by an INTERNAL ('i') pg_depend edge.
+    idseq.seqstart AS identity_start,
+    idseq.seqincrement AS identity_increment,
+    idseq.seqmin AS identity_min,
+    idseq.seqmax AS identity_max,
+    idseq.seqcache AS identity_cache,
+    idseq.seqcycle AS identity_cycle,
     -- Partitioning metadata (per table, repeated on every column row; the loader reads
     -- it once when it first creates the table).
     pt.partstrat::text AS partition_strategy,
@@ -63,6 +71,15 @@ FROM
         AND ad.adnum = a.attnum
     LEFT JOIN pg_type col_type ON col_type.oid = a.atttypid
     LEFT JOIN pg_collation co ON co.oid = a.attcollation
+    -- Identity column's backing sequence: the sequence has an INTERNAL dependency on the
+    -- column (deptype 'i'). Serial columns use deptype 'a' instead, so this matches identity
+    -- sequences only. NULL-joins for every non-identity column.
+    LEFT JOIN pg_depend idseq_dep ON idseq_dep.refobjid = a.attrelid
+        AND idseq_dep.refobjsubid = a.attnum
+        AND idseq_dep.deptype = 'i'
+        AND idseq_dep.classid = 'pg_class'::regclass
+        AND idseq_dep.refclassid = 'pg_class'::regclass
+    LEFT JOIN pg_sequence idseq ON idseq.seqrelid = idseq_dep.objid
 WHERE
     c.relkind IN ('r', 'p')
     AND n.nspname NOT LIKE 'pg_%'

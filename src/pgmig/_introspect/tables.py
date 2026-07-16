@@ -21,6 +21,13 @@ class _TableRow(_QueryRow):
     column_identity: str | None
     column_generated: str | None
     column_serial_sequence: str | None
+    # Identity backing-sequence options; all NULL for a non-identity column.
+    identity_start: int | None
+    identity_increment: int | None
+    identity_min: int | None
+    identity_max: int | None
+    identity_cache: int | None
+    identity_cycle: bool | None
     # Partitioning metadata (per table, repeated on every column row).
     partition_strategy: str | None
     partition_key: str | None
@@ -81,5 +88,11 @@ async def load() -> None:
                 serial_sequence=table_row.column_serial_sequence,
                 generated=table_row.column_generated,
                 generation_expression=table_row.generation_expression,
+                identity_start=table_row.identity_start,
+                identity_increment=table_row.identity_increment,
+                identity_min=table_row.identity_min,
+                identity_max=table_row.identity_max,
+                identity_cache=table_row.identity_cache,
+                identity_cycle=table_row.identity_cycle,
             )
         )

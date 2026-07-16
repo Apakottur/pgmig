@@ -1,10 +1,73 @@
 from collections.abc import Iterator
+from typing import cast
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_single_comment
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
+
+# Value bounds per integer type an identity column may use (smallint/integer/bigint only).
+# An identity sequence's default MINVALUE/MAXVALUE are derived from these and the increment
+# sign, so an explicitly-set bound can be told apart from a default one.
+_IDENTITY_TYPE_BOUNDS: dict[str, tuple[int, int]] = {
+    "smallint": (-32768, 32767),
+    "integer": (-2147483648, 2147483647),
+    "bigint": (-9223372036854775808, 9223372036854775807),
+}
+
+
+def _identity_options_clause(column: Column) -> str:
+    """
+    The " (OPTION value ...)" tail for an identity column's CREATE/ADD, listing only the
+    sequence options that differ from their defaults, or "" when every option is a default.
+
+    Defaults depend on the sign of the increment and on the column's integer type: an
+    ascending sequence runs 1..type_max and a descending one runs type_min..-1, and in both
+    cases the start defaults to the range's near end (MINVALUE ascending, MAXVALUE descending).
+    Call only for an identity column (every identity_* field is then set).
+    """
+    increment = cast("int", column.identity_increment)
+    type_min, type_max = _IDENTITY_TYPE_BOUNDS[column.type]
+    ascending = increment > 0
+    default_start = column.identity_min if ascending else column.identity_max
+    parts: list[str] = []
+    if column.identity_start != default_start:
+        parts.append(f"START WITH {column.identity_start}")
+    if increment != 1:
+        parts.append(f"INCREMENT BY {increment}")
+    if column.identity_min != (1 if ascending else type_min):
+        parts.append(f"MINVALUE {column.identity_min}")
+    if column.identity_max != (type_max if ascending else -1):
+        parts.append(f"MAXVALUE {column.identity_max}")
+    if column.identity_cache != 1:
+        parts.append(f"CACHE {column.identity_cache}")
+    if column.identity_cycle:
+        parts.append("CYCLE")
+    return f" ({' '.join(parts)})" if parts else ""
+
+
+def _identity_option_set_clauses(src_column: Column, dst_column: Column) -> list[str]:
+    """
+    The `SET <option>` clauses for the identity sequence options that differ between two
+    columns that are both identity columns. Chained into a single ALTER COLUMN by the caller.
+    A value returning to its default still differs from the source value, so it is emitted
+    (SET INCREMENT BY 1) rather than dropped, keeping the diff convergent.
+    """
+    clauses: list[str] = []
+    if src_column.identity_start != dst_column.identity_start:
+        clauses.append(f"SET START WITH {dst_column.identity_start}")
+    if src_column.identity_increment != dst_column.identity_increment:
+        clauses.append(f"SET INCREMENT BY {dst_column.identity_increment}")
+    if src_column.identity_min != dst_column.identity_min:
+        clauses.append(f"SET MINVALUE {dst_column.identity_min}")
+    if src_column.identity_max != dst_column.identity_max:
+        clauses.append(f"SET MAXVALUE {dst_column.identity_max}")
+    if src_column.identity_cache != dst_column.identity_cache:
+        clauses.append(f"SET CACHE {dst_column.identity_cache}")
+    if src_column.identity_cycle != dst_column.identity_cycle:
+        clauses.append("SET CYCLE" if dst_column.identity_cycle else "SET NO CYCLE")
+    return clauses
 
 
 def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -73,7 +136,7 @@ def _column_def(column: Column) -> str:
     # implies NOT NULL and owns its backing sequence, both of which must not be emitted
     # alongside it (mirrors the serial pseudo-type above).
     if column.identity_clause is not None:
-        return f"{ident(column.name)} {column.type} {column.identity_clause}"
+        return f"{ident(column.name)} {column.type} {column.identity_clause}{_identity_options_clause(column)}"
 
     # A generated column carries its expression as a GENERATED ALWAYS AS (...) clause, not a
     # DEFAULT, followed by STORED or VIRTUAL (VIRTUAL is PG18+). A generated column may still
@@ -297,10 +360,17 @@ def _alter_shared_column(
             # NOT NULL block below is skipped for identity targets, so no double).
             if not src_column.not_null:
                 statements.append(f"{prefix} SET NOT NULL;")
-            statements.append(f"{prefix} ADD {dst_column.identity_clause};")
+            statements.append(f"{prefix} ADD {dst_column.identity_clause}{_identity_options_clause(dst_column)};")
         else:
             # Stays an identity, generation kind flips (ALWAYS <-> BY DEFAULT).
             statements.append(f"{prefix} SET GENERATED {dst_column.identity_kind};")
+    # Sequence-option changes on a column that is an identity on both sides. A column that
+    # gains its identity here carries these options inline in the ADD above (src has no
+    # identity, so this is skipped); one that loses its identity has no sequence to alter.
+    if src_column.identity_kind is not None and dst_column.identity_kind is not None:
+        option_clauses = _identity_option_set_clauses(src_column, dst_column)
+        if option_clauses:
+            statements.append(f"{prefix} {' '.join(option_clauses)};")
     if dst_column.default is not None and src_column.default != dst_column.default:
         statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
     if src_column.not_null != dst_column.not_null:

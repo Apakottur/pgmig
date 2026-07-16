@@ -189,3 +189,4 @@ reloption
 autovacuum
 retargeted
 nextval
+idseq
