@@ -1,10 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
 import psycopg
 from pydantic import BaseModel
-from typing_extensions import LiteralString, Self
+from typing_extensions import Self
 
 from pgmig._errors import _PgmigError
 
@@ -29,12 +29,12 @@ class DbConnection:
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
+    async def connect(cls, *, dsn: str, auto_commit: bool = True) -> AsyncIterator[Self]:
         """
         Connection context.
         """
         try:
-            conn = await psycopg.AsyncConnection.connect(dsn)
+            conn = await psycopg.AsyncConnection.connect(dsn, autocommit=auto_commit)
         except psycopg.Error as error:
             raise _PgmigError(f"Could not connect to database: {error}") from error
 
@@ -46,7 +46,7 @@ class DbConnection:
         Execute a statement that returns no rows.
         """
         try:
-            return await self.driver_conn.execute(cast("LiteralString", statement))
+            return await self.driver_conn.execute(statement)  # ty: ignore[no-matching-overload]
         except psycopg.errors.UniqueViolation as error:
             raise UniqueViolation(str(error)) from error
 
@@ -58,11 +58,11 @@ class DbReadOnlyConnection(DbConnection):
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, dsn: str) -> AsyncIterator[Self]:
+    async def connect(cls, *, dsn: str, auto_commit: bool = True) -> AsyncIterator[Self]:
         """
         Read-only connection context.
         """
-        async with super().connect(dsn=dsn) as conn:
+        async with super().connect(dsn=dsn, auto_commit=auto_commit) as conn:
             # Force all subsequent transactions to be read-only.
             await conn.driver_conn.set_read_only(True)
 

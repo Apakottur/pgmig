@@ -11,7 +11,7 @@ async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None
     await gen_setup.src.execute("CREATE TABLE widget (id integer)")
 
     # Introspect the database through pgbouncer.
-    pgbouncer_dsn = get_dsn(gen_setup.src.dsn, pgbouncer=True)
+    pgbouncer_dsn = get_dsn(gen_setup.src_db_name, pgbouncer=True)
     info = await introspect_db(dsn=pgbouncer_dsn)
 
     # Verify the introspection result.

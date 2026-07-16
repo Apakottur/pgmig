@@ -2,8 +2,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from pgmig import agenerate
+from pgmig._db import DbConnection
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection
 
 
 def _create_extension(name: str, *, version: str | None = None, schema: str | None = None) -> str:

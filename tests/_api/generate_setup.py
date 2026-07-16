@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig import PgmigUnsupportedError, agenerate
-from tests.fixtures.db_utils import DbConnection
+from pgmig._db import DbConnection
 
 
 class GenerateSetup:
