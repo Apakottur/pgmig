@@ -178,3 +178,6 @@ userlist
 asyncio
 agenerate
 maxfail
+reloptions
+reloption
+autovacuum
