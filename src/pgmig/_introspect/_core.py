@@ -1,9 +1,7 @@
 from pathlib import Path
-from typing import Protocol, TypeVar, cast
+from typing import Protocol, TypeVar
 
-from psycopg.rows import class_row
 from pydantic import BaseModel, ConfigDict
-from typing_extensions import LiteralString
 
 from pgmig._introspect._context import context
 
@@ -22,9 +20,9 @@ class _QueryRow(BaseModel):
 
 class Loader(Protocol):
     """
-    The shared shape of every object-kind loader: read from the introspection connection and
-    populate the result being assembled on the context. Loaders run in a dependency-significant
-    order (schemas and tables before the objects that attach to them).
+    The shared shape of every object-kind loader: read from the connection and populate
+    the DB introspection result being assembled. Loaders run in a dependency-significant order (schemas
+    and tables before the objects that attach to them).
     """
 
     async def __call__(self) -> None: ...
@@ -46,13 +44,9 @@ _RowT = TypeVar("_RowT", bound=_QueryRow)
 
 async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
     """
-    Load a bundled SQL query from the queries directory, run it on the current introspection
-    connection, and parse each row into the given Pydantic model (by SELECT column alias).
-    Validation happens at parse time, so a schema/type drift surfaces here rather than
-    silently downstream.
+    Load a bundled SQL query from the queries directory and run it on the current
+    introspection connection, parsing each row into the given Pydantic model.
     """
     file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
-    query = cast("LiteralString", file_path.read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
-    async with context.conn.cursor(row_factory=class_row(model)) as cur:
-        await cur.execute(query)
-        return await cur.fetchall()
+    query = file_path.read_text(encoding="utf-8")
+    return await context.conn.introspect(query, model)

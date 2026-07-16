@@ -2,10 +2,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
 
-import psycopg
-
+from pgmig._db import DbReadOnlyConnection
 from pgmig._models import DbIntrospectionResult
 
 
@@ -16,7 +14,7 @@ class _ContextData:
     """
 
     # DB connection.
-    conn: psycopg.AsyncConnection[Any]
+    conn: DbReadOnlyConnection
 
     # Result being assembled by the loaders.
     db_introspection_result: DbIntrospectionResult
@@ -35,7 +33,7 @@ class _Context:
     def context_scope(
         self,
         *,
-        conn: psycopg.AsyncConnection[Any],
+        conn: DbReadOnlyConnection,
         db_introspection_result: DbIntrospectionResult,
     ) -> Iterator[None]:
         token = _context.set(
@@ -50,7 +48,7 @@ class _Context:
             _context.reset(token)
 
     @property
-    def conn(self) -> psycopg.AsyncConnection[Any]:
+    def conn(self) -> DbReadOnlyConnection:
         return _context.get().conn
 
     @property

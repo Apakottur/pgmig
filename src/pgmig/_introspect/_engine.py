@@ -1,8 +1,5 @@
-from typing import Any
-
-import psycopg
-
-from pgmig._errors import PgmigUnsupportedError, _PgmigError
+from pgmig._db import DbReadOnlyConnection
+from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
     composite_types,
     constraints,
@@ -59,34 +56,23 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-async def _connect(dsn: str) -> psycopg.AsyncConnection[Any]:
-    """
-    Create the introspection connection.
-    """
-    try:
-        conn = await psycopg.AsyncConnection.connect(dsn)
-    except psycopg.Error as error:
-        raise _PgmigError(f"Could not connect to database: {error}") from error
-
-    # Force all subsequent transactions to be read-only.
-    await conn.set_read_only(True)
-
-    # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
-    await conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
-
-    # Return the connection.
-    return conn
-
-
 async def introspect_db(dsn: str) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
     """
     db_introspection_result = DbIntrospectionResult(
-        schema_by_name={}, extension_by_name={}, view_dependencies={}, view_column_dependencies={}
+        schema_by_name={},
+        extension_by_name={},
+        view_dependencies={},
+        view_column_dependencies={},
     )
-    async with await _connect(dsn) as conn:
-        with context.context_scope(conn=conn, db_introspection_result=db_introspection_result):
+
+    async with DbReadOnlyConnection.connect(dsn=dsn) as conn:
+        # Run within the introspection context.
+        with context.context_scope(
+            conn=conn,
+            db_introspection_result=db_introspection_result,
+        ):
             # Use an empty search path to make introspection independent of the database's own search path.
             await conn.execute("SET LOCAL search_path = ''")
 
@@ -100,4 +86,5 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
 
             for load in _LOADERS:
                 await load()
+
     return db_introspection_result

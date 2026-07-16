@@ -1,13 +1,12 @@
 import hashlib
 import re
-from typing import Any
 
-import psycopg
 import tenacity
+
+from pgmig._db import DbConnection
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
-_ADMIN_DB_NAME = "postgres"
 
 
 # Postgres truncates identifiers past this length, which would silently collapse
@@ -36,9 +35,32 @@ def get_unique_postgres_name(base: str, key: str) -> str:
     return f"{base}_{slug_trunc}_{digest}"
 
 
-async def recreate_database(admin_conn: "DbConnection", db_name: str) -> None:
+def get_dsn(db_name: str, *, pgbouncer: bool = False) -> str:
     """
-    Recreate the database.
+    Get the DSN for a database.
+    """
+    if pgbouncer:
+        return f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
+    else:
+        return f"{_DSN_PREFIX}/{db_name}"
+
+
+@tenacity.retry(
+    wait=tenacity.wait_fixed(0.5),
+    stop=tenacity.stop_after_delay(10),
+    reraise=True,
+)
+async def wait_for_db_connection(*, dsn: str) -> None:
+    """
+    Wait for a database to be ready to accept connections.
+    """
+    async with DbConnection.connect(dsn=dsn):
+        pass
+
+
+async def recreate_database(admin_conn: DbConnection, db_name: str) -> None:
+    """
+    Recreate a database.
     """
     # Drop the database, if exists. WITH (FORCE) atomically terminates any
     # lingering backends and drops the database, avoiding the race between a
@@ -47,43 +69,3 @@ async def recreate_database(admin_conn: "DbConnection", db_name: str) -> None:
 
     # Create the database.
     await admin_conn.execute(f"CREATE DATABASE {db_name}")
-
-
-class DbConnection:
-    def __init__(self, db_name: str) -> None:
-        # Database name and DSN.
-        self.db_name = db_name
-        self.dsn = f"{_DSN_PREFIX}/{db_name}"
-        self.pgbouncer_dsn = f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
-
-        # Open a single connection, reused for every query on this database.
-        self._conn = self._connect()
-
-    @tenacity.retry(
-        wait=tenacity.wait_fixed(0.5),
-        stop=tenacity.stop_after_delay(10),
-        reraise=True,
-    )
-    def _connect(self) -> psycopg.Connection:
-        """
-        Open a connection, retrying until the database is ready to accept them.
-        """
-        return psycopg.connect(self.dsn, autocommit=True)
-
-    def close(self) -> None:
-        """
-        Close the connection.
-        """
-        self._conn.close()
-
-    async def execute(self, query: str) -> list[tuple[Any, ...]]:
-        """
-        Execute a SQL statement against this database on the reused connection.
-        """
-        result = self._conn.execute(query)  # ty: ignore[no-matching-overload]
-
-        # Fetch query results.
-        if result.description is None:
-            return []
-        else:
-            return result.fetchall()
