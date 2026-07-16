@@ -1,4 +1,4 @@
--- Constraints (primary key, unique, and check).
+-- Constraints (primary key, unique, check, and exclusion).
 SELECT
     n.nspname AS schema_name,
     c.relname AS table_name,
@@ -20,7 +20,7 @@ SELECT
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
     c.relkind IN ('r', 'p')
-    AND con.contype IN ('p', 'u', 'c', 'f')
+    AND con.contype IN ('p', 'u', 'c', 'f', 'x')
     -- Exclude constraints inherited from a partitioned parent (conparentid <> 0): they are
     -- (re)created by the parent's cascading ADD CONSTRAINT. A parent-level declaration and
     -- a child's own local constraint both have conparentid = 0 and are kept.

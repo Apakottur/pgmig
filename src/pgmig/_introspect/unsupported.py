@@ -8,7 +8,6 @@ _KIND_NAMES = {
     ("pg_class", "f"): "foreign table",
     ("pg_type", "r"): "range type",
     ("pg_type", "b"): "base type",
-    ("pg_constraint", "x"): "exclusion constraint",
     ("pg_proc", "a"): "aggregate",
     ("pg_proc", "w"): "window function",
     ("pg_trigger", "v"): "INSTEAD OF trigger",
@@ -32,7 +31,7 @@ class _UnsupportedRow(_QueryRow):
 async def check() -> list[str]:
     """
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
-    list: foreign tables, range/base types, exclusion constraints, aggregate/window
+    list: foreign tables, range/base types, aggregate/window
     functions, view INSTEAD OF triggers, rules, RLS policies and RLS-enabled tables, legacy
     inheritance children, extended statistics, event triggers). Without this, generate()
     diffs only the supported kinds and returns "" for a database whose not-yet-modelled

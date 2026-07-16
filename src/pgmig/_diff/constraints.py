@@ -25,7 +25,8 @@ def _diff_constraints(
 
 def generate() -> Iterator[Statement]:
     """
-    Generate the migration SQL of primary key, unique, and check constraints (add, drop, rename).
+    Generate the migration SQL of primary key, unique, check, and exclusion constraints
+    (add, drop, rename).
     """
     for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
         # Table dropped: its constraints are dropped with it.

@@ -1,18 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-async def test_exclusion_constraint_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    An EXCLUDE constraint (pg_constraint contype 'x') is not modelled yet and must raise
-    rather than be silently dropped by the constraint query's contype filter.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TABLE room (during int4range, EXCLUDE USING gist (during WITH &&))"],
-        match=r"exclusion constraint .* is not supported",
-    )
-
-
 async def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:
     """
     Primary key present in target but missing in source -> ADD CONSTRAINT.
@@ -278,4 +266,85 @@ async def test_foreign_key_comment_added(gen_setup: GenerateSetup) -> None:
         src=[],
         dst=["COMMENT ON CONSTRAINT person_team_fkey ON person IS 'team ref'"],
         diff=['COMMENT ON CONSTRAINT "person_team_fkey" ON "public"."person" IS \'team ref\''],
+    )
+
+
+async def test_constraint_add_exclusion(gen_setup: GenerateSetup) -> None:
+    """
+    Exclusion constraint (contype 'x') present in target but missing in source -> ADD CONSTRAINT.
+    The backing gist index rides along with the constraint and is not emitted separately.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE room (during int4range)"],
+        src=[],
+        dst=["ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)"],
+        diff=['ALTER TABLE "public"."room" ADD CONSTRAINT "room_during_excl" EXCLUDE USING gist (during WITH &&)'],
+    )
+
+
+async def test_constraint_drop_exclusion(gen_setup: GenerateSetup) -> None:
+    """
+    Exclusion constraint present in source but missing in target -> DROP CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=["CREATE TABLE room (during int4range)"],
+        diff=['ALTER TABLE "public"."room" DROP CONSTRAINT "room_during_excl"'],
+    )
+
+
+async def test_constraint_rename_exclusion(gen_setup: GenerateSetup) -> None:
+    """
+    Same exclusion definition on both sides, only the name differs -> RENAME CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl_old EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl_new EXCLUDE USING gist (during WITH &&)",
+        ],
+        diff=['ALTER TABLE "public"."room" RENAME CONSTRAINT "room_excl_old" TO "room_excl_new"'],
+    )
+
+
+async def test_constraint_exclusion_definition_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Same name, different exclusion operator -> DROP CONSTRAINT then ADD CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl EXCLUDE USING gist (during WITH -|-)",
+        ],
+        diff=[
+            'ALTER TABLE "public"."room" DROP CONSTRAINT "room_excl"',
+            'ALTER TABLE "public"."room" ADD CONSTRAINT "room_excl" EXCLUDE USING gist (during WITH -|-)',
+        ],
+    )
+
+
+async def test_constraint_exclusion_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Same exclusion name and definition on both sides -> no migration SQL.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        diff=[],
     )
