@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 
 from pgmig._diff._engine import get_diff
+from pgmig._errors import PgmigApiError
 from pgmig._introspect._engine import introspect_db
 
 
@@ -59,7 +60,20 @@ def generate(
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
+
+    Raises:
+        PgmigApiError: If called from within a running event loop. This synchronous wrapper
+                       drives its own loop via [`asyncio.run`][asyncio.run], which cannot nest;
+                       call [`agenerate`][pgmig.agenerate] and await it instead.
     """
+    # Verify that we're not already in an asyncio context.
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise PgmigApiError("generate() cannot be called from within a running event loop. Use agenerate() instead.")
+
     return asyncio.run(
         agenerate(
             source=source,
