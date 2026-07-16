@@ -61,8 +61,6 @@ class _ContextData:
 
     @cached_property
     def retyped_column_readers(self) -> set[ViewKey]:
-        # Diff-scoped cache of the retyped-column reader scan (see _get_retyped_column_readers).
-        # Lazy: a diff whose generators never ask -- e.g. one with no views -- never runs it.
         return _get_retyped_column_readers(self.source, self.target)
 
 
