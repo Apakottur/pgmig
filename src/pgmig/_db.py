@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any, TypeVar
 
 import psycopg
+from psycopg.rows import dict_row
 from pydantic import BaseModel
 from typing_extensions import Self
 
@@ -41,14 +42,23 @@ class DbConnection:
         async with conn:
             yield cls(dsn=dsn, conn=conn)
 
-    async def execute(self, statement: str) -> psycopg.AsyncCursor[Any]:
+    async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
         Execute a statement that returns no rows.
         """
+        # Execute the statement.
         try:
-            return await self.driver_conn.execute(statement)  # ty: ignore[no-matching-overload]
+            result = await self.driver_conn.execute(statement)  # ty: ignore[no-matching-overload]
         except psycopg.errors.UniqueViolation as error:
             raise UniqueViolation(str(error)) from error
+
+        # Fetch the results, if any.
+        results = []
+        if result.description:
+            result = await result.fetchall()
+
+        # Return the results.
+        return results
 
 
 class DbReadOnlyConnection(DbConnection):
@@ -69,17 +79,20 @@ class DbReadOnlyConnection(DbConnection):
             # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
             await conn.driver_conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
 
+            # Use an empty search path so introspection is independent of the database's own search
+            # path: pg_get_*def()/format_type() then emit fully schema-qualified names.
+            await conn.driver_conn.execute("SET search_path = ''")
+
             yield conn
 
     async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
         """
         Run introspection query and parse each row into the given model.
         """
-        # Execute the query.
-        cursor = await self.execute(query)
-
-        # Fetch the results.
-        result = await cursor.fetchall()
+        # Execute the query, fetching rows as dicts so field names map to the model.
+        async with self.driver_conn.cursor(row_factory=dict_row) as cursor:
+            await cursor.execute(query)  # ty: ignore[no-matching-overload]
+            result = await cursor.fetchall()
 
         # Parse the results.
         return [response_model.model_validate(row) for row in result]

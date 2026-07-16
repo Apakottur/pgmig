@@ -31,7 +31,7 @@ async def _get_installable_extension(conn: DbConnection) -> _ExtensionInfo:
     version. Relocatable extensions install into the current schema (public in a
     fresh database) and can be moved with ALTER EXTENSION ... SET SCHEMA.
     """
-    result = await conn.execute(
+    rows = await conn.execute(
         """
         SELECT ae.name, ae.default_version
         FROM pg_available_extensions ae
@@ -41,7 +41,6 @@ async def _get_installable_extension(conn: DbConnection) -> _ExtensionInfo:
         ORDER BY ae.name
         """
     )
-    rows = await result.fetchall()
     assert rows, "no relocatable extension available"
     name, default_version = rows[0]
     return _ExtensionInfo(name=name, version=default_version, schema="public")
@@ -66,8 +65,7 @@ async def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExte
         return [int(part) for part in version.split(".")]
 
     # Get all available extension versions.
-    result = await conn.execute("SELECT name, version FROM pg_available_extension_versions ORDER BY name")
-    rows = await result.fetchall()
+    rows = await conn.execute("SELECT name, version FROM pg_available_extension_versions ORDER BY name")
 
     # Group versions by name.
     versions_by_name = defaultdict(list)
