@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._models import ColumnKey, Schema, Table, ViewKey
+from pgmig._models import Schema, Table, ViewKey
 from pgmig._sql import comment_on, ident, qualified
 
 if TYPE_CHECKING:
@@ -271,44 +271,6 @@ def ctx_iter_object_pairs(
         yield schema_name, src_objs, dst_objs, pairs
 
 
-def retyped_column_refs() -> set[ColumnKey]:
-    """
-    Columns of tables present on both sides whose type changes between source and target.
-    Postgres refuses ALTER COLUMN ... TYPE while a view reads the column, and -- unlike a
-    dropped column -- a type change leaves the reading view's definition text unchanged, so
-    the view-definition recreate path never catches it. The view diff intersects these with
-    its view-on-column edges to decide which views to drop and recreate around the change.
-
-    Source-side identity (a column read by a source view exists in the source). A serial
-    change keeps the integer `type`, so it does not surface here; that is intentional -- a
-    serial change is unsupported and raised by the table diff before applying.
-    """
-    refs: set[ColumnKey] = set()
-    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
-        if src_table is None or dst_table is None:
-            continue
-        dst_columns = {column.name: column for column in dst_table.columns}
-        for src_column in src_table.columns:
-            dst_column = dst_columns.get(src_column.name)
-            if dst_column is not None and src_column.type != dst_column.type:
-                refs.add(ColumnKey(schema_name, table_name, src_column.name))
-    return refs
-
-
-def retyped_column_readers() -> set[ViewKey]:
-    """
-    Views and materialized views that read (in the source) a table column whose type changes
-    between source and target. Such a reader must be dropped and recreated around the
-    ALTER COLUMN ... TYPE: Postgres refuses the alter while the column is read, and the type
-    change leaves the reader's definition text unchanged, so only the column edge catches it.
-
-    Shared by the view diff, the matview diff, and the matview-index differ (which must treat
-    such a matview as recreated so its indexes are recreated with it).
-    """
-    retyped_columns = retyped_column_refs()
-    return {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
-
-
 def recreated_matview_keys() -> set[ViewKey]:
     """
     Materialized views present on both sides that the migration drops and recreates: either the
@@ -322,7 +284,7 @@ def recreated_matview_keys() -> set[ViewKey]:
     indexes, so every target index is created fresh). A matview present on only one side is a
     plain create or drop, not a recreate, and is absent here.
     """
-    column_readers = retyped_column_readers()
+    column_readers = context.retyped_column_readers
     keys: set[ViewKey] = set()
     for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_views = src_schema.materialized_view_by_name if src_schema else {}
