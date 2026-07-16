@@ -2,6 +2,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import cached_property
 
 from pgmig._models import ColumnKey, DbIntrospectionResult, ViewKey
 
@@ -14,8 +15,10 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
     a type change leaves the reader's definition text unchanged, so the view-definition recreate
     path never catches it. Only the source view-on-column edges catch it.
 
-    Computed once per diff in context_scope and shared by the view diff, the matview diff, and
-    the matview-index differ, so the O(tables x columns) scan runs a single time.
+    Computed lazily on first access and cached for the diff scope (see
+    _ContextData.retyped_column_readers), shared by the view diff, the matview diff, and the
+    matview-index differ, so the O(tables x columns) scan runs at most once -- and never at all
+    for a diff with no views.
 
     Source-side identity (a column read by a source view exists in the source). A serial change
     keeps the integer `type`, so it does not surface here; that is intentional -- a serial change
@@ -56,9 +59,11 @@ class _ContextData:
     # Suppress all ALTER ... OWNER TO statements.
     ignore_owner: bool
 
-    # Views/matviews reading a table column whose type changes this diff. Computed once in
-    # context_scope and shared by the view, matview, and matview-index generators.
-    retyped_column_readers: set[ViewKey]
+    @cached_property
+    def retyped_column_readers(self) -> set[ViewKey]:
+        # Diff-scoped cache of the retyped-column reader scan (see _get_retyped_column_readers).
+        # Lazy: a diff whose generators never ask -- e.g. one with no views -- never runs it.
+        return _get_retyped_column_readers(self.source, self.target)
 
 
 # Context of the current diff generation.
@@ -87,7 +92,6 @@ class _Context:
                 index_concurrently=index_concurrently,
                 ignore_extension_version=ignore_extension_version,
                 ignore_owner=ignore_owner,
-                retyped_column_readers=_get_retyped_column_readers(source, target),
             )
         )
         try:
