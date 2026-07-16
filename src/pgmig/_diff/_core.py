@@ -280,8 +280,8 @@ def retyped_column_readers() -> set[ViewKey]:
 
     Shared by the view diff, the matview diff, and the matview-index differ (which must treat
     such a matview as recreated so its indexes are recreated with it). The set is identical for
-    every caller in a run, so the context computes it lazily on first access and caches it for
-    the diff scope (see _ContextData.retyped_column_readers), sparing repeat callers a fresh
+    every caller in a run, so the context computes it once at scope entry (see
+    _get_retyped_column_readers in _context) and this reads it back, sparing each caller a fresh
     O(tables x columns) scan.
     """
     return context.retyped_column_readers

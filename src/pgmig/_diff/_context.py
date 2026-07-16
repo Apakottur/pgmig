@@ -2,24 +2,26 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from functools import cached_property
 
 from pgmig._models import ColumnKey, DbIntrospectionResult, ViewKey
 
 
-def _retyped_column_refs(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[ColumnKey]:
+def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[ViewKey]:
     """
-    Columns of tables present on both sides whose type changes between source and target.
-    Postgres refuses ALTER COLUMN ... TYPE while a view reads the column, and -- unlike a
-    dropped column -- a type change leaves the reading view's definition text unchanged, so
-    the view-definition recreate path never catches it. The view diff intersects these with
-    its view-on-column edges to decide which views to drop and recreate around the change.
+    Views/matviews that read (in the source) a table column whose type changes between source
+    and target. Such a reader must be dropped and recreated around the ALTER COLUMN ... TYPE:
+    Postgres refuses the alter while a view reads the column, and -- unlike a dropped column --
+    a type change leaves the reader's definition text unchanged, so the view-definition recreate
+    path never catches it. Only the source view-on-column edges catch it.
 
-    Source-side identity (a column read by a source view exists in the source). A serial
-    change keeps the integer `type`, so it does not surface here; that is intentional -- a
-    serial change is unsupported and raised by the table diff before applying.
+    Computed once per diff in context_scope and shared by the view diff, the matview diff, and
+    the matview-index differ, so the O(tables x columns) scan runs a single time.
+
+    Source-side identity (a column read by a source view exists in the source). A serial change
+    keeps the integer `type`, so it does not surface here; that is intentional -- a serial change
+    is unsupported and raised by the table diff before applying.
     """
-    refs: set[ColumnKey] = set()
+    retyped_columns: set[ColumnKey] = set()
     for schema_name in source.schema_by_name.keys() & target.schema_by_name.keys():
         src_tables = source.schema_by_name[schema_name].table_by_name
         dst_tables = target.schema_by_name[schema_name].table_by_name
@@ -28,8 +30,8 @@ def _retyped_column_refs(source: DbIntrospectionResult, target: DbIntrospectionR
             for src_column in src_tables[table_name].columns:
                 dst_column = dst_columns.get(src_column.name)
                 if dst_column is not None and src_column.type != dst_column.type:
-                    refs.add(ColumnKey(schema_name, table_name, src_column.name))
-    return refs
+                    retyped_columns.add(ColumnKey(schema_name, table_name, src_column.name))
+    return {key for key, cols in source.view_column_dependencies.items() if cols & retyped_columns}
 
 
 @dataclass(frozen=True)
@@ -54,18 +56,9 @@ class _ContextData:
     # Suppress all ALTER ... OWNER TO statements.
     ignore_owner: bool
 
-    @cached_property
-    def retyped_column_readers(self) -> set[ViewKey]:
-        """
-        Views/matviews reading (in the source) a table column whose type changes this diff.
-        The three generators that need it (view, matview, matview-index) share one diff-scoped
-        instance, so the O(tables x columns) scan runs once and is cached here; a diff with no
-        views never triggers it at all. The cache lives and dies with the diff scope.
-        """
-        retyped_columns = _retyped_column_refs(self.source, self.target)
-        return {
-            key for key, cols in self.source.view_column_dependencies.items() if cols & retyped_columns
-        }
+    # Views/matviews reading a table column whose type changes this diff. Computed once in
+    # context_scope and shared by the view, matview, and matview-index generators.
+    retyped_column_readers: set[ViewKey]
 
 
 # Context of the current diff generation.
@@ -94,6 +87,7 @@ class _Context:
                 index_concurrently=index_concurrently,
                 ignore_extension_version=ignore_extension_version,
                 ignore_owner=ignore_owner,
+                retyped_column_readers=_get_retyped_column_readers(source, target),
             )
         )
         try:
