@@ -11,6 +11,10 @@ _runner = CliRunner()
 
 
 async def _run_cli(args: str, env: dict[str, str] | None = None) -> Result:
+    """
+    Run the CLI application.
+    """
+    # We need to wrap with asyncio.to_thread to prevent an issue with asyncio event loops and typer.
     return await asyncio.to_thread(lambda: _runner.invoke(app, args, env=env))
 
 

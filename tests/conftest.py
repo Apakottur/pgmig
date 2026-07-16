@@ -52,13 +52,17 @@ def _pg_major(request: pytest.FixtureRequest) -> int:
     """
     Get the Postgres major version of the server under test (e.g. 16).
     """
-    # Resolve the Postgres major version: --pg-version, then PGMIG_TEST_PG_VERSION, then 18.
-    # Export it so the docker compose image tag (postgres:${PGMIG_TEST_PG_VERSION}) resolves;
-    # the subprocess inherits this environment.
-    pg_version = request.config.getoption("--pg-version") or os.environ.get("PGMIG_TEST_PG_VERSION") or "18"
-    os.environ["PGMIG_TEST_PG_VERSION"] = pg_version
+    config_option = request.config.getoption("--pg-version")
+    env_var = os.environ.get("PGMIG_TEST_PG_VERSION")
 
-    return int(pg_version) // 10000
+    # Construct the final Postgres major version.
+    final_pg_version = config_option or env_var or "18"
+
+    # Export it so that docker compose has it.
+    os.environ["PGMIG_TEST_PG_VERSION"] = final_pg_version
+
+    # Return it.
+    return int(final_pg_version)
 
 
 @pytest.fixture(scope="session")
