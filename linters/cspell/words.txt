@@ -177,3 +177,4 @@ edoburu
 userlist
 asyncio
 agenerate
+maxfail
