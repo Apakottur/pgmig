@@ -1,5 +1,6 @@
 from pgmig._diff.functions import _topological_drop_order
-from pgmig._models import Function, FunctionKey
+from pgmig._keys import FunctionKey
+from pgmig._models import Function
 
 
 def _func(name: str, depends_on: set[FunctionKey]) -> Function:

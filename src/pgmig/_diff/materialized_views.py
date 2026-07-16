@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, recreated_matview_keys
-from pgmig._models import ViewKey
+from pgmig._keys import ViewKey
 from pgmig._sql import qualified
 
 

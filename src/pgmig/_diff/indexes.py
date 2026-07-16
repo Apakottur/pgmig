@@ -1,7 +1,14 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_comment_statements, diff_renamable
+from pgmig._diff._core import (
+    Phase,
+    RenameDiff,
+    Statement,
+    ctx_iter_table_pairs,
+    diff_comment_statements,
+    diff_renamable,
+)
 from pgmig._models import Index
 from pgmig._sql import ident, qualified
 
@@ -24,10 +31,10 @@ def _diff_indexes(
     src: dict[str, Index],
     dst: dict[str, Index],
     concurrently: bool,
-) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
+) -> RenameDiff:
     """
-    Diff one table's standalone indexes into (drops, renames, creates), using each
-    index's name-independent canonical form as the rename key. Drops and creates carry
+    Diff one table's standalone indexes into a RenameDiff, using each index's
+    name-independent canonical form as the rename key. Drops and creates carry
     CONCURRENTLY when requested; a rename is ALTER INDEX and cannot be concurrent.
     """
     drop_keyword = "DROP INDEX CONCURRENTLY" if concurrently else "DROP INDEX"

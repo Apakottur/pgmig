@@ -4,7 +4,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
 
-from pgmig._models import ColumnKey, DbIntrospectionResult, ViewKey
+from pgmig._keys import ColumnKey, ViewKey
+from pgmig._models import DbIntrospectionResult
 
 
 def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[ViewKey]:

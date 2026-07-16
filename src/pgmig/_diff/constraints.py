@@ -1,15 +1,22 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_child_comment_statements, diff_renamable
+from pgmig._diff._core import (
+    Phase,
+    RenameDiff,
+    Statement,
+    ctx_iter_table_pairs,
+    diff_child_comment_statements,
+    diff_renamable,
+)
 from pgmig._models import Constraint
 from pgmig._sql import ident, qualified
 
 
 def _diff_constraints(
     *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
+) -> RenameDiff:
     """
-    Diff one table's constraints (of a single kind) into (drops, renames, adds).
+    Diff one table's constraints (of a single kind) into a RenameDiff.
     The constraint definition (from pg_get_constraintdef) is already name-independent.
     """
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"

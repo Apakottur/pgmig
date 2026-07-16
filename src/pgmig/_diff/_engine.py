@@ -28,7 +28,7 @@ from pgmig._models import DbIntrospectionResult
 # matview indexes no longer belong here: they were split into Phase.MATVIEW_INDEX_CREATE so
 # their dependency on the matview create (Phase.VIEW_CREATE) is structural, not registration-
 # order luck. A new object kind is a new module plus one entry here.
-_GENERATORS: tuple[Generator, ...] = (
+_GENERATORS: list[Generator] = [
     schemas.generate,
     extensions.generate,
     enums.generate,
@@ -44,7 +44,7 @@ _GENERATORS: tuple[Generator, ...] = (
     views.generate,
     materialized_views.generate,
     matview_indexes.generate,
-)
+]
 
 
 def get_diff(

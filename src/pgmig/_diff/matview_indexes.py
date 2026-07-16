@@ -2,7 +2,8 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, recreated_matview_keys
 from pgmig._diff.indexes import diff_index_statements
-from pgmig._models import Index, ViewKey
+from pgmig._keys import ViewKey
+from pgmig._models import Index
 
 
 def generate() -> Iterator[Statement]:

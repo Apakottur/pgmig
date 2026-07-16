@@ -1,9 +1,10 @@
 from collections.abc import Iterator
-from typing import cast
+from typing import NamedTuple, cast
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_single_comment
 from pgmig._errors import PgmigUnsupportedError
+from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -68,6 +69,18 @@ def _identity_option_set_clauses(src_column: Column, dst_column: Column) -> list
     if src_column.identity_cycle != dst_column.identity_cycle:
         clauses.append("SET CYCLE" if dst_column.identity_cycle else "SET NO CYCLE")
     return clauses
+
+
+class ColumnDiff(NamedTuple):
+    """
+    Column-sync statements split by phase. `statements` run in the TABLE phase;
+    `deferred_drop_not_null` must run after the CONSTRAINT phase (a DROP NOT NULL on a
+    column whose covering primary key is dropped this run -- Postgres refuses it while the
+    column is still in a primary key).
+    """
+
+    statements: list[str]
+    deferred_drop_not_null: list[str]
 
 
 def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -168,10 +181,10 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
     """
     keyword = "UNLOGGED TABLE" if table.unlogged else "TABLE"
     if table.partition_parent is not None:
-        parent_schema, parent_name = table.partition_parent
+        parent = table.partition_parent
         statement = (
             f"CREATE {keyword} {qualified(schema_name, table.name)} "
-            f"PARTITION OF {qualified(parent_schema, parent_name)} {table.partition_bound}"
+            f"PARTITION OF {qualified(parent.schema, parent.name)} {table.partition_bound}"
         )
         if table.is_partitioned:
             statement += f" PARTITION BY {table.partition_key}"
@@ -182,25 +195,23 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
     return [f"CREATE {keyword} {qualified(schema_name, table.name)} ({columns}){partition_by};"]
 
 
-def _attach_partition(schema_name: str, table_name: str, parent: tuple[str, str], bound: str | None) -> str:
+def _attach_partition(schema_name: str, table_name: str, parent: RelationKey, bound: str | None) -> str:
     """
     ALTER TABLE <parent> ATTACH PARTITION <child> <bound> -- make an existing standalone
     table a partition.
     """
-    parent_schema, parent_name = parent
     return (
-        f"ALTER TABLE {qualified(parent_schema, parent_name)} "
+        f"ALTER TABLE {qualified(parent.schema, parent.name)} "
         f"ATTACH PARTITION {qualified(schema_name, table_name)} {bound};"
     )
 
 
-def _detach_partition(schema_name: str, table_name: str, parent: tuple[str, str]) -> str:
+def _detach_partition(schema_name: str, table_name: str, parent: RelationKey) -> str:
     """
     ALTER TABLE <parent> DETACH PARTITION <child> -- turn a partition back into a
     standalone table (the table itself survives).
     """
-    parent_schema, parent_name = parent
-    return f"ALTER TABLE {qualified(parent_schema, parent_name)} DETACH PARTITION {qualified(schema_name, table_name)};"
+    return f"ALTER TABLE {qualified(parent.schema, parent.name)} DETACH PARTITION {qualified(schema_name, table_name)};"
 
 
 def _alter_columns(
@@ -211,15 +222,15 @@ def _alter_columns(
     dst_table: Table,
     pk_columns: set[str],
     src_pk_columns: set[str],
-) -> tuple[list[str], list[str]]:
+) -> ColumnDiff:
     """
     Sync the columns of a table present on both sides: add/drop by name, and for a
     shared column sync TYPE, then DEFAULT, then NOT NULL. An identity or serial change is
     unsupported and raises rather than emitting a silently-empty (falsely converged)
     migration.
 
-    Returns (statements, deferred_drop_not_null). The first run in the TABLE phase; the
-    second must run after the CONSTRAINT phase (see below).
+    Returns a ColumnDiff: TABLE-phase statements plus the DROP NOT NULLs deferred past the
+    CONSTRAINT phase (see below).
 
     A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
     ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. The mirror case: a column
@@ -251,7 +262,7 @@ def _alter_columns(
             )
             statements.extend(column_statements)
             deferred_drop_not_null.extend(column_deferred)
-    return statements, deferred_drop_not_null
+    return ColumnDiff(statements, deferred_drop_not_null)
 
 
 def _alter_shared_column(
@@ -263,14 +274,14 @@ def _alter_shared_column(
     dst_column: Column,
     pk_columns: set[str],
     src_pk_columns: set[str],
-) -> tuple[list[str], list[str]]:
+) -> ColumnDiff:
     """
     Sync one column present on both sides: TYPE, then DEFAULT, then NOT NULL, with the
     identity ADD/SET/DROP interleaved in the order Postgres requires. An identity or serial
     change that cannot be expressed raises rather than emitting a silently-empty diff.
 
-    Returns (statements, deferred_drop_not_null) for this column; see `_alter_columns` for
-    why a DROP NOT NULL on a source-PK column is deferred past the CONSTRAINT phase.
+    Returns a ColumnDiff for this column; see `_alter_columns` for why a DROP NOT NULL on a
+    source-PK column is deferred past the CONSTRAINT phase.
     """
     statements: list[str] = []
     deferred_drop_not_null: list[str] = []
@@ -309,7 +320,7 @@ def _alter_shared_column(
     )
     if expression_changed and src_column.generated == "s":
         table_prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
-        return (
+        return ColumnDiff(
             [
                 f"{table_prefix} DROP COLUMN {ident(column_name)};",
                 f"{table_prefix} ADD COLUMN {_column_def(dst_column)};",
@@ -384,7 +395,7 @@ def _alter_shared_column(
             deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")
         else:
             statements.append(f"{prefix} DROP NOT NULL;")
-    return statements, deferred_drop_not_null
+    return ColumnDiff(statements, deferred_drop_not_null)
 
 
 def _persistence_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
@@ -425,14 +436,14 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     )
 
 
-def _partition_depth(key: tuple[str, str], table_map: dict[tuple[str, str], Table]) -> int:
+def _partition_depth(key: RelationKey, table_map: dict[RelationKey, Table]) -> int:
     """
     Depth of a table in the partition hierarchy (0 = root / not a partition), walking the
     partition_parent chain within `table_map`. Sorting creates by depth guarantees a
     parent is created before its partitions (and sub-partitions).
     """
     depth = 0
-    seen: set[tuple[str, str]] = set()
+    seen: set[RelationKey] = set()
     table: Table | None = table_map.get(key)
     while table is not None and table.partition_parent is not None and table.partition_parent not in seen:
         seen.add(table.partition_parent)
@@ -494,8 +505,8 @@ def generate() -> Iterator[Statement]:
     partition whose parent is also dropped is skipped.
     """
     pairs = list(ctx_iter_table_pairs())
-    src_map = {(schema, name): src for schema, name, src, _dst in pairs if src is not None}
-    dst_map = {(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
+    src_map = {RelationKey(schema, name): src for schema, name, src, _dst in pairs if src is not None}
+    dst_map = {RelationKey(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
 
     creates: list[tuple[str, str, Table]] = []
     alters: list[tuple[str, str, Table, Table]] = []
@@ -509,7 +520,7 @@ def generate() -> Iterator[Statement]:
             alters.append((schema_name, table_name, src_table, dst_table))
 
     # Create: parent before child (and comments; a new table has no source owner to sync).
-    creates.sort(key=lambda item: (_partition_depth((item[0], item[1]), dst_map), item[0], item[1]))
+    creates.sort(key=lambda item: (_partition_depth(RelationKey(item[0], item[1]), dst_map), item[0], item[1]))
     for schema_name, _table_name, dst_table in creates:
         rendered = _create_table(schema_name, dst_table)
         rendered += _table_comment_statements(schema_name, None, dst_table)
@@ -548,7 +559,7 @@ def generate() -> Iterator[Statement]:
     # Drop: skip a partition whose parent is also dropped (the parent's DROP TABLE
     # cascades to it). Attached objects are dropped with the table.
     for schema_name, table_name in drops:
-        parent = src_map[schema_name, table_name].partition_parent
+        parent = src_map[RelationKey(schema_name, table_name)].partition_parent
         if parent is not None and parent in src_map and parent not in dst_map:
             continue
         yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")

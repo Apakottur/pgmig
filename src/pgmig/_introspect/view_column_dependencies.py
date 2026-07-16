@@ -1,6 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._models import ColumnKey, ViewKey
+from pgmig._keys import ColumnKey, ViewKey
 
 
 class _ViewColumnDependencyRow(_QueryRow):

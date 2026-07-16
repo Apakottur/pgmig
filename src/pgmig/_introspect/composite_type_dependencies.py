@@ -1,6 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._models import CompositeTypeKey
+from pgmig._keys import CompositeTypeKey
 
 
 class _CompositeTypeDependencyRow(_QueryRow):

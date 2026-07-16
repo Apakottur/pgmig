@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
 from pgmig._sql import qualified
 
@@ -23,16 +24,16 @@ def _sequence_tail(sequence: Sequence) -> str:
     return tail
 
 
-def _owned_by_clause(owned_by: tuple[str, str, str] | None) -> str:
+def _owned_by_clause(owned_by: ColumnKey | None) -> str:
     """
     Render the OWNED BY target of an ALTER SEQUENCE: the qualified column, or NONE.
     """
     if owned_by is None:
         return "NONE"
-    return qualified(*owned_by)
+    return qualified(owned_by.schema, owned_by.table, owned_by.column)
 
 
-def _owning_column_survives(owned_by: tuple[str, str, str]) -> bool:
+def _owning_column_survives(owned_by: ColumnKey) -> bool:
     """
     Whether the column an owned sequence is tied to still exists in the target.
 
@@ -41,10 +42,9 @@ def _owning_column_survives(owned_by: tuple[str, str, str]) -> bool:
     drops the sequence, so an explicit DROP SEQUENCE would fail "sequence does not exist";
     only emit one when the column survives.
     """
-    schema_name, table_name, column_name = owned_by
-    schema = context.target.schema_by_name.get(schema_name)
-    table = schema.table_by_name.get(table_name) if schema else None
-    return table is not None and any(column.name == column_name for column in table.columns)
+    schema = context.target.schema_by_name.get(owned_by.schema)
+    table = schema.table_by_name.get(owned_by.table) if schema else None
+    return table is not None and any(column.name == owned_by.column for column in table.columns)
 
 
 def generate() -> Iterator[Statement]:

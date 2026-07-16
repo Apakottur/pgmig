@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
 
 
@@ -46,7 +47,7 @@ async def load() -> None:
         if table is None:
             # A partition has both a parent schema and name (the query sets them together).
             partition_parent = (
-                (table_row.partition_parent_schema, table_row.partition_parent_name)
+                RelationKey(table_row.partition_parent_schema, table_row.partition_parent_name)
                 if table_row.partition_parent_schema is not None and table_row.partition_parent_name is not None
                 else None
             )

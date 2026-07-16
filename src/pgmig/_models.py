@@ -1,57 +1,7 @@
 from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
-
-
-@dataclass(frozen=True, order=True)
-class ViewKey:
-    """
-    Full view identifier within a database.
-    """
-
-    schema: str
-    name: str
-
-
-@dataclass(frozen=True, order=True)
-class FunctionKey:
-    """
-    Full function identifier within a database (schema plus overload signature).
-    """
-
-    schema: str
-    signature: str  # "name(identity_arguments)"
-
-
-@dataclass(frozen=True, order=True)
-class RelationKey:
-    """
-    Full identifier of a table, view, or materialized view within a database.
-    """
-
-    schema: str
-    name: str
-
-
-@dataclass(frozen=True, order=True)
-class CompositeTypeKey:
-    """
-    Full identifier of a standalone composite type within a database.
-    """
-
-    schema: str
-    name: str
-
-
-@dataclass(frozen=True, order=True)
-class ColumnKey:
-    """
-    Full identifier of a table column within a database.
-    """
-
-    schema: str
-    table: str
-    column: str
+from pgmig._keys import ColumnKey, CompositeTypeKey, FunctionKey, RelationKey, ViewKey
 
 
 @dataclass(frozen=True)
@@ -200,7 +150,7 @@ class Table:
     partition_strategy: str | None
     partition_key: str | None
     partition_bound: str | None
-    partition_parent: tuple[str, str] | None
+    partition_parent: RelationKey | None
 
     # Relations.
     index_by_name: dict[str, Index]
@@ -235,10 +185,10 @@ class Sequence:
     """
     A standalone Postgres sequence (not the backing sequence of a serial/identity column).
 
-    A sequence may still carry a manual OWNED BY: `owned_by` is the (schema, table, column)
-    it is tied to, or None when it is truly standalone. Unlike a serial/identity backing
-    sequence -- whose lifecycle the table layer owns and which is excluded from introspection
-    -- a manually owned sequence is a first-class object whose ownership is diffed here.
+    A sequence may still carry a manual OWNED BY: `owned_by` is the ColumnKey it is tied to,
+    or None when it is truly standalone. Unlike a serial/identity backing sequence -- whose
+    lifecycle the table layer owns and which is excluded from introspection -- a manually
+    owned sequence is a first-class object whose ownership is diffed here.
     """
 
     name: str
@@ -250,7 +200,7 @@ class Sequence:
     cache: int
     cycle: bool
     comment: str | None
-    owned_by: tuple[str, str, str] | None
+    owned_by: ColumnKey | None
 
 
 @dataclass(frozen=True)

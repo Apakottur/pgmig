@@ -9,7 +9,8 @@ from pgmig._diff._core import (
     topological_sort,
 )
 from pgmig._errors import PgmigUnsupportedError
-from pgmig._models import Function, FunctionKey, RelationKey
+from pgmig._keys import FunctionKey, RelationKey
+from pgmig._models import Function
 from pgmig._sql import comment_on, qualified
 
 
