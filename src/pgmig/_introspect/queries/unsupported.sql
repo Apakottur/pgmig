@@ -8,7 +8,6 @@
 --   pg_class:             foreign table 'f'; row-level-security table 'rls'; legacy
 --                         inheritance child 'inherits'.
 --   pg_type:              range 'r'; base type 'b'.
---   pg_constraint:        exclusion 'x'   (dropped by constraints.sql's contype filter).
 --   pg_proc:              aggregate 'a', window 'w'   (dropped by functions.sql's prokind filter).
 --   pg_trigger:           INSTEAD OF trigger on a view 'v'   (dropped by triggers.sql).
 --   pg_rewrite:           rule 'r'   (the view _RETURN rule is excluded).
@@ -73,41 +72,6 @@ WHERE
             pg_depend d
         WHERE
             d.objid = t.oid
-            AND d.deptype = 'e')
-UNION ALL
--- Exclusion constraints ('x'), dropped by constraints.sql's contype filter. Same
--- conparentid = 0 guard as constraints.sql so a partition-inherited copy is not
--- double-reported alongside the parent declaration.
-SELECT
-    n.nspname AS schema_name,
-    con.conname AS obj_name,
-    'pg_constraint' AS catalog,
-    con.contype::text AS kind
-FROM
-    pg_constraint con
-    JOIN pg_class c ON c.oid = con.conrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE
-    con.contype = 'x'
-    AND c.relkind IN ('r', 'p')
-    AND con.conparentid = 0
-    AND n.nspname NOT LIKE 'pg_%'
-    AND n.nspname <> 'information_schema'
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = c.oid
             AND d.deptype = 'e')
 UNION ALL
 -- Aggregate ('a') and window ('w') functions, dropped by functions.sql's prokind filter.
