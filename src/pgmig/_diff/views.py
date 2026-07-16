@@ -59,7 +59,14 @@ def generate() -> Iterator[Statement]:
     dst_edges = target.view_dependencies
 
     shared = src_views.keys() & dst_views.keys()
-    changed = {key for key in shared if src_views[key].definition != dst_views[key].definition}
+    # A changed definition or a changed option set both force a drop-and-recreate. Options
+    # (security_invoker, security_barrier, check_option) live outside the definition, so a
+    # pure option change leaves `definition` untouched and must be checked separately.
+    changed = {
+        key
+        for key in shared
+        if src_views[key].definition != dst_views[key].definition or src_views[key].options != dst_views[key].options
+    }
     # A view reading a table column whose type changes must also be recreated: Postgres
     # refuses ALTER COLUMN ... TYPE while a view reads the column, so the view is dropped in
     # VIEW_DROP (before the TABLE-phase change) and recreated in VIEW_CREATE. A type change
@@ -81,8 +88,13 @@ def generate() -> Iterator[Statement]:
     # Creates: dependency-first over the target graph.
     creates = create_only | recreate
     for key in topological_sort(creates, dst_edges):
+        view = dst_views[key]
+        # security_invoker, security_barrier and check_option (WITH CHECK OPTION) all live in
+        # reloptions; emit them verbatim in a WITH (...) clause between the name and AS.
+        with_clause = f" WITH ({', '.join(view.options)})" if view.options else ""
         yield Statement(
-            Phase.VIEW_CREATE, f"CREATE VIEW {qualified(key.schema, key.name)} AS {dst_views[key].definition};"
+            Phase.VIEW_CREATE,
+            f"CREATE VIEW {qualified(key.schema, key.name)}{with_clause} AS {view.definition};",
         )
 
     # Comments, after the views they annotate exist. A recreated view re-emits its comment

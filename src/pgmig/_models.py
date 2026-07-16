@@ -282,6 +282,11 @@ class View:
     name: str
     definition: str  # pg_get_viewdef output: the SELECT the view wraps (no trailing semicolon)
     comment: str | None
+    # pg_class.reloptions, sorted for order-independent comparison: security_invoker,
+    # security_barrier, and check_option (WITH CHECK OPTION) all live here as "key=value"
+    # strings. Emitted verbatim in a CREATE VIEW ... WITH (...) clause; empty when the view
+    # has none.
+    options: tuple[str, ...]
 
 
 @dataclass

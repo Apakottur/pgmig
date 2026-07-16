@@ -4,7 +4,8 @@ SELECT
     n.nspname AS schema_name,
     c.relname AS view_name,
     pg_get_viewdef(c.oid) AS view_definition,
-    obj_description(c.oid, 'pg_class') AS view_comment
+    obj_description(c.oid, 'pg_class') AS view_comment,
+    c.reloptions AS view_options
 FROM
     pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace

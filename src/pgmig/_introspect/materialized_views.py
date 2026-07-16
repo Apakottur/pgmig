@@ -9,7 +9,9 @@ async def load() -> None:
     await _load_views(
         "materialized_views.sql",
         lambda schema: schema.materialized_view_by_name,
-        lambda name, definition, comment: MaterializedView(
+        # A matview's reloptions are storage params (fillfactor, autovacuum_*), not the
+        # view-only security/check options; they are not part of the model, so drop them.
+        lambda name, definition, comment, _options: MaterializedView(
             name=name, definition=definition, comment=comment, index_by_name={}
         ),
     )

@@ -181,3 +181,6 @@ unlogged
 asyncio
 agenerate
 maxfail
+reloptions
+reloption
+autovacuum
