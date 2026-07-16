@@ -1,13 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import (
-    Phase,
-    Statement,
-    ctx_iter_schema_pairs,
-    diff_comment_statements,
-    topological_sort,
-)
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, topological_sort
 from pgmig._models import DbIntrospectionResult, View, ViewKey
 from pgmig._sql import qualified
 
