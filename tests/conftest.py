@@ -7,7 +7,7 @@ import shpyx
 
 from pgmig._db import DbConnection
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import get_dsn, get_unique_postgres_name, recreate_database
+from tests.fixtures.db_utils import get_dsn, get_unique_postgres_name, recreate_database, wait_for_db_connection
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -77,6 +77,9 @@ async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnect
 
     # Get the database DSN.
     admin_db_dsn = get_dsn("postgres")
+
+    # Wait for the database server to be ready.
+    await wait_for_db_connection(dsn=admin_db_dsn)
 
     # Open a single connection to the admin database for the whole session.
     async with DbConnection.connect(dsn=admin_db_dsn) as admin_conn:

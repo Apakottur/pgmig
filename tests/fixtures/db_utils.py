@@ -1,6 +1,8 @@
 import hashlib
 import re
 
+import tenacity
+
 from pgmig._db import DbConnection
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
@@ -41,6 +43,19 @@ def get_dsn(db_name: str, *, pgbouncer: bool = False) -> str:
         return f"{_PGBOUNCER_DSN_PREFIX}/{db_name}"
     else:
         return f"{_DSN_PREFIX}/{db_name}"
+
+
+@tenacity.retry(
+    wait=tenacity.wait_fixed(0.5),
+    stop=tenacity.stop_after_delay(10),
+    reraise=True,
+)
+async def wait_for_db_connection(*, dsn: str) -> None:
+    """
+    Wait for a database to be ready to accept connections.
+    """
+    async with DbConnection.connect(dsn=dsn):
+        pass
 
 
 async def recreate_database(admin_conn: DbConnection, db_name: str) -> None:
