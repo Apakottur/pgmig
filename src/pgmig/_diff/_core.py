@@ -1,14 +1,54 @@
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Protocol, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._models import Schema, Table, ViewKey
 from pgmig._sql import comment_on, ident, qualified
 
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
+
 _Renamable = TypeVar("_Renamable")
 _ObjT = TypeVar("_ObjT")
+_SortableT = TypeVar("_SortableT", bound="SupportsRichComparison")
+
+
+def topological_sort(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_SortableT]]) -> list[_SortableT]:
+    """
+    Order `nodes` dependencies-first via Kahn's algorithm: a node appears after every node
+    it points to in `edges` that is also in `nodes` (edges leaving the set are ignored).
+    Ties break by sorted node, so the output is deterministic regardless of set iteration
+    order.
+
+    A cycle raises rather than silently dropping the cyclic nodes: cyclic nodes never reach
+    zero remaining dependencies, so a plain Kahn's loop would just omit them -- and a caller
+    that reverses this order to emit DROPs would then produce a non-converging diff with no
+    error. Postgres forbids cycles among views and among SQL-body routines, so this guards a
+    can't-happen case.
+    """
+    deps = {node: {dep for dep in edges.get(node, set()) if dep in nodes} for node in nodes}
+    dependents: dict[_SortableT, set[_SortableT]] = {node: set() for node in nodes}
+    for node, node_deps in deps.items():
+        for dep in node_deps:
+            dependents[dep].add(node)
+
+    ready = sorted(node for node, node_deps in deps.items() if not node_deps)
+    order: list[_SortableT] = []
+    while ready:
+        node = ready.pop(0)
+        order.append(node)
+        for dependent in dependents[node]:
+            deps[dependent].discard(node)
+            if not deps[dependent]:
+                ready.append(dependent)
+        ready.sort()
+
+    if len(order) != len(nodes):
+        cyclic = sorted(nodes - set(order))
+        raise AssertionError(f"dependency cycle detected among: {', '.join(repr(node) for node in cyclic)}")
+    return order
 
 
 class _Commented(Protocol):
@@ -63,6 +103,26 @@ def _diff_comments(
         if src_comment != dst[name].comment:
             statements.append(render(name, dst[name]))
     return statements
+
+
+def diff_single_comment(
+    src_obj: _CommentedT | None,
+    dst_obj: _CommentedT,
+    *,
+    render: Callable[[_CommentedT], str],
+) -> list[str]:
+    """
+    Single-object counterpart to _diff_comments: render a COMMENT ON for `dst_obj` when
+    its comment differs from `src_obj` (an absent source object counts as no comment),
+    else nothing. Wraps the pair in a one-entry mapping and defers to _diff_comments so
+    the "absent source = None" rule lives in exactly one place, rather than being
+    hand-copied as `(src.comment if src else None) != dst.comment` per object kind.
+    """
+    return _diff_comments(
+        {} if src_obj is None else {"": src_obj},
+        {"": dst_obj},
+        render=lambda _name, obj: render(obj),
+    )
 
 
 def diff_comment_statements(
@@ -220,10 +280,36 @@ def retyped_column_readers() -> set[ViewKey]:
 
     Shared by the view diff, the matview diff, and the matview-index differ (which must treat
     such a matview as recreated so its indexes are recreated with it). The set is identical for
-    every caller in a run, so the context computes it once at scope entry (see _ContextData) and
-    this reads it back, sparing each caller a fresh O(tables x columns) scan.
+    every caller in a run, so the context computes it lazily on first access and caches it for
+    the diff scope (see _ContextData.retyped_column_readers), sparing repeat callers a fresh
+    O(tables x columns) scan.
     """
     return context.retyped_column_readers
+
+
+def recreated_matview_keys() -> set[ViewKey]:
+    """
+    Materialized views present on both sides that the migration drops and recreates: either the
+    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW) or the matview reads a
+    table column whose type changes (Postgres refuses ALTER COLUMN ... TYPE while the column is
+    read, and the type change leaves the definition text unchanged, so only the column edge
+    catches it).
+
+    The single source of truth for the recreate decision, consumed by both the matview diff
+    (which drops and recreates) and the matview-index differ (a recreated matview loses its
+    indexes, so every target index is created fresh). A matview present on only one side is a
+    plain create or drop, not a recreate, and is absent here.
+    """
+    column_readers = retyped_column_readers()
+    keys: set[ViewKey] = set()
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_views = src_schema.materialized_view_by_name if src_schema else {}
+        dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
+        for name in src_views.keys() & dst_views.keys():
+            key = ViewKey(schema_name, name)
+            if src_views[name].definition != dst_views[name].definition or key in column_readers:
+                keys.add(key)
+    return keys
 
 
 def diff_renamable(

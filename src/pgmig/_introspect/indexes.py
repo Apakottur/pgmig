@@ -1,13 +1,9 @@
-from typing import Any
-
-import psycopg
-from pydantic import BaseModel
-
-from pgmig._introspect._core import _run_query
-from pgmig._models import DbInfo, Index
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import Index
 
 
-class _IndexRow(BaseModel):
+class _IndexRow(_QueryRow):
     schema_name: str
     table_name: str
     index_name: str
@@ -16,12 +12,14 @@ class _IndexRow(BaseModel):
     index_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Indexes (standalone only; constraint-backed indexes are excluded).
     """
-    for index_row in _run_query(conn, "indexes.sql", _IndexRow):
-        table = db_info.schema_by_name[index_row.schema_name].table_by_name[index_row.table_name]
+    for index_row in await run_introspection_query("indexes.sql", _IndexRow):
+        table = context.db_introspection_result.schema_by_name[index_row.schema_name].table_by_name[
+            index_row.table_name
+        ]
         table.index_by_name[index_row.index_name] = Index(
             name=index_row.index_name,
             definition=index_row.index_def,

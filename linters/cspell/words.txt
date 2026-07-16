@@ -175,3 +175,6 @@ pgbouncer
 pooler
 edoburu
 userlist
+asyncio
+agenerate
+maxfail

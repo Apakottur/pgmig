@@ -1,25 +1,21 @@
-from typing import Any
-
-import psycopg
-from pydantic import BaseModel
-
-from pgmig._introspect._core import _run_query
-from pgmig._models import DbInfo, Extension
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import Extension
 
 
-class _ExtensionRow(BaseModel):
+class _ExtensionRow(_QueryRow):
     name: str
     version: str
     extension_schema: str
     extension_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Extensions (database-level).
     """
-    for ext_row in _run_query(conn, "extensions.sql", _ExtensionRow):
-        db_info.extension_by_name[ext_row.name] = Extension(
+    for ext_row in await run_introspection_query("extensions.sql", _ExtensionRow):
+        context.db_introspection_result.extension_by_name[ext_row.name] = Extension(
             name=ext_row.name,
             version=ext_row.version,
             schema=ext_row.extension_schema,

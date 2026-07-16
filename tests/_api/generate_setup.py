@@ -1,7 +1,7 @@
 import pytest
 
-from pgmig import PgmigUnsupportedError, generate
-from tests.fixtures.db_utils import DbConnection
+from pgmig import PgmigUnsupportedError, agenerate
+from pgmig._db import DbConnection
 
 
 class GenerateSetup:
@@ -9,19 +9,31 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, src_conn: DbConnection, dst_conn: DbConnection) -> None:
+    def __init__(
+        self,
+        *,
+        src_db_name: str,
+        dst_db_name: str,
+        src_conn: DbConnection,
+        dst_conn: DbConnection,
+        pg_major: int,
+        unique_key: str,
+    ) -> None:
+        # Database names.
+        self.src_db_name = src_db_name
+        self.dst_db_name = dst_db_name
+
+        # Database connections.
         self.src = src_conn
         self.dst = dst_conn
 
-    @property
-    def pg_major(self) -> int:
-        """
-        Get the Postgres major version of the server under test (e.g. 16).
-        """
-        (row,) = self.src.execute("SHOW server_version_num")
-        return int(row[0]) // 10000
+        # Postgres major version.
+        self.pg_major = pg_major
 
-    def assert_diff(
+        # Unique key for the test session.
+        self.unique_key = unique_key
+
+    async def assert_diff(
         self,
         *,
         src: list[str],
@@ -56,14 +68,14 @@ class GenerateSetup:
                 raise ValueError("Remove trailing newlines and semicolons from the statements to keep tests clean")
 
         # Execute commands.
-        self.src.execute(";\n".join(src))  # ty: ignore[invalid-argument-type]
-        self.dst.execute(";\n".join(dst))  # ty: ignore[invalid-argument-type]
+        await self.src.execute(";\n".join(src))
+        await self.dst.execute(";\n".join(dst))
 
         # Normalize to the "\n"-joined form that `generate` returns.
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
 
         # Generate the migration SQL.
-        result = generate(
+        result = await agenerate(
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
@@ -76,8 +88,8 @@ class GenerateSetup:
         # Apply the migration to the source and confirm it converges: after applying,
         # source should match target, so a second generate must produce nothing.
         if apply and result:
-            self.src.execute(result)  # ty: ignore[invalid-argument-type]
-            residual = generate(
+            await self.src.execute(result)
+            residual = await agenerate(
                 source=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
@@ -85,7 +97,7 @@ class GenerateSetup:
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
-    def assert_unsupported(
+    async def assert_unsupported(
         self,
         *,
         src: list[str],
@@ -94,11 +106,11 @@ class GenerateSetup:
         match: str | None = None,
     ) -> None:
         """
-        Wrapper around `assert_diff` that asserts the migration refuses the change with an
-        UnsupportedChangeError (a documented limitation, not a bug).
+        Wrapper around `assert_diff` that asserts the migration refuses the change with a
+        PgmigUnsupportedError (a documented limitation, not a bug).
         """
         with pytest.raises(PgmigUnsupportedError, match=match):
-            self.assert_diff(
+            await self.assert_diff(
                 src=src,
                 dst=dst,
                 both=both,

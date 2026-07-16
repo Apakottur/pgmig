@@ -1,12 +1,13 @@
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from functools import cached_property
 
-from pgmig._models import ColumnKey, DbInfo, ViewKey
+from pgmig._models import ColumnKey, DbIntrospectionResult, ViewKey
 
 
-def _retyped_column_refs(source: DbInfo, target: DbInfo) -> set[ColumnKey]:
+def _retyped_column_refs(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[ColumnKey]:
     """
     Columns of tables present on both sides whose type changes between source and target.
     Postgres refuses ALTER COLUMN ... TYPE while a view reads the column, and -- unlike a
@@ -31,16 +32,6 @@ def _retyped_column_refs(source: DbInfo, target: DbInfo) -> set[ColumnKey]:
     return refs
 
 
-def _compute_retyped_column_readers(source: DbInfo, target: DbInfo) -> set[ViewKey]:
-    """
-    Views and materialized views that read (in the source) a table column whose type changes
-    between source and target. Such a reader must be dropped and recreated around the
-    ALTER COLUMN ... TYPE (see pgmig._diff._core.retyped_column_readers for the full story).
-    """
-    retyped_columns = _retyped_column_refs(source, target)
-    return {key for key, cols in source.view_column_dependencies.items() if cols & retyped_columns}
-
-
 @dataclass(frozen=True)
 class _ContextData:
     """
@@ -48,8 +39,8 @@ class _ContextData:
     """
 
     # Databases.
-    source: DbInfo
-    target: DbInfo
+    source: DbIntrospectionResult
+    target: DbIntrospectionResult
 
     # Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
     # Using CONCURRENTLY avoid blocking index read/write operations, but takes longer to execute and cannot be
@@ -63,13 +54,18 @@ class _ContextData:
     # Suppress all ALTER ... OWNER TO statements.
     ignore_owner: bool
 
-    # Views/matviews reading a table column whose type changes this diff. Derived from
-    # source/target in __post_init__ (not a constructor arg) and shared by the three generators
-    # that need it (view, matview, matview-index), so the O(tables x columns) scan runs once.
-    retyped_column_readers: set[ViewKey] = field(init=False, compare=False, repr=False)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "retyped_column_readers", _compute_retyped_column_readers(self.source, self.target))
+    @cached_property
+    def retyped_column_readers(self) -> set[ViewKey]:
+        """
+        Views/matviews reading (in the source) a table column whose type changes this diff.
+        The three generators that need it (view, matview, matview-index) share one diff-scoped
+        instance, so the O(tables x columns) scan runs once and is cached here; a diff with no
+        views never triggers it at all. The cache lives and dies with the diff scope.
+        """
+        retyped_columns = _retyped_column_refs(self.source, self.target)
+        return {
+            key for key, cols in self.source.view_column_dependencies.items() if cols & retyped_columns
+        }
 
 
 # Context of the current diff generation.
@@ -78,16 +74,15 @@ _context: ContextVar[_ContextData] = ContextVar("pgmig_context")
 
 class _Context:
     """
-    Proxy over the context var. Generators import the `context` singleton and read
-    `context.source` etc.; each access fetches the value set for the running diff.
+    Singleton class for the diff context.
     """
 
     @contextmanager
     def context_scope(
         self,
         *,
-        source: DbInfo,
-        target: DbInfo,
+        source: DbIntrospectionResult,
+        target: DbIntrospectionResult,
         index_concurrently: bool,
         ignore_extension_version: Sequence[str],
         ignore_owner: bool,
@@ -107,11 +102,11 @@ class _Context:
             _context.reset(token)
 
     @property
-    def source(self) -> DbInfo:
+    def source(self) -> DbIntrospectionResult:
         return _context.get().source
 
     @property
-    def target(self) -> DbInfo:
+    def target(self) -> DbIntrospectionResult:
         return _context.get().target
 
     @property

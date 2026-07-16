@@ -1,6 +1,13 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_object_pairs, ctx_iter_schema_pairs
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    _diff_comments,
+    ctx_iter_object_pairs,
+    ctx_iter_schema_pairs,
+    topological_sort,
+)
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._models import Function, FunctionKey, RelationKey
 from pgmig._sql import comment_on, qualified
@@ -68,31 +75,21 @@ def _dropped_relations() -> set[RelationKey]:
 
 def _topological_drop_order(late: dict[FunctionKey, tuple[str, Function]]) -> list[FunctionKey]:
     """
-    Order the late-drop set so a routine is dropped before the routines it depends on
-    (Kahn's algorithm, deterministic by key). Edges are restricted to the late set; hard
-    function->function dependencies (SQL-body routines) cannot be cyclic, so this always
-    consumes every node.
+    Order the late-drop set so a routine is dropped before the routines it depends on.
+
+    `topological_sort` orders dependencies-first (a node after everything in its edge set),
+    which is the opposite of what a drop needs. Feeding it the reversed graph -- each routine
+    mapped to the late routines that depend on it -- makes it emit a routine before its
+    dependencies, i.e. drop order. Edges are restricted to the late set.
     """
     keys = set(late)
-    # out_edges[F] = routines F depends on that are also dropped late (F must precede them).
-    out_edges = {key: {dep for dep in late[key][1].depends_on_functions if dep in keys} for key in keys}
-    # in_degree[G] = how many late routines depend on G (each must be dropped before G).
-    in_degree = dict.fromkeys(keys, 0)
-    for deps in out_edges.values():
-        for dep in deps:
-            in_degree[dep] += 1
-
-    ready = sorted(key for key in keys if in_degree[key] == 0)
-    order: list[FunctionKey] = []
-    while ready:
-        key = ready.pop(0)
-        order.append(key)
-        for dep in out_edges[key]:
-            in_degree[dep] -= 1
-            if in_degree[dep] == 0:
-                ready.append(dep)
-        ready.sort()
-    return order
+    # dependents[G] = late routines that depend on G (each must be dropped before G).
+    dependents: dict[FunctionKey, set[FunctionKey]] = {key: set() for key in keys}
+    for key in keys:
+        for dep in late[key][1].depends_on_functions:
+            if dep in keys:
+                dependents[dep].add(key)
+    return topological_sort(keys, dependents)
 
 
 def _function_comment_statements(
