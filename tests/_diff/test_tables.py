@@ -21,6 +21,12 @@ def _generated_column(name: str, *, generated: str, expression: str | None, not_
         serial_sequence=None,
         generated=generated,
         generation_expression=expression,
+        identity_start=None,
+        identity_increment=None,
+        identity_min=None,
+        identity_max=None,
+        identity_cache=None,
+        identity_cycle=None,
     )
 
 

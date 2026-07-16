@@ -70,6 +70,13 @@ class Column:
     serial_sequence: str | None  # sequence owned via a nextval() default, else None
     generated: str  # pg_attribute.attgenerated ('' none, 's' stored, 'v' virtual)
     generation_expression: str | None  # generation expression, kept separate from `default`
+    # Backing-sequence options of an identity column (pg_sequence); all None otherwise.
+    identity_start: int | None
+    identity_increment: int | None
+    identity_min: int | None
+    identity_max: int | None
+    identity_cache: int | None
+    identity_cycle: bool | None
 
     @property
     def serial_type(self) -> str | None:
@@ -120,7 +127,8 @@ class Column:
     @property
     def identity_clause(self) -> str | None:
         """
-        The GENERATED ... AS IDENTITY clause for an identity column, or None.
+        The GENERATED ... AS IDENTITY clause for an identity column, or None. The backing
+        sequence's options are rendered separately at emit time (see the tables diff).
         """
         kind = self.identity_kind
         return None if kind is None else f"GENERATED {kind} AS IDENTITY"
