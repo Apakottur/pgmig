@@ -13,7 +13,7 @@ async def test_view_dependencies_exclude_system_and_extension_referenced_views(g
     await gen_setup.src.execute("CREATE VIEW v_sys AS SELECT pid FROM pg_stat_activity")
     await gen_setup.src.execute("CREATE VIEW v_ext AS SELECT userid FROM pg_stat_statements")
 
-    info = await introspect_db(gen_setup.src.dsn)
+    info = await introspect_db(gen_setup.src.dsn, gen_setup.driver)
 
     # Every referenced view across all recorded edges lives in a managed (non-system) schema.
     referenced = {ref for refs in info.view_dependencies.values() for ref in refs}

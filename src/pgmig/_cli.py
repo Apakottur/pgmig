@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from pgmig._api import generate as generate_migration
+from pgmig._db import DEFAULT_DRIVER, Driver
 from pgmig._errors import _PgmigError
 
 app = typer.Typer(
@@ -90,6 +91,14 @@ def generate(
             help="Suppress all ALTER ... OWNER TO statements.",
         ),
     ] = False,
+    driver: Annotated[
+        Driver,
+        typer.Option(
+            "--driver",
+            envvar="PGMIG_DRIVER",
+            help="Database driver to use for introspection.",
+        ),
+    ] = DEFAULT_DRIVER,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -106,6 +115,7 @@ def generate(
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version or [],
             ignore_owner=ignore_owner,
+            driver=driver,
         )
     except _PgmigError as error:
         # Expected error - print message without traceback.

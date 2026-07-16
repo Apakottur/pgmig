@@ -52,6 +52,9 @@ uv add --dev pgmig            # Or add pgmig to your project.
 pip install pgmig
 ```
 
+The base install uses the pure-Python psycopg driver (needs a system libpq). For a faster build,
+a bundled-libpq build, or the asyncpg driver, see [which driver should I install?](#which-driver-should-i-install).
+
 ### Usage
 
 `pgmig` can be used directly in the command line or as a Python library.
@@ -99,6 +102,7 @@ adds a few more (`—` in the library column):
 | `--index-concurrently`, `-C` | `index_concurrently` | Whether to emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`. Using `CONCURRENTLY` avoids blocking index read/write operations, but takes longer to execute and cannot be run inside a transaction block. |
 | `--ignore-extension-version` | `ignore_extension_version` | Names of extensions whose version mismatch is ignored: no `ALTER EXTENSION ... UPDATE TO` is emitted for them. Repeatable on the CLI; a list of names in the library. |
 | `--ignore-owner`         | `ignore_owner`       | Suppress all `ALTER ... OWNER TO` statements. |
+| `--driver`               | `driver`             | Database driver to use for introspection: `psycopg` (default) or `asyncpg`. Falls back to the `PGMIG_DRIVER` environment variable. See [the FAQ](#which-driver-should-i-install). |
 | `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
 | `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 
@@ -127,14 +131,42 @@ e.g. `postgresql://user:pass@host:5432/dbname`.
 
 ## FAQ
 
+### Which driver should I install?
+
+pgmig talks to Postgres through a driver. The base `pgmig` install uses **psycopg** (pure
+Python), which needs a system-provided libpq. Extras swap in a faster build or a different
+driver — the migration code is identical, only the connection layer changes.
+
+| Install                 | Driver / build           | Needs at install | libpq         | Notes |
+| ----------------------- | ------------------------ | ---------------- | ------------- | ----- |
+| `pip install pgmig`             | psycopg (pure Python) | nothing          | system libpq  | Works everywhere; slowest. |
+| `pip install 'pgmig[binary]'`   | psycopg (prebuilt C)  | nothing          | **bundled**   | Fast, no build tools or system libpq. Bundled libpq/OpenSSL only update with the wheel, so psycopg advises against it in production — ideal for CLI / standalone use. |
+| `pip install 'pgmig[c]'`        | psycopg (compiled C)  | C compiler + libpq headers | system libpq | Fast **and** rides your OS's libpq security updates. Recommended for production. |
+| `pip install 'pgmig[asyncpg]'`  | asyncpg               | nothing          | **none**      | No libpq at all. Select it with `--driver asyncpg` (or `driver="asyncpg"`). |
+
 ### Do I need libpq installed?
 
-By default, yes — pgmig requires the Postgres client library (libpq) on the machine. For
-standalone / CLI use you can skip that by installing the `binary` extra, which bundles it:
+Depends on the install. The base install and the `c` extra use the system libpq (install it via
+your OS, e.g. `apt install libpq5`). The `binary` extra bundles its own, and the `asyncpg` extra
+doesn't use libpq at all — so either of those needs nothing extra on the machine.
+
+### Can I use asyncpg instead of psycopg?
+
+Yes. Install the extra and select the driver:
 
 ```shell
-pip install 'pgmig[binary]'
+pip install 'pgmig[asyncpg]'
+pgmig generate -s "$SRC" -t "$TGT" --driver asyncpg   # or set PGMIG_DRIVER=asyncpg
 ```
+
+In the library, pass `driver="asyncpg"` to `generate` / `agenerate`. The default is `psycopg`.
+
+### Which driver is fastest?
+
+psycopg — especially the `c` / `binary` builds — is about 1.3× faster than asyncpg for pgmig's
+workload. Introspection is a handful of one-shot catalog queries, where asyncpg's per-statement
+prepare cost outweighs its throughput edge. That said, a generation runs once and finishes in
+well under a second, so pick by install convenience rather than speed.
 
 ## Contributing
 

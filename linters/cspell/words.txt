@@ -27,6 +27,7 @@ pycache
 pyproject
 softprops
 psycopg
+asyncpg
 dataclass
 dataclasses
 conftest
