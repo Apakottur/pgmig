@@ -1,4 +1,4 @@
-from pgmig._db import DbReadOnlyConnection
+from pgmig._db import DEFAULT_DRIVER, DbReadOnlyConnection, Driver
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
     composite_types,
@@ -56,7 +56,7 @@ _LOADERS: tuple[Loader, ...] = (
 )
 
 
-async def introspect_db(dsn: str) -> DbIntrospectionResult:
+async def introspect_db(dsn: str, driver: Driver = DEFAULT_DRIVER) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
     """
@@ -67,15 +67,13 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         view_column_dependencies={},
     )
 
-    async with DbReadOnlyConnection.connect(dsn=dsn) as conn:
-        # Run within the introspection context.
+    async with DbReadOnlyConnection.connect(dsn=dsn, driver=driver) as conn:
+        # Run within the introspection context. The connection already runs read-only at REPEATABLE
+        # READ with an empty search path (set in DbReadOnlyConnection.connect).
         with context.context_scope(
             conn=conn,
             db_introspection_result=db_introspection_result,
         ):
-            # Use an empty search path to make introspection independent of the database's own search path.
-            await conn.execute("SET LOCAL search_path = ''")
-
             # Get all the unsupported findings.
             all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
             if all_findings:

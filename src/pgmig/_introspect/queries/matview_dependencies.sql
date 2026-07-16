@@ -7,10 +7,10 @@
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,
     dependent.relname AS dependent_view,
-    dependent.relkind AS dependent_kind,
+    dependent.relkind::text AS dependent_kind,
     referenced_ns.nspname AS referenced_schema,
     referenced.relname AS referenced_view,
-    referenced.relkind AS referenced_kind
+    referenced.relkind::text AS referenced_kind
 FROM
     pg_depend d
     JOIN pg_rewrite r ON r.oid = d.objid

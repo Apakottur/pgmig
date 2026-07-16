@@ -18,7 +18,7 @@ SELECT
     obj_description(c.oid, 'pg_class') AS table_comment,
     pg_get_userbyid(c.relowner) AS table_owner,
     a.attidentity::text AS column_identity,
-    a.attgenerated AS column_generated,
+    a.attgenerated::text AS column_generated,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,
     -- Partitioning metadata (per table, repeated on every column row; the loader reads
     -- it once when it first creates the table).

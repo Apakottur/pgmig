@@ -4,6 +4,8 @@ requires = ["hatchling", "hatch-vcs"]
 
 [dependency-groups]
 dev = [
+  # Both drivers live here while we benchmark them; the base-package driver + extras are TBD.
+  "asyncpg>=0.31.0",
   "asyncpg-stubs>=0.31.3",
   "httpx==0.28.1",
   "mypy==2.3.0",
@@ -43,18 +45,11 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
+# No database driver is a hard dependency yet: the default driver and the psycopg/asyncpg
+# install extras are decided after benchmarking. Both drivers are in the dev group meanwhile.
 dependencies = [
-  "asyncpg>=0.31.0",
-  #
-  "psycopg>=3.3.4",
   "pydantic>=2",
   "typer>=0.12",
-]
-
-[project.optional-dependencies]
-binary = [
-  #
-  "psycopg[binary]>=3.3.4",
 ]
 
 [project.scripts]

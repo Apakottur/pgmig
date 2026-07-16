@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 
+from pgmig._db import DEFAULT_DRIVER, Driver
 from pgmig._diff._engine import get_diff
 from pgmig._introspect._engine import introspect_db
 
@@ -12,6 +13,7 @@ async def agenerate(
     index_concurrently: bool = False,
     ignore_extension_version: Sequence[str] = (),
     ignore_owner: bool = False,
+    driver: Driver = DEFAULT_DRIVER,
 ) -> str:
     """
     Asynchronous equivalent of [`generate`][pgmig.generate].
@@ -25,9 +27,12 @@ async def agenerate(
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
+        driver: The database driver to use for introspection ("psycopg" or "asyncpg").
     """
     # Introspect both databases concurrently.
-    source_result, target_result = await asyncio.gather(introspect_db(source), introspect_db(target))
+    source_result, target_result = await asyncio.gather(
+        introspect_db(source, driver), introspect_db(target, driver)
+    )
 
     # Generate migration SQL.
     return get_diff(
@@ -46,6 +51,7 @@ def generate(
     index_concurrently: bool = False,
     ignore_extension_version: Sequence[str] = (),
     ignore_owner: bool = False,
+    driver: Driver = DEFAULT_DRIVER,
 ) -> str:
     """
     Generate the migration SQL between the given source and target databases.
@@ -59,6 +65,7 @@ def generate(
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
+        driver: The database driver to use for introspection ("psycopg" or "asyncpg").
     """
     return asyncio.run(
         agenerate(
@@ -67,5 +74,6 @@ def generate(
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version,
             ignore_owner=ignore_owner,
+            driver=driver,
         )
     )
