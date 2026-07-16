@@ -190,6 +190,7 @@ class Phase(Enum):
     TYPE_CREATE = auto()  # Before tables (a column may be of the type) and its ADD VALUE alters.
     SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
     TABLE = auto()
+    SEQUENCE_OWNED_BY = auto()  # After tables: OWNED BY needs its target table/column to exist.
     INDEX = auto()
     CONSTRAINT = auto()
     COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.

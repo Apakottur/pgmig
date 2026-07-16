@@ -78,8 +78,16 @@ class Column:
 
         A serial column owns a sequence via its nextval() default and is not an
         identity column; its integer type maps to the matching pseudo-type.
+
+        The nextval() default is load-bearing, not incidental: pg_get_serial_sequence
+        resolves `serial_sequence` from the OWNED BY dependency alone, so a column tied to
+        a manually created sequence via `ALTER SEQUENCE ... OWNED BY` (with no nextval
+        default) also has `serial_sequence` set -- yet it is not serial. Requiring the
+        nextval default excludes that manual-ownership case.
         """
         if self.serial_sequence is None or self.identity != "":
+            return None
+        if self.default is None or not self.default.startswith("nextval("):
             return None
         match self.type:
             case "smallint":
@@ -217,7 +225,12 @@ class Table:
 @dataclass(frozen=True)
 class Sequence:
     """
-    A standalone Postgres sequence (not owned by a serial/identity column).
+    A standalone Postgres sequence (not the backing sequence of a serial/identity column).
+
+    A sequence may still carry a manual OWNED BY: `owned_by` is the (schema, table, column)
+    it is tied to, or None when it is truly standalone. Unlike a serial/identity backing
+    sequence -- whose lifecycle the table layer owns and which is excluded from introspection
+    -- a manually owned sequence is a first-class object whose ownership is diffed here.
     """
 
     name: str
@@ -229,6 +242,7 @@ class Sequence:
     cache: int
     cycle: bool
     comment: str | None
+    owned_by: tuple[str, str, str] | None
 
 
 @dataclass(frozen=True)

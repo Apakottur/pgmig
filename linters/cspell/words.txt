@@ -187,3 +187,5 @@ maxfail
 reloptions
 reloption
 autovacuum
+retargeted
+nextval
