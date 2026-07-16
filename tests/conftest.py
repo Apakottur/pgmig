@@ -1,6 +1,7 @@
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 import shpyx
@@ -86,8 +87,9 @@ def _driver(request: pytest.FixtureRequest) -> Driver:
     config_option = request.config.getoption("--driver")
     env_var = os.environ.get("PGMIG_DRIVER")
 
-    # Resolve the final driver: --driver, then PGMIG_DRIVER, then the default.
-    final_driver: Driver = config_option or env_var or DEFAULT_DRIVER
+    # Resolve the final driver: --driver, then PGMIG_DRIVER, then the default. Both sources are
+    # validated (option choices / a real install), so narrow the str back to Driver.
+    final_driver = cast("Driver", config_option or env_var or DEFAULT_DRIVER)
 
     # Export it so CLI invocations (which read PGMIG_DRIVER) use the same driver.
     os.environ["PGMIG_DRIVER"] = final_driver

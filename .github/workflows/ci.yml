@@ -50,28 +50,41 @@ jobs:
       fail-fast: false
       matrix:
         # Sparse cross: every Postgres major on the newest Python, plus every other
-        # Python on the default Postgres (18). The PG-18 x 3.14 cell is shared.
+        # Python on the default Postgres (18). The PG-18 x 3.14 cell is shared. Everything
+        # runs on the default psycopg driver; one extra cell covers the asyncpg driver.
         include:
           - python-version: "3.14"
             pg-version: "14"
+            driver: "psycopg"
           - python-version: "3.14"
             pg-version: "15"
+            driver: "psycopg"
           - python-version: "3.14"
             pg-version: "16"
+            driver: "psycopg"
           - python-version: "3.14"
             pg-version: "17"
+            driver: "psycopg"
           - python-version: "3.14"
             pg-version: "18"
+            driver: "psycopg"
           - python-version: "3.10"
             pg-version: "18"
+            driver: "psycopg"
           - python-version: "3.11"
             pg-version: "18"
+            driver: "psycopg"
           - python-version: "3.12"
             pg-version: "18"
+            driver: "psycopg"
           - python-version: "3.13"
             pg-version: "18"
+            driver: "psycopg"
+          - python-version: "3.14"
+            pg-version: "18"
+            driver: "asyncpg"
 
-    name: Unit Tests - Python ${{ matrix.python-version }} - Postgres ${{ matrix.pg-version }}
+    name: Unit Tests - Python ${{ matrix.python-version }} - Postgres ${{ matrix.pg-version }} - ${{ matrix.driver }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -83,6 +96,7 @@ jobs:
       - name: Run unit tests
         env:
           PGMIG_TEST_PG_VERSION: ${{ matrix.pg-version }}
+          PGMIG_DRIVER: ${{ matrix.driver }}
         run: pytest --showlocals -c tests/pytest.ini
 
   check:

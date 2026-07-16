@@ -1,20 +1,20 @@
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 import asyncpg
 import psycopg
 from psycopg.rows import class_row
 from pydantic import BaseModel
-from typing_extensions import Literal, Self
+from typing_extensions import Self
 
 from pgmig._errors import _PgmigError
 
 _RowT = TypeVar("_RowT", bound=BaseModel)
 
-# The database driver to use. No default is committed yet: while we benchmark the two drivers the
-# caller picks one explicitly (see DEFAULT_DRIVER, a temporary choice that is free to change).
+# The database driver to use. psycopg is the default: it is the faster driver for pgmig's
+# introspection workload and is what the base package installs. asyncpg is an opt-in extra.
 Driver = Literal["psycopg", "asyncpg"]
 DEFAULT_DRIVER: Driver = "psycopg"
 
@@ -61,9 +61,7 @@ class DbConnection:
                 # asyncpg returns json/jsonb as raw text by default; decode so queries that build
                 # nested jsonb objects (domains, composite types, functions) parse into their models.
                 for type_name in ("json", "jsonb"):
-                    await conn.set_type_codec(
-                        type_name, encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
-                    )
+                    await conn.set_type_codec(type_name, encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
 
                 try:
                     yield cls(dsn=dsn, driver=driver, conn=conn)
@@ -86,22 +84,22 @@ class DbConnection:
                     raise UniqueViolation(str(error)) from error
 
                 if result.description:
-                    return await result.fetchall()
+                    return cast("list[tuple[Any, ...]]", await result.fetchall())
                 return []
 
             case "asyncpg":
                 # asyncpg splits protocols: fetch() (extended) returns rows but forbids multiple
-                # statements and non-transactionable commands; execute() (simple) allows those but
-                # returns no rows. Reads are always single SELECT-likes; everything else is DDL.
+                # statements and commands that cannot run in a transaction; execute() (simple) allows
+                # those but returns no rows. Reads are always single SELECT-likes; everything else is DDL.
                 is_read = statement.lstrip().upper().startswith(("SELECT", "WITH", "SHOW", "VALUES", "TABLE"))
                 try:
                     if is_read:
                         records = await self.driver_conn.fetch(statement)
                         return [tuple(record) for record in records]
                     await self.driver_conn.execute(statement)
-                    return []
                 except asyncpg.UniqueViolationError as error:
                     raise UniqueViolation(str(error)) from error
+                return []
 
 
 class DbReadOnlyConnection(DbConnection):
@@ -142,8 +140,8 @@ class DbReadOnlyConnection(DbConnection):
             case "psycopg":
                 async with self.driver_conn.cursor(row_factory=class_row(response_model)) as cur:
                     await cur.execute(query)
-                    return await cur.fetchall()
+                    return cast("list[_RowT]", await cur.fetchall())
 
             case "asyncpg":
                 records = await self.driver_conn.fetch(query)
-                return [response_model.model_validate(dict(record)) for record in records]
+                return [response_model(**record) for record in records]

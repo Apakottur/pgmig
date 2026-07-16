@@ -4,7 +4,7 @@ requires = ["hatchling", "hatch-vcs"]
 
 [dependency-groups]
 dev = [
-  # Both drivers live here while we benchmark them; the base-package driver + extras are TBD.
+  # asyncpg is an optional extra for users, but the dev env installs it to test that driver.
   "asyncpg>=0.31.0",
   "asyncpg-stubs>=0.31.3",
   "httpx==0.28.1",
@@ -45,12 +45,21 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
-# No database driver is a hard dependency yet: the default driver and the psycopg/asyncpg
-# install extras are decided after benchmarking. Both drivers are in the dev group meanwhile.
-dependencies = [
-  "pydantic>=2",
-  "typer>=0.12",
-]
+# The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
+# and driver-alternative builds are opt-in extras below; the runtime `driver` argument selects
+# which installed driver to use.
+dependencies = ["psycopg>=3.3.4", "pydantic>=2", "typer>=0.12"]
+
+[project.optional-dependencies]
+# psycopg's C speedups compiled against the system libpq. Fast; recommended for production.
+# Needs a C compiler and libpq headers at install time.
+c = ["psycopg[c]>=3.3.4"]
+# psycopg's C speedups shipped as a prebuilt wheel that bundles libpq. Fast and needs no build
+# tools or system libpq -- but the bundled libpq/OpenSSL only update when psycopg-binary does,
+# so psycopg recommends against it for production. Great for CLI / standalone use.
+binary = ["psycopg[binary]>=3.3.4"]
+# The asyncpg driver instead of psycopg. Needs no libpq at all. Select it with driver="asyncpg".
+asyncpg = ["asyncpg>=0.31.0"]
 
 [project.scripts]
 pgmig = "pgmig._cli:app"
