@@ -167,6 +167,7 @@ class Table:
     columns: list[Column]
     comment: str | None
     owner: str
+    unlogged: bool  # UNLOGGED table (relpersistence 'u'); a partitioned parent is always logged
 
     # Declarative partitioning metadata.
     partition_strategy: str | None

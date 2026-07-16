@@ -12,6 +12,7 @@ class _TableRow(BaseModel):
     table_name: str
     table_comment: str | None
     table_owner: str
+    table_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
     # Column fields are all NULL together for the single phantom row a zero-column table
     # yields through the LEFT JOIN (see tables.sql); a real column row has them all set.
     column_name: str | None
@@ -50,6 +51,7 @@ def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
                 columns=[],
                 comment=table_row.table_comment,
                 owner=table_row.table_owner,
+                unlogged=table_row.table_persistence == "u",
                 partition_strategy=table_row.partition_strategy,
                 partition_key=table_row.partition_key,
                 partition_bound=table_row.partition_bound,

@@ -175,3 +175,5 @@ pgbouncer
 pooler
 edoburu
 userlist
+relpersistence
+unlogged
