@@ -53,7 +53,7 @@ class DbConnection:
             raise UniqueViolation(str(error)) from error
 
         # Fetch the results, if any.
-        results = []
+        results: list[tuple[Any, ...]] = []
         if result.description:
             result = await result.fetchall()
 
@@ -90,5 +90,5 @@ class DbReadOnlyConnection(DbConnection):
         Run an introspection query and parse each row into the given model.
         """
         async with self.driver_conn.cursor(row_factory=class_row(response_model)) as cur:
-            await cur.execute(query)
+            await cur.execute(query)  # ty: ignore[no-matching-overload]
             return await cur.fetchall()
