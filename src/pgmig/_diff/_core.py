@@ -1,14 +1,54 @@
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Protocol, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._models import ColumnKey, Schema, Table, ViewKey
+from pgmig._models import Schema, Table, ViewKey
 from pgmig._sql import comment_on, ident, qualified
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
 
 _Renamable = TypeVar("_Renamable")
 _ObjT = TypeVar("_ObjT")
+_SortableT = TypeVar("_SortableT", bound="SupportsRichComparison")
+
+
+def topological_sort(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_SortableT]]) -> list[_SortableT]:
+    """
+    Order `nodes` dependencies-first via Kahn's algorithm: a node appears after every node
+    it points to in `edges` that is also in `nodes` (edges leaving the set are ignored).
+    Ties break by sorted node, so the output is deterministic regardless of set iteration
+    order.
+
+    A cycle raises rather than silently dropping the cyclic nodes: cyclic nodes never reach
+    zero remaining dependencies, so a plain Kahn's loop would just omit them -- and a caller
+    that reverses this order to emit DROPs would then produce a non-converging diff with no
+    error. Postgres forbids cycles among views and among SQL-body routines, so this guards a
+    can't-happen case.
+    """
+    deps = {node: {dep for dep in edges.get(node, set()) if dep in nodes} for node in nodes}
+    dependents: dict[_SortableT, set[_SortableT]] = {node: set() for node in nodes}
+    for node, node_deps in deps.items():
+        for dep in node_deps:
+            dependents[dep].add(node)
+
+    ready = sorted(node for node, node_deps in deps.items() if not node_deps)
+    order: list[_SortableT] = []
+    while ready:
+        node = ready.pop(0)
+        order.append(node)
+        for dependent in dependents[node]:
+            deps[dependent].discard(node)
+            if not deps[dependent]:
+                ready.append(dependent)
+        ready.sort()
+
+    if len(order) != len(nodes):
+        cyclic = sorted(nodes - set(order))
+        raise AssertionError(f"dependency cycle detected among: {', '.join(repr(node) for node in cyclic)}")
+    return order
 
 
 class _Commented(Protocol):
@@ -231,42 +271,29 @@ def ctx_iter_object_pairs(
         yield schema_name, src_objs, dst_objs, pairs
 
 
-def retyped_column_refs() -> set[ColumnKey]:
+def recreated_matview_keys() -> set[ViewKey]:
     """
-    Columns of tables present on both sides whose type changes between source and target.
-    Postgres refuses ALTER COLUMN ... TYPE while a view reads the column, and -- unlike a
-    dropped column -- a type change leaves the reading view's definition text unchanged, so
-    the view-definition recreate path never catches it. The view diff intersects these with
-    its view-on-column edges to decide which views to drop and recreate around the change.
+    Materialized views present on both sides that the migration drops and recreates: either the
+    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW) or the matview reads a
+    table column whose type changes (Postgres refuses ALTER COLUMN ... TYPE while the column is
+    read, and the type change leaves the definition text unchanged, so only the column edge
+    catches it).
 
-    Source-side identity (a column read by a source view exists in the source). A serial
-    change keeps the integer `type`, so it does not surface here; that is intentional -- a
-    serial change is unsupported and raised by the table diff before applying.
+    The single source of truth for the recreate decision, consumed by both the matview diff
+    (which drops and recreates) and the matview-index differ (a recreated matview loses its
+    indexes, so every target index is created fresh). A matview present on only one side is a
+    plain create or drop, not a recreate, and is absent here.
     """
-    refs: set[ColumnKey] = set()
-    for schema_name, table_name, src_table, dst_table in ctx_iter_table_pairs():
-        if src_table is None or dst_table is None:
-            continue
-        dst_columns = {column.name: column for column in dst_table.columns}
-        for src_column in src_table.columns:
-            dst_column = dst_columns.get(src_column.name)
-            if dst_column is not None and src_column.type != dst_column.type:
-                refs.add(ColumnKey(schema_name, table_name, src_column.name))
-    return refs
-
-
-def retyped_column_readers() -> set[ViewKey]:
-    """
-    Views and materialized views that read (in the source) a table column whose type changes
-    between source and target. Such a reader must be dropped and recreated around the
-    ALTER COLUMN ... TYPE: Postgres refuses the alter while the column is read, and the type
-    change leaves the reader's definition text unchanged, so only the column edge catches it.
-
-    Shared by the view diff, the matview diff, and the matview-index differ (which must treat
-    such a matview as recreated so its indexes are recreated with it).
-    """
-    retyped_columns = retyped_column_refs()
-    return {key for key, cols in context.source.view_column_dependencies.items() if cols & retyped_columns}
+    column_readers = context.retyped_column_readers
+    keys: set[ViewKey] = set()
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_views = src_schema.materialized_view_by_name if src_schema else {}
+        dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
+        for name in src_views.keys() & dst_views.keys():
+            key = ViewKey(schema_name, name)
+            if src_views[name].definition != dst_views[name].definition or key in column_readers:
+                keys.add(key)
+    return keys
 
 
 def diff_renamable(

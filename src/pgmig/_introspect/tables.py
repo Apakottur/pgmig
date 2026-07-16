@@ -1,13 +1,9 @@
-from typing import Any
-
-import psycopg
-from pydantic import BaseModel
-
-from pgmig._introspect._core import _run_query
-from pgmig._models import Column, DbInfo, Table
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import Column, Table
 
 
-class _TableRow(BaseModel):
+class _TableRow(_QueryRow):
     schema_name: str
     table_name: str
     table_comment: str | None
@@ -32,12 +28,12 @@ class _TableRow(BaseModel):
     partition_parent_name: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in _run_query(conn, "tables.sql", _TableRow):
-        schema = db_info.schema_by_name[table_row.schema_name]
+    for table_row in await run_introspection_query("tables.sql", _TableRow):
+        schema = context.db_introspection_result.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:
             # A partition has both a parent schema and name (the query sets them together).

@@ -1,23 +1,19 @@
-from typing import Any
-
-import psycopg
-from pydantic import BaseModel
-
-from pgmig._introspect._core import _run_query
-from pgmig._models import DbInfo, Schema
+from pgmig._introspect._context import context
+from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._models import Schema
 
 
-class _SchemaRow(BaseModel):
+class _SchemaRow(_QueryRow):
     schema_name: str
     schema_comment: str | None
 
 
-def load(conn: psycopg.Connection[Any], db_info: DbInfo) -> None:
+async def load() -> None:
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in _run_query(conn, "schemas.sql", _SchemaRow):
-        db_info.schema_by_name[schema_row.schema_name] = Schema(
+    for schema_row in await run_introspection_query("schemas.sql", _SchemaRow):
+        context.db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,
             table_by_name={},

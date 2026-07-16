@@ -1,36 +1,31 @@
 from pathlib import Path
-from typing import Any, Protocol, TypeVar, cast
+from typing import Protocol, TypeVar
 
-import psycopg
-from psycopg.rows import class_row
-from pydantic import BaseModel
-from typing_extensions import LiteralString
+from pydantic import BaseModel, ConfigDict
 
-from pgmig._models import DbInfo
-
-_RowT = TypeVar("_RowT", bound=BaseModel)
+from pgmig._introspect._context import context
 
 
-def _run_query(conn: psycopg.Connection[Any], file_name: str, model: type[_RowT]) -> list[_RowT]:
+class _QueryRow(BaseModel):
     """
-    Load a bundled SQL query from the queries directory, run it, and parse each row
-    into the given Pydantic model (by SELECT column alias). Validation happens at parse
-    time, so a schema/type drift surfaces here rather than silently downstream.
+    Base for every model parsed from a bundled SQL query -- a top-level row, or a nested
+    jsonb object a query builds.
     """
-    file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
-    query = cast("LiteralString", file_path.read_text(encoding="utf-8"))  # type: ignore[redundant-cast]
-    with conn.cursor(row_factory=class_row(model)) as cur:
-        return cur.execute(query).fetchall()
+
+    model_config = ConfigDict(
+        # Ensure queries dont fetch unused columns.
+        extra="forbid",
+    )
 
 
 class Loader(Protocol):
     """
     The shared shape of every object-kind loader: read from the connection and populate
-    the DbInfo being assembled. Loaders run in a dependency-significant order (schemas
+    the DB introspection result being assembled. Loaders run in a dependency-significant order (schemas
     and tables before the objects that attach to them).
     """
 
-    def __call__(self, conn: psycopg.Connection[Any], db_info: DbInfo) -> None: ...
+    async def __call__(self) -> None: ...
 
 
 class Guard(Protocol):
@@ -41,4 +36,17 @@ class Guard(Protocol):
     collected and reported together so the user sees all problems at once.
     """
 
-    def __call__(self, conn: psycopg.Connection[Any]) -> list[str]: ...
+    async def __call__(self) -> list[str]: ...
+
+
+_RowT = TypeVar("_RowT", bound=_QueryRow)
+
+
+async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
+    """
+    Load a bundled SQL query from the queries directory and run it on the current
+    introspection connection, parsing each row into the given Pydantic model.
+    """
+    file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
+    query = file_path.read_text(encoding="utf-8")
+    return await context.conn.introspect(query, model)

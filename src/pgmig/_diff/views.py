@@ -1,55 +1,23 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, retyped_column_readers
-from pgmig._models import DbInfo, View, ViewKey
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, topological_sort
+from pgmig._models import DbIntrospectionResult, View, ViewKey
 from pgmig._sql import qualified
 
 _Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
 
 
-def _collect_views(db_info: DbInfo) -> dict[ViewKey, View]:
+def _collect_views(db_introspection_result: DbIntrospectionResult) -> dict[ViewKey, View]:
     """
     Flatten every schema's views into one (schema, name) -> View map. View-on-view
     ordering is global because a dependency can cross schemas.
     """
     views: dict[ViewKey, View] = {}
-    for schema_name, schema in db_info.schema_by_name.items():
+    for schema_name, schema in db_introspection_result.schema_by_name.items():
         for name, view in schema.view_by_name.items():
             views[ViewKey(schema_name, name)] = view
     return views
-
-
-def _topological_order(nodes: set[ViewKey], edges: _Edges) -> list[ViewKey]:
-    """
-    Order `nodes` dependencies-first: a view appears after every view it reads that is
-    also in `nodes` (edges to views outside the set are ignored). Ties break by sorted
-    key so the output is deterministic. A cycle -- which Postgres does not permit between
-    views -- raises rather than silently dropping nodes.
-    """
-    deps = {node: {dep for dep in edges.get(node, set()) if dep in nodes} for node in nodes}
-    dependents: dict[ViewKey, set[ViewKey]] = {node: set() for node in nodes}
-    for node, node_deps in deps.items():
-        for dep in node_deps:
-            dependents[dep].add(node)
-
-    ready = sorted(node for node, node_deps in deps.items() if not node_deps)
-    order: list[ViewKey] = []
-    while ready:
-        node = ready.pop(0)
-        order.append(node)
-        for dependent in dependents[node]:
-            deps[dependent].discard(node)
-            if not deps[dependent]:
-                ready.append(dependent)
-        ready.sort()
-
-    if len(order) != len(nodes):
-        cyclic = sorted(node for node in nodes if node not in set(order))
-        raise AssertionError(
-            f"view dependency cycle detected among: {', '.join(qualified(node.schema, node.name) for node in cyclic)}"
-        )
-    return order
 
 
 def _dependents_closure(seeds: set[ViewKey], edges: _Edges) -> set[ViewKey]:
@@ -96,7 +64,7 @@ def generate() -> Iterator[Statement]:
     # refuses ALTER COLUMN ... TYPE while a view reads the column, so the view is dropped in
     # VIEW_DROP (before the TABLE-phase change) and recreated in VIEW_CREATE. A type change
     # leaves the view's definition unchanged, so `changed` above never catches this.
-    column_readers = retyped_column_readers()
+    column_readers = context.retyped_column_readers
     # A recreate resets the view (and its comment); pull in every view that transitively
     # reads a changed one. Restrict to shared views -- a create-only view has nothing to
     # drop, and a drop-only view is already dropped below.
@@ -107,12 +75,12 @@ def generate() -> Iterator[Statement]:
 
     # Drops: dependent-first, so reverse the source graph's dependency-first order.
     drops = drop_only | recreate
-    for key in reversed(_topological_order(drops, src_edges)):
+    for key in reversed(topological_sort(drops, src_edges)):
         yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(key.schema, key.name)};")
 
     # Creates: dependency-first over the target graph.
     creates = create_only | recreate
-    for key in _topological_order(creates, dst_edges):
+    for key in topological_sort(creates, dst_edges):
         yield Statement(
             Phase.VIEW_CREATE, f"CREATE VIEW {qualified(key.schema, key.name)} AS {dst_views[key].definition};"
         )
