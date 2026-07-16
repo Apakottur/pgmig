@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig import PgmigUnsupportedError, agenerate
-from tests.fixtures.db_utils import DbConnection
+from pgmig._db import DbConnection
 
 
 class GenerateSetup:
@@ -9,7 +9,20 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, pg_major: int, unique_key: str) -> None:
+    def __init__(
+        self,
+        *,
+        src_db_name: str,
+        dst_db_name: str,
+        src_conn: DbConnection,
+        dst_conn: DbConnection,
+        pg_major: int,
+        unique_key: str,
+    ) -> None:
+        # Database names.
+        self.src_db_name = src_db_name
+        self.dst_db_name = dst_db_name
+
         # Database connections.
         self.src = src_conn
         self.dst = dst_conn

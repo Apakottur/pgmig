@@ -35,8 +35,7 @@ _context: ContextVar[_ContextData] = ContextVar("pgmig_context")
 
 class _Context:
     """
-    Proxy over the context var. Generators import the `context` singleton and read
-    `context.source` etc.; each access fetches the value set for the running diff.
+    Singleton class for the diff context.
     """
 
     @contextmanager

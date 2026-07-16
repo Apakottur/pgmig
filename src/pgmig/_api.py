@@ -1,8 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 
-from pgmig._diff._context import context
-from pgmig._diff._engine import generate_migration_sql
+from pgmig._diff._engine import get_diff
 from pgmig._introspect._engine import introspect_db
 
 
@@ -28,19 +27,16 @@ async def agenerate(
         ignore_owner: Suppress all ALTER ... OWNER TO statements.
     """
     # Introspect both databases concurrently.
-    source_db_introspection_result, target_db_introspection_result = await asyncio.gather(
-        introspect_db(source), introspect_db(target)
-    )
+    source_result, target_result = await asyncio.gather(introspect_db(source), introspect_db(target))
 
     # Generate migration SQL.
-    with context.context_scope(
-        source=source_db_introspection_result,
-        target=target_db_introspection_result,
+    return get_diff(
+        source=source_result,
+        target=target_result,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
         ignore_owner=ignore_owner,
-    ):
-        return generate_migration_sql()
+    )
 
 
 def generate(

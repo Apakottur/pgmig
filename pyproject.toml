@@ -17,7 +17,7 @@ dev = [
   "ruff==0.15.21",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.59",
+  "ty==0.0.60",
   "typing-extensions==4.16.0",
 ]
 

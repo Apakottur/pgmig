@@ -1,20 +1,20 @@
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
-import pytest_asyncio
 import shpyx
 
+from pgmig._db import DbConnection
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import DbConnection, get_unique_postgres_name, recreate_database
+from tests.fixtures.db_utils import get_dsn, get_unique_postgres_name, recreate_database, wait_for_db_connection
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """
-    Custom pytest options
+    Custom pytest options.
     """
     parser.addoption(
         "--stop-docker",
@@ -38,6 +38,7 @@ def _unique_key() -> str:
     """
     Get a unique identifier for the current test session.
     """
+    # Generate a unique key from the git branch.
     result = shpyx.run("git rev-parse --abbrev-ref HEAD", verify_return_code=False)
     branch = result.stdout.strip()
     if result.return_code == 0 and branch and branch != "HEAD":
@@ -66,7 +67,7 @@ def _pg_major(request: pytest.FixtureRequest) -> int:
 
 
 @pytest.fixture(scope="session")
-def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
+async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
@@ -74,44 +75,48 @@ def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
+    # Get the database DSN.
+    admin_db_dsn = get_dsn("postgres")
+
+    # Wait for the database server to be ready.
+    await wait_for_db_connection(dsn=admin_db_dsn)
+
     # Open a single connection to the admin database for the whole session.
-    admin_conn = DbConnection("postgres")
-
-    try:
+    async with DbConnection.connect(dsn=admin_db_dsn) as admin_conn:
         yield admin_conn
-    finally:
-        admin_conn.close()
 
-        # Stop the database server, unless asked to leave it running.
-        # Keeping it running is useful when developing locally and running tests frequently.
-        if request.config.getoption("--stop-docker"):
-            shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
+    # Stop the database server, unless asked to leave it running.
+    # Keeping it running is useful when developing locally and running tests frequently.
+    if request.config.getoption("--stop-docker"):
+        shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest.fixture(scope="function")
 async def gen_setup(
-    _admin_conn: DbConnection,
     _unique_key: str,
     _pg_major: int,
+    _admin_conn: DbConnection,
 ) -> AsyncIterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
-    # Construct DB names.
+    # Get the database names and DSNs.
     src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
     dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
+    src_db_dsn = get_dsn(src_db_name)
+    dst_db_dsn = get_dsn(dst_db_name)
 
-    # Recreate the databases before each test.
+    # Recreate the DBs before each test.
     await recreate_database(_admin_conn, src_db_name)
     await recreate_database(_admin_conn, dst_db_name)
 
-    # Create the DB connections.
-    src_conn = DbConnection(src_db_name)
-    dst_conn = DbConnection(dst_db_name)
-
-    # Provide the utility class for the test.
-    try:
-        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, pg_major=_pg_major, unique_key=_unique_key)
-    finally:
-        src_conn.close()
-        dst_conn.close()
+    # Create DB connections and yield for the test.
+    async with DbConnection.connect(dsn=src_db_dsn) as src_conn, DbConnection.connect(dsn=dst_db_dsn) as dst_conn:
+        yield GenerateSetup(
+            src_db_name=src_db_name,
+            dst_db_name=dst_db_name,
+            src_conn=src_conn,
+            dst_conn=dst_conn,
+            pg_major=_pg_major,
+            unique_key=_unique_key,
+        )
