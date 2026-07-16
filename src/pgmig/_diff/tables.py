@@ -76,13 +76,12 @@ def _column_def(column: Column) -> str:
         return f"{ident(column.name)} {column.type} {column.identity_clause}"
 
     # A generated column carries its expression as a GENERATED ALWAYS AS (...) clause, not a
-    # DEFAULT. Virtual columns (PG18+) are unsupported. A stored generated column may still
+    # DEFAULT, followed by STORED or VIRTUAL (VIRTUAL is PG18+). A generated column may still
     # be NOT NULL, appended after the clause.
-    if column.generated == "v":
-        raise PgmigUnsupportedError(f"Virtual generated column is not supported: {ident(column.name)}")
-    if column.generated == "s":
+    if column.generated in ("s", "v"):
         expression = _parenthesize_generation(column.generation_expression or "")
-        clause = f"{ident(column.name)} {_type_clause(column)} GENERATED ALWAYS AS {expression} STORED"
+        storage = "STORED" if column.generated == "s" else "VIRTUAL"
+        clause = f"{ident(column.name)} {_type_clause(column)} GENERATED ALWAYS AS {expression} {storage}"
         return f"{clause} NOT NULL" if column.not_null else clause
 
     parts = [f"{ident(column.name)} {_type_clause(column)}"]
@@ -228,15 +227,31 @@ def _alter_shared_column(
             f"{qualified(schema_name, table_name)}.{ident(column_name)} "
             f"{src_column.serial_type} -> {dst_column.serial_type}"
         )
-    # Generated columns cannot be altered in place: Postgres has no ADD GENERATED,
-    # and a generation-expression change has no in-place ALTER (pre-PG18). Raise on a
-    # generated-ness flip or an expression change rather than mis-diff. A generated
+    # A generated-ness change (plain <-> generated, or STORED <-> VIRTUAL) has no in-place
+    # ALTER and is potentially destructive (Postgres has no ADD GENERATED, and switching
+    # storage rebuilds the column), so it still raises rather than mis-diff. A generated
     # column's `default` is None on both sides, so the DEFAULT sync below is inert.
-    if src_column.generated != dst_column.generated or (
-        src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
-    ):
+    if src_column.generated != dst_column.generated:
         raise PgmigUnsupportedError(
             f"Column generated change is not supported: {qualified(schema_name, table_name)}.{ident(column_name)}"
+        )
+    # A generation-expression change on a column that keeps the same generated kind is
+    # supported. A STORED column's data is derived, so it is rebuilt non-destructively with
+    # DROP COLUMN + ADD COLUMN (portable to pre-PG18, which has no in-place expression ALTER);
+    # the re-added definition carries the new expression, type and NOT NULL, so no further
+    # per-column sync is needed. A VIRTUAL column (PG18+) has no stored data and changes in
+    # place with SET EXPRESSION AS (...), handled after the type change below.
+    expression_changed = (
+        src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
+    )
+    if expression_changed and src_column.generated == "s":
+        table_prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
+        return (
+            [
+                f"{table_prefix} DROP COLUMN {ident(column_name)};",
+                f"{table_prefix} ADD COLUMN {_column_def(dst_column)};",
+            ],
+            [],
         )
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
     # Emit order matters: drops before adds. Postgres refuses ADD IDENTITY on a
@@ -261,6 +276,11 @@ def _alter_shared_column(
             statements.append(
                 f"{prefix} TYPE {_type_clause(dst_column)} USING {ident(column_name)}::{dst_column.type};"
             )
+    # A VIRTUAL generated column's expression is changed in place (PG18+); STORED is rebuilt
+    # via DROP + ADD above, which returns early, so only VIRTUAL reaches here.
+    if expression_changed:
+        expression = _parenthesize_generation(dst_column.generation_expression or "")
+        statements.append(f"{prefix} SET EXPRESSION AS {expression};")
     if identity_changed and dst_column.identity_kind is None:
         # Loses its identity. The owned identity sequence drops with it; the
         # column stays NOT NULL (handled by the NOT NULL block below).
@@ -354,9 +374,10 @@ def _partition_depth(key: tuple[str, str], table_map: dict[tuple[str, str], Tabl
 def _membership_statements(schema_name: str, table_name: str, src_table: Table, dst_table: Table) -> list[str]:
     """
     Statements reconciling a table's partition membership across the diff: ATTACH a
-    standalone table, DETACH a partition, or re-parent (detach + attach). Changes Postgres
-    cannot make in place -- partition key/strategy, or a bound change on the same parent --
-    raise rather than emit a data-destructive DROP + CREATE.
+    standalone table, DETACH a partition, re-parent (detach + attach), or re-bound on the
+    same parent (detach + attach at the new bound). A partition key/strategy change is the
+    one case Postgres cannot make in place; it raises rather than emit a data-destructive
+    DROP + CREATE.
     """
     if (src_table.is_partitioned or dst_table.is_partitioned) and (
         src_table.partition_strategy != dst_table.partition_strategy
@@ -376,9 +397,14 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
                 _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
             ]
         if src_table.partition_bound != dst_table.partition_bound:
-            raise PgmigUnsupportedError(
-                f"Partition bound change is not supported: {qualified(schema_name, table_name)}"
-            )
+            # Bound change on the same parent: no in-place ALTER exists, but DETACH then
+            # re-ATTACH at the new bound is non-destructive (the table and its rows
+            # survive; Postgres validates the rows against the new bound on ATTACH, same
+            # as any ATTACH).
+            return [
+                _detach_partition(schema_name, table_name, dst_parent),
+                _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
+            ]
         return []
     if src_parent is not None:
         return [_detach_partition(schema_name, table_name, src_parent)]
