@@ -52,13 +52,10 @@ class DbConnection:
         except psycopg.errors.UniqueViolation as error:
             raise UniqueViolation(str(error)) from error
 
-        # Fetch the results, if any.
-        results: list[tuple[Any, ...]] = []
+        # Fetch and return the results, if any.
         if result.description:
-            results = await result.fetchall()
-
-        # Return the results.
-        return results
+            return await result.fetchall()
+        return []
 
 
 class DbReadOnlyConnection(DbConnection):
