@@ -271,22 +271,6 @@ def ctx_iter_object_pairs(
         yield schema_name, src_objs, dst_objs, pairs
 
 
-def retyped_column_readers() -> set[ViewKey]:
-    """
-    Views and materialized views that read (in the source) a table column whose type changes
-    between source and target. Such a reader must be dropped and recreated around the
-    ALTER COLUMN ... TYPE: Postgres refuses the alter while the column is read, and the type
-    change leaves the reader's definition text unchanged, so only the column edge catches it.
-
-    Shared by the view diff, the matview diff, and the matview-index differ (which must treat
-    such a matview as recreated so its indexes are recreated with it). The set is identical for
-    every caller in a run, so the context computes it once at scope entry (see
-    _get_retyped_column_readers in _context) and this reads it back, sparing each caller a fresh
-    O(tables x columns) scan.
-    """
-    return context.retyped_column_readers
-
-
 def recreated_matview_keys() -> set[ViewKey]:
     """
     Materialized views present on both sides that the migration drops and recreates: either the
@@ -300,7 +284,7 @@ def recreated_matview_keys() -> set[ViewKey]:
     indexes, so every target index is created fresh). A matview present on only one side is a
     plain create or drop, not a recreate, and is absent here.
     """
-    column_readers = retyped_column_readers()
+    column_readers = context.retyped_column_readers
     keys: set[ViewKey] = set()
     for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_views = src_schema.materialized_view_by_name if src_schema else {}
