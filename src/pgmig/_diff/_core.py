@@ -1,10 +1,11 @@
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Protocol, TypeVar
+from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._models import Schema, Table, ViewKey
+from pgmig._keys import ViewKey
+from pgmig._models import Schema, Table
 from pgmig._sql import comment_on, ident, qualified
 
 if TYPE_CHECKING:
@@ -297,6 +298,26 @@ def recreated_matview_keys() -> set[ViewKey]:
     return keys
 
 
+class RenameDiff(NamedTuple):
+    """
+    Result of `diff_renamable`: the rendered SQL plus the two comment-diff inputs.
+
+    `drops`/`renames`/`creates` are rendered SQL statements. `recreated` is the set of names
+    whose object is freshly created and therefore starts without a comment -- a name dropped
+    and recreated (same name, changed definition), or a create reusing a name a rename vacated
+    this run. `renamed_from` maps each new name to its old name. The last two let the comment
+    diff force a re-emit (a recreate resets the comment) and resolve a renamed object's source
+    comment through its old name (a rename preserves the comment, so it must be cleared when
+    the target has none).
+    """
+
+    drops: list[str]
+    renames: list[str]
+    creates: list[str]
+    recreated: set[str]
+    renamed_from: dict[str, str]
+
+
 def diff_renamable(
     src: dict[str, _Renamable],
     dst: dict[str, _Renamable],
@@ -305,22 +326,13 @@ def diff_renamable(
     render_drop: Callable[[str], str],
     render_rename: Callable[[str, str], str],
     render_create: Callable[[str, _Renamable], str],
-) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
+) -> RenameDiff:
     """
     Diff two name->object mappings whose objects carry a name-independent `key`,
-    detecting renames (same key, different name).
+    detecting renames (same key, different name), into a `RenameDiff`.
 
-    Returns:
-        A 5-tuple (drops, renames, creates, recreated, renamed_from). The first three are
-        rendered SQL statements; `recreated` is the set of names whose object is freshly
-        created and therefore starts without a comment -- a name dropped and recreated (same
-        name, changed definition) or a create reusing a name a rename vacated this run;
-        `renamed_from` maps each new name to its old name.
-        A shared name is a no-op when the keys match; otherwise objects are dropped, renamed
-        (same key across a name change), or created. `recreated` lets the comment diff force
-        a re-emit (a recreate resets the comment), and `renamed_from` lets it resolve a
-        renamed object's source comment through the old name (a rename preserves the
-        comment, so it must be cleared when the target has none).
+    A shared name is a no-op when the keys match; otherwise objects are dropped, renamed
+    (same key across a name change), or created.
     """
     src = dict(src)
     dst = dict(dst)
@@ -361,4 +373,4 @@ def diff_renamable(
     recreated = (src.keys() & dst.keys()) | (dst.keys() & set(renamed_from.values()))
     drops = [render_drop(name) for name in sorted(src.keys())]
     creates = [render_create(name, dst[name]) for name in sorted(dst.keys())]
-    return drops, renames, creates, recreated, renamed_from
+    return RenameDiff(drops, renames, creates, recreated, renamed_from)

@@ -1,16 +1,23 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_table_pairs, diff_child_comment_statements, diff_renamable
+from pgmig._diff._core import (
+    Phase,
+    RenameDiff,
+    Statement,
+    ctx_iter_table_pairs,
+    diff_child_comment_statements,
+    diff_renamable,
+)
 from pgmig._models import Trigger
 from pgmig._sql import ident, qualified
 
 
 def _diff_triggers(
     *, schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
-) -> tuple[list[str], list[str], list[str], set[str], dict[str, str]]:
+) -> RenameDiff:
     """
-    Diff one table's triggers into (drops, renames, creates), using each trigger's
-    name-independent canonical form as the rename key.
+    Diff one table's triggers into a RenameDiff, using each trigger's name-independent
+    canonical form as the rename key.
     """
     table = qualified(schema_name, table_name)
     return diff_renamable(

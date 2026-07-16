@@ -1,6 +1,7 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._models import Function, FunctionKey, RelationKey
+from pgmig._keys import FunctionKey, RelationKey
+from pgmig._models import Function
 
 
 class _FunctionDep(_QueryRow):

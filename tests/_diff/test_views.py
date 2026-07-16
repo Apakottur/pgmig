@@ -1,5 +1,5 @@
 from pgmig._diff.views import _dependents_closure
-from pgmig._models import ViewKey
+from pgmig._keys import ViewKey
 
 A = ViewKey("public", "a")
 B = ViewKey("public", "b")

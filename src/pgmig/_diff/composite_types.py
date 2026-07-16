@@ -3,7 +3,8 @@ from collections.abc import Iterator
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, topological_sort
 from pgmig._errors import PgmigUnsupportedError
-from pgmig._models import CompositeType, CompositeTypeKey, DbIntrospectionResult
+from pgmig._keys import CompositeTypeKey
+from pgmig._models import CompositeType, DbIntrospectionResult
 from pgmig._sql import ident, qualified
 
 

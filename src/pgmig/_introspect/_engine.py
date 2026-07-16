@@ -28,16 +28,16 @@ from pgmig._models import DbIntrospectionResult
 # Preconditions run before any loader. Each guard reports every object it finds that
 # pgmig cannot process; all findings are collected and reported together, so the user
 # sees every problem at once instead of one per re-run.
-_UNSUPPORTED_GUARDS: tuple[Guard, ...] = (
+_UNSUPPORTED_GUARDS: list[Guard] = [
     unsupported.check,
     view_dependencies.check,
     invalid_indexes.check,
-)
+]
 
 # Order is dependency-significant: schemas must exist before tables, and tables before
 # the objects that attach to them (indexes, constraints, triggers). Extensions are
 # database-level and independent.
-_LOADERS: tuple[Loader, ...] = (
+_LOADERS: list[Loader] = [
     schemas.load,
     tables.load,
     indexes.load,
@@ -55,7 +55,7 @@ _LOADERS: tuple[Loader, ...] = (
     composite_types.load,
     composite_type_dependencies.load,
     extensions.load,
-)
+]
 
 
 async def introspect_db(dsn: str) -> DbIntrospectionResult:

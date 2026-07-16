@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig._diff._core import topological_sort
-from pgmig._models import ViewKey
+from pgmig._keys import ViewKey
 
 A = ViewKey("public", "a")
 B = ViewKey("public", "b")

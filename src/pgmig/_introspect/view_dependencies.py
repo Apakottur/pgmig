@@ -1,6 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._models import ViewKey
+from pgmig._keys import ViewKey
 from pgmig._sql import qualified
 
 # pg_class.relkind -> the object noun used in the finding message.

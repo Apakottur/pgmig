@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
 
 
@@ -27,9 +28,9 @@ async def load() -> None:
     for seq_row in await run_introspection_query("sequences.sql", _SequenceRow):
         # A manual OWNED BY resolves all three owned_* columns together; a standalone
         # sequence leaves them NULL.
-        owned_by: tuple[str, str, str] | None = None
+        owned_by: ColumnKey | None = None
         if seq_row.owned_schema is not None and seq_row.owned_table is not None and seq_row.owned_column is not None:
-            owned_by = (seq_row.owned_schema, seq_row.owned_table, seq_row.owned_column)
+            owned_by = ColumnKey(seq_row.owned_schema, seq_row.owned_table, seq_row.owned_column)
         context.db_introspection_result.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = (
             Sequence(
                 name=seq_row.seq_name,
