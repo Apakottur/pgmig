@@ -341,9 +341,10 @@ def _partition_depth(key: tuple[str, str], table_map: dict[tuple[str, str], Tabl
 def _membership_statements(schema_name: str, table_name: str, src_table: Table, dst_table: Table) -> list[str]:
     """
     Statements reconciling a table's partition membership across the diff: ATTACH a
-    standalone table, DETACH a partition, or re-parent (detach + attach). Changes Postgres
-    cannot make in place -- partition key/strategy, or a bound change on the same parent --
-    raise rather than emit a data-destructive DROP + CREATE.
+    standalone table, DETACH a partition, re-parent (detach + attach), or re-bound on the
+    same parent (detach + attach at the new bound). A partition key/strategy change is the
+    one case Postgres cannot make in place; it raises rather than emit a data-destructive
+    DROP + CREATE.
     """
     if (src_table.is_partitioned or dst_table.is_partitioned) and (
         src_table.partition_strategy != dst_table.partition_strategy
@@ -363,9 +364,14 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
                 _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
             ]
         if src_table.partition_bound != dst_table.partition_bound:
-            raise PgmigUnsupportedError(
-                f"Partition bound change is not supported: {qualified(schema_name, table_name)}"
-            )
+            # Bound change on the same parent: no in-place ALTER exists, but DETACH then
+            # re-ATTACH at the new bound is non-destructive (the table and its rows
+            # survive; Postgres validates the rows against the new bound on ATTACH, same
+            # as any ATTACH).
+            return [
+                _detach_partition(schema_name, table_name, dst_parent),
+                _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
+            ]
         return []
     if src_parent is not None:
         return [_detach_partition(schema_name, table_name, src_parent)]
