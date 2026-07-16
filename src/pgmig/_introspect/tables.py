@@ -13,6 +13,7 @@ class _TableRow(_QueryRow):
     # yields through the LEFT JOIN (see tables.sql); a real column row has them all set.
     column_name: str | None
     column_type: str | None
+    column_collation: str | None
     column_not_null: bool | None
     column_default: str | None
     generation_expression: str | None
@@ -72,6 +73,7 @@ async def load() -> None:
             Column(
                 name=table_row.column_name,
                 type=table_row.column_type,
+                collation=table_row.column_collation,
                 not_null=table_row.column_not_null,
                 default=table_row.column_default,
                 comment=table_row.column_comment,

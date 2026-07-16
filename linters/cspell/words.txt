@@ -57,6 +57,9 @@ attisdropped
 attnotnull
 attidentity
 attgenerated
+attcollation
+typcollation
+collname
 attrdef
 adbin
 adrelid

@@ -13,6 +13,7 @@ def test_virtual_generated_column_raises() -> None:
     column = Column(
         name="v",
         type="integer",
+        collation=None,
         not_null=False,
         default=None,
         comment=None,

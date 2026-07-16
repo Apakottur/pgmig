@@ -62,6 +62,7 @@ class Column:
 
     name: str
     type: str
+    collation: str | None  # explicit collation name when it overrides the type default, else None
     not_null: bool
     default: str | None
     comment: str | None
