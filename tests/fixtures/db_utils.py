@@ -1,9 +1,7 @@
 import hashlib
 import re
-from typing import Any
 
 import tenacity
-from typing_extensions import LiteralString
 
 from pgmig._db import DbConnection
 
@@ -48,6 +46,9 @@ def get_unique_postgres_name(base: str, key: str) -> str:
 
 
 async def recreate_database(db_name: str, admin_conn: DbConnection) -> None:
+    """
+    Recreate the database.
+    """
     # Drop the database, if exists. WITH (FORCE) atomically terminates any
     # lingering backends and drops the database, avoiding the race between a
     # separate pg_terminate_backend call and the drop.

@@ -43,8 +43,8 @@ async def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
     """
     Owners differ, but --ignore-owner suppresses the ALTER TABLE ... OWNER TO entirely.
     """
-    role_a = _ensure_role(gen_setup, "pgmig_owner_a")
-    role_b = _ensure_role(gen_setup, "pgmig_owner_b")
+    role_a = await _ensure_role(gen_setup, "pgmig_owner_a")
+    role_b = await _ensure_role(gen_setup, "pgmig_owner_b")
 
     await gen_setup.assert_diff(
         src=[
@@ -64,7 +64,7 @@ async def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same table and same owner on both sides -> no migration SQL.
     """
-    role_a = _ensure_role(gen_setup, "pgmig_owner_a")
+    role_a = await _ensure_role(gen_setup, "pgmig_owner_a")
     await gen_setup.assert_diff(
         src=[
             "CREATE TABLE person (name text)",

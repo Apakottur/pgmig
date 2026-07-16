@@ -8,7 +8,7 @@ async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None
     Ensure that introspection works through pgbouncer.
     """
     # Create an object on the source database over a direct connection.
-    gen_setup.src.execute("CREATE TABLE widget (id integer)")
+    await gen_setup.src.execute("CREATE TABLE widget (id integer)")
 
     # Wait for pgbouncer to start accepting connections.
     wait_until_accepting_connections(gen_setup.src.pgbouncer_dsn)

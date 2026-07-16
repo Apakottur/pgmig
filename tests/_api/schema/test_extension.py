@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-from pgmig import generate
+from pgmig import agenerate
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import DbConnection
 
@@ -25,13 +25,13 @@ class _ExtensionInfo:
     schema: str
 
 
-def _get_installable_extension(conn: DbConnection) -> _ExtensionInfo:
+async def _get_installable_extension(conn: DbConnection) -> _ExtensionInfo:
     """
     Find a relocatable extension that can be installed, along with its default
     version. Relocatable extensions install into the current schema (public in a
     fresh database) and can be moved with ALTER EXTENSION ... SET SCHEMA.
     """
-    rows = conn.execute(
+    rows = await conn.execute(
         """
         SELECT ae.name, ae.default_version
         FROM pg_available_extensions ae
@@ -53,7 +53,7 @@ class _MultiVersionExtension:
     max_version: str
 
 
-def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
+async def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
     """
     Find an extension exposing more than one installable version.
     """
@@ -65,7 +65,7 @@ def _pick_multi_version_extension(conn: DbConnection) -> _MultiVersionExtension:
         return [int(part) for part in version.split(".")]
 
     # Get all available extension versions.
-    rows = conn.execute("SELECT name, version FROM pg_available_extension_versions ORDER BY name")
+    rows = await conn.execute("SELECT name, version FROM pg_available_extension_versions ORDER BY name")
 
     # Group versions by name.
     versions_by_name = defaultdict(list)
@@ -90,7 +90,7 @@ async def test_extension_create(gen_setup: GenerateSetup) -> None:
     """
     Extension present in target but missing in source -> CREATE EXTENSION.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         src=[],
@@ -109,7 +109,7 @@ async def test_extension_owned_table_not_recreated(gen_setup: GenerateSetup) -> 
     Extension ownership is reproduced with ALTER EXTENSION ... ADD, which records the
     same pg_depend deptype='e' membership PostGIS relies on -- no PostGIS image needed.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     # A table with a primary key and a secondary index. Extension membership is
     # recorded on the table; the constraint and index are excluded because their
@@ -136,7 +136,7 @@ async def test_user_trigger_on_extension_owned_table(gen_setup: GenerateSetup) -
     The trigger function is made an extension member too so only CREATE EXTENSION is
     expected; the trigger itself stays user-owned and is the object exercising the bug.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         src=[],
@@ -159,7 +159,7 @@ async def test_user_function_in_extension_owned_schema(gen_setup: GenerateSetup)
     extension-managed and dropped from the model, so functions.sql needs the
     namespace-level exclusion or the loader raises KeyError on the missing schema.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         src=[],
@@ -179,7 +179,7 @@ async def test_user_enum_in_extension_owned_schema(gen_setup: GenerateSetup) -> 
     extension-managed and dropped from the model, so enums.sql needs the namespace-level
     exclusion or the loader raises KeyError on the missing schema.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         src=[],
@@ -199,7 +199,7 @@ async def test_extension_owned_sequence_not_recreated(gen_setup: GenerateSetup) 
     recreates it, so re-emitting CREATE SEQUENCE would fail. The sequence lives in a user
     schema and is not column-owned, so only sequences.sql's self-leg exclusion can drop it.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         src=[],
@@ -216,7 +216,7 @@ async def test_extension_drop(gen_setup: GenerateSetup) -> None:
     """
     Extension present in source but missing in target -> DROP EXTENSION.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         src=[_create_extension(ext_info.name)],
@@ -229,7 +229,7 @@ async def test_extension_version_update(gen_setup: GenerateSetup) -> None:
     """
     Extension present in both but with different versions -> ALTER EXTENSION UPDATE.
     """
-    ext_info = _pick_multi_version_extension(gen_setup.src)
+    ext_info = await _pick_multi_version_extension(gen_setup.src)
 
     await gen_setup.assert_diff(
         src=[_create_extension(ext_info.name, version=ext_info.min_version)],
@@ -238,28 +238,30 @@ async def test_extension_version_update(gen_setup: GenerateSetup) -> None:
     )
 
 
-def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: GenerateSetup) -> None:
+async def test_ignore_extension_version_list_matching_suppresses_update(gen_setup: GenerateSetup) -> None:
     """
     A list naming the extension suppresses only that extension's version update.
     """
-    ext_info = _pick_multi_version_extension(gen_setup.src)
-    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))  # ty: ignore[invalid-argument-type]
-    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))  # ty: ignore[invalid-argument-type]
+    ext_info = await _pick_multi_version_extension(gen_setup.src)
+    await gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))
+    await gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))
 
-    sql_out = generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name])
+    sql_out = await agenerate(
+        source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=[ext_info.name]
+    )
 
     assert sql_out == ""
 
 
-def test_ignore_extension_version_list_non_matching_still_updates(gen_setup: GenerateSetup) -> None:
+async def test_ignore_extension_version_list_non_matching_still_updates(gen_setup: GenerateSetup) -> None:
     """
     A list that does not name the extension leaves its version update in place.
     """
-    ext_info = _pick_multi_version_extension(gen_setup.src)
-    gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))  # ty: ignore[invalid-argument-type]
-    gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))  # ty: ignore[invalid-argument-type]
+    ext_info = await _pick_multi_version_extension(gen_setup.src)
+    await gen_setup.src.execute(_create_extension(ext_info.name, version=ext_info.min_version))
+    await gen_setup.dst.execute(_create_extension(ext_info.name, version=ext_info.max_version))
 
-    sql_out = generate(
+    sql_out = await agenerate(
         source=gen_setup.src.dsn, target=gen_setup.dst.dsn, ignore_extension_version=["some_other_extension"]
     )
 
@@ -270,7 +272,7 @@ async def test_extension_set_schema(gen_setup: GenerateSetup) -> None:
     """
     Extension present in both but in different schemas -> ALTER EXTENSION SET SCHEMA.
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
 
     await gen_setup.assert_diff(
         # Create the target schema on both sides so only the extension move is diffed.
@@ -303,7 +305,7 @@ async def test_extension_comment_changed(gen_setup: GenerateSetup) -> None:
     the target's. (A newly created extension already carries its control-file comment, so
     comments are only synced for the present-on-both case.)
     """
-    ext_info = _get_installable_extension(gen_setup.dst)
+    ext_info = await _get_installable_extension(gen_setup.dst)
     create = _create_extension(ext_info.name, version=ext_info.version, schema=ext_info.schema)
 
     await gen_setup.assert_diff(

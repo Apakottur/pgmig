@@ -1,5 +1,5 @@
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
@@ -47,18 +47,29 @@ def _unique_key() -> str:
     return "unknown"
 
 
+def _pg_major(request: pytest.FixtureRequest) -> int:
+    """
+    Get the Postgres major version of the server under test (e.g. 16).
+    """
+    config_option = request.config.getoption("--pg-version")
+    env_var = os.environ.get("PGMIG_TEST_PG_VERSION")
+
+    # Construct the final Postgres major version.
+    final_pg_version = config_option or env_var or "18"
+
+    # Export it so that docker compose has it.
+    os.environ["PGMIG_TEST_PG_VERSION"] = final_pg_version
+
+    # Return it.
+    return int(final_pg_version)
+
+
 @pytest.fixture(scope="session")
 async def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
     """
-    # Resolve the Postgres major version: --pg-version, then PGMIG_TEST_PG_VERSION, then 18.
-    # Export it so the docker compose image tag (postgres:${PGMIG_TEST_PG_VERSION}) resolves;
-    # the subprocess inherits this environment.
-    pg_version = request.config.getoption("--pg-version") or os.environ.get("PGMIG_TEST_PG_VERSION") or "18"
-    os.environ["PGMIG_TEST_PG_VERSION"] = pg_version
-
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
@@ -78,7 +89,8 @@ async def _admin_conn(request: pytest.FixtureRequest) -> Iterator[DbConnection]:
 async def gen_setup(
     _admin_conn: DbConnection,
     _unique_key: str,
-) -> Iterator[GenerateSetup]:
+    _pg_major: int,
+) -> AsyncIterator[GenerateSetup]:
     """
     Main fixture for testing `generate`.
     """
@@ -90,6 +102,5 @@ async def gen_setup(
     await _admin_conn.recreate_database()
 
     # Create DB connections and yield for the test.
-    async with DbConnection(src_db_name) as src_conn:
-        async with DbConnection(dst_db_name) as dst_conn:
-            yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, unique_key=_unique_key)
+    async with DbConnection(src_db_name) as src_conn, DbConnection(dst_db_name) as dst_conn:
+        yield GenerateSetup(src_conn=src_conn, dst_conn=dst_conn, pg_major=_pg_major, unique_key=_unique_key)

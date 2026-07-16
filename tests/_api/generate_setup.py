@@ -9,21 +9,16 @@ class GenerateSetup:
     Utility class for testing `generate`.
     """
 
-    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, unique_key: str) -> None:
+    def __init__(self, *, src_conn: DbConnection, dst_conn: DbConnection, pg_major: int, unique_key: str) -> None:
         # Database connections.
         self.src = src_conn
         self.dst = dst_conn
 
+        # Postgres major version.
+        self.pg_major = pg_major
+
         # Unique key for the test session.
         self.unique_key = unique_key
-
-    @property
-    def pg_major(self) -> int:
-        """
-        Get the Postgres major version of the server under test (e.g. 16).
-        """
-        (row,) = self.src.execute("SHOW server_version_num")
-        return int(row[0]) // 10000
 
     async def assert_diff(
         self,

@@ -1,6 +1,6 @@
 import pytest
 
-from pgmig import PgmigUnsupportedError, generate
+from pgmig import PgmigUnsupportedError, agenerate
 from pgmig._db import UniqueViolation
 from tests._api.generate_setup import GenerateSetup
 
@@ -19,7 +19,7 @@ async def test_invalid_index_is_rejected(gen_setup: GenerateSetup) -> None:
         await gen_setup.src.execute("CREATE UNIQUE INDEX CONCURRENTLY u ON t (a)")
 
     with pytest.raises(PgmigUnsupportedError, match="invalid index"):
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+        await agenerate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
 
 async def test_multiple_invalid_indexes_are_all_listed(gen_setup: GenerateSetup) -> None:
@@ -33,7 +33,7 @@ async def test_multiple_invalid_indexes_are_all_listed(gen_setup: GenerateSetup)
             await gen_setup.src.execute(f"CREATE UNIQUE INDEX CONCURRENTLY {index} ON {table} (a)")
 
     with pytest.raises(PgmigUnsupportedError) as excinfo:
-        generate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
+        await agenerate(source=gen_setup.src.dsn, target=gen_setup.dst.dsn)
 
     message = str(excinfo.value)
     assert '"public"."u1"' in message
