@@ -226,13 +226,72 @@ async def test_partitioned_table_key_change_raises(gen_setup: GenerateSetup) -> 
     )
 
 
-async def test_partitioned_table_bound_change_raises(gen_setup: GenerateSetup) -> None:
+async def test_partitioned_table_range_bound_change(gen_setup: GenerateSetup) -> None:
     """
-    Changing a partition's bound (same parent) is impossible in place; refuse loudly.
+    A range partition's bound change (same parent) has no in-place ALTER; reconcile with a
+    non-destructive DETACH then ATTACH at the new bound (the table and its rows survive).
     """
-    await gen_setup.assert_unsupported(
+    await gen_setup.assert_diff(
         both=["CREATE TABLE events (id integer) PARTITION BY RANGE (id)"],
         src=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (100)"],
         dst=["CREATE TABLE events_2024 PARTITION OF events FOR VALUES FROM (1) TO (200)"],
-        match=r"Partition bound change is not supported",
+        diff=[
+            'ALTER TABLE "public"."events" DETACH PARTITION "public"."events_2024"',
+            'ALTER TABLE "public"."events" ATTACH PARTITION "public"."events_2024" FOR VALUES FROM (1) TO (200)',
+        ],
+    )
+
+
+async def test_partitioned_table_list_bound_change(gen_setup: GenerateSetup) -> None:
+    """
+    A list partition's value-set change is likewise reconciled with DETACH + ATTACH.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE t (id integer, region text) PARTITION BY LIST (region)"],
+        src=["CREATE TABLE t_us PARTITION OF t FOR VALUES IN ('us')"],
+        dst=["CREATE TABLE t_us PARTITION OF t FOR VALUES IN ('us', 'ca')"],
+        diff=[
+            'ALTER TABLE "public"."t" DETACH PARTITION "public"."t_us"',
+            'ALTER TABLE "public"."t" ATTACH PARTITION "public"."t_us" FOR VALUES IN (\'us\', \'ca\')',
+        ],
+    )
+
+
+async def test_partitioned_table_bound_change_with_default(gen_setup: GenerateSetup) -> None:
+    """
+    Widening a regular partition's bound while a DEFAULT partition also exists: only the
+    regular partition is re-bounded (DETACH + ATTACH); the default partition is untouched.
+    Postgres scans the default partition on ATTACH to ensure no rows now belong to the
+    widened bound -- here it is empty, so the migration converges.
+    """
+    await gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE t (id integer, region text) PARTITION BY LIST (region)",
+            "CREATE TABLE t_def PARTITION OF t DEFAULT",
+        ],
+        src=["CREATE TABLE t_us PARTITION OF t FOR VALUES IN ('us')"],
+        dst=["CREATE TABLE t_us PARTITION OF t FOR VALUES IN ('us', 'ca')"],
+        diff=[
+            'ALTER TABLE "public"."t" DETACH PARTITION "public"."t_us"',
+            'ALTER TABLE "public"."t" ATTACH PARTITION "public"."t_us" FOR VALUES IN (\'us\', \'ca\')',
+        ],
+    )
+
+
+async def test_partitioned_table_reparent_and_bound_change(gen_setup: GenerateSetup) -> None:
+    """
+    A partition that both moves to a new parent and changes bound: the re-parent DETACH +
+    ATTACH already attaches at the target bound, so the new bound is applied in one step.
+    """
+    await gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE p1 (id integer) PARTITION BY RANGE (id)",
+            "CREATE TABLE p2 (id integer) PARTITION BY RANGE (id)",
+        ],
+        src=["CREATE TABLE part PARTITION OF p1 FOR VALUES FROM (1) TO (100)"],
+        dst=["CREATE TABLE part PARTITION OF p2 FOR VALUES FROM (1) TO (200)"],
+        diff=[
+            'ALTER TABLE "public"."p1" DETACH PARTITION "public"."part"',
+            'ALTER TABLE "public"."p2" ATTACH PARTITION "public"."part" FOR VALUES FROM (1) TO (200)',
+        ],
     )
