@@ -14,13 +14,22 @@ class _SequenceRow(_QueryRow):
     seq_cache: int
     seq_cycle: bool
     seq_comment: str | None
+    owned_schema: str | None
+    owned_table: str | None
+    owned_column: str | None
 
 
 async def load() -> None:
     """
-    Sequences (standalone only; sequences owned by a serial/identity column are excluded).
+    Sequences (the backing sequence of a serial/identity column is excluded; a manually
+    owned sequence is kept, with its OWNED BY target in `owned_by`).
     """
     for seq_row in await run_introspection_query("sequences.sql", _SequenceRow):
+        # A manual OWNED BY resolves all three owned_* columns together; a standalone
+        # sequence leaves them NULL.
+        owned_by: tuple[str, str, str] | None = None
+        if seq_row.owned_schema is not None and seq_row.owned_table is not None and seq_row.owned_column is not None:
+            owned_by = (seq_row.owned_schema, seq_row.owned_table, seq_row.owned_column)
         context.db_introspection_result.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = (
             Sequence(
                 name=seq_row.seq_name,
@@ -32,5 +41,6 @@ async def load() -> None:
                 cache=seq_row.seq_cache,
                 cycle=seq_row.seq_cycle,
                 comment=seq_row.seq_comment,
+                owned_by=owned_by,
             )
         )
