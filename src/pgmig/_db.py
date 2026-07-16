@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any, TypeVar
 
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import class_row
 from pydantic import BaseModel
 from typing_extensions import Self
 
@@ -44,7 +44,7 @@ class DbConnection:
 
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
-        Execute a statement that returns no rows.
+        Execute a statement and return the statement results, if any.
         """
         # Execute the statement.
         try:
@@ -87,12 +87,8 @@ class DbReadOnlyConnection(DbConnection):
 
     async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
         """
-        Run introspection query and parse each row into the given model.
+        Run an introspection query and parse each row into the given model.
         """
-        # Execute the query, fetching rows as dicts so field names map to the model.
-        async with self.driver_conn.cursor(row_factory=dict_row) as cursor:
-            await cursor.execute(query)  # ty: ignore[no-matching-overload]
-            result = await cursor.fetchall()
-
-        # Parse the results.
-        return [response_model.model_validate(row) for row in result]
+        async with self.driver_conn.cursor(row_factory=class_row(response_model)) as cur:
+            await cur.execute(query)
+            return await cur.fetchall()
