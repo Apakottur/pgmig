@@ -119,6 +119,7 @@ typname
 typnamespace
 typtype
 typcategory
+typelem
 relrowsecurity
 relforcerowsecurity
 polname
