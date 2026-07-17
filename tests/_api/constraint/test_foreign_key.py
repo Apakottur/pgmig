@@ -1,3 +1,5 @@
+import pytest
+
 from tests._api.generate_setup import GenerateSetup
 
 # Shared setup: a referenced table (with a primary key) and a referencing table, on both sides.
@@ -226,6 +228,75 @@ async def test_foreign_key_drop_ordered_before_referenced_table(gen_setup: Gener
             'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
             'DROP TABLE "public"."team"',
         ],
+    )
+
+
+async def test_foreign_key_add_not_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    A NOT ENFORCED foreign key (Postgres 18+) rides through pg_get_constraintdef on a fresh ADD.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED"
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) NOT ENFORCED"
+        ],
+    )
+
+
+async def test_foreign_key_enforce_to_not_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    Only the enforced state differs (Postgres 18+): ALTER CONSTRAINT ... NOT ENFORCED, not drop + re-add.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED"
+        ],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" NOT ENFORCED'],
+    )
+
+
+async def test_foreign_key_not_enforced_to_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    The reverse enforced-state change (Postgres 18+): ALTER CONSTRAINT ... ENFORCED.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED"
+        ],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" ENFORCED'],
+    )
+
+
+async def test_foreign_key_not_enforced_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical NOT ENFORCED foreign key on both sides (Postgres 18+) -> no migration SQL.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=[
+            *_TABLES,
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
     )
 
 

@@ -1,3 +1,5 @@
+import pytest
+
 from tests._api.generate_setup import GenerateSetup
 
 
@@ -280,6 +282,45 @@ async def test_constraint_check_definition_changed(gen_setup: GenerateSetup) -> 
         diff=[
             'ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check"',
             'ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 18))',
+        ],
+    )
+
+
+async def test_constraint_add_check_not_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    A NOT ENFORCED check constraint (Postgres 18+) rides through pg_get_constraintdef on a fresh ADD.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE person (age integer)"],
+        dst=[
+            "CREATE TABLE person (age integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT ENFORCED",
+        ],
+        diff=['ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT ENFORCED'],
+    )
+
+
+async def test_constraint_check_enforcement_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    Postgres cannot alter a check constraint's enforceability in place, so an enforced-state
+    change is a DROP + ADD, not an ALTER CONSTRAINT (Postgres 18+).
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (age integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)",
+        ],
+        dst=[
+            "CREATE TABLE person (age integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT ENFORCED",
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT ENFORCED',
         ],
     )
 
