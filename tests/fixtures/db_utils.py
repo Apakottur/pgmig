@@ -9,9 +9,8 @@ from pgmig._db import DbConnection
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 
-# SQL that wipes a database back to a freshly-created state (see the file for details).
+# SQL that wipes a database back to a freshly-created state.
 _RESET_SQL = (Path(__file__).parent / "db_reset.sql").read_text(encoding="utf-8")
-
 
 # Postgres truncates identifiers past this length, which would silently collapse
 # distinct long branch names to the same database name.
@@ -77,6 +76,8 @@ async def recreate_database(admin_conn: DbConnection, db_name: str) -> None:
 
 async def reset_database(conn: DbConnection) -> None:
     """
-    Reset a database to the state of a freshly created one, reusing an open connection.
+    Reset a database to the state of a freshly created one.
+
+    This is ~25% faster than recreating the database, keeping the connection open.
     """
     await conn.execute(_RESET_SQL)

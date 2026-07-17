@@ -110,7 +110,7 @@ async def _persistent_dbs(
     src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
     dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
 
-    # Start from a clean slate; a stale one from a crashed prior run may linger.
+    # Create the DBs.
     await recreate_database(_admin_conn, src_db_name)
     await recreate_database(_admin_conn, dst_db_name)
 
