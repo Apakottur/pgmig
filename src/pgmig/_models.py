@@ -356,6 +356,9 @@ class DbIntrospectionResult:
     # Mapping from a view to the set of views it depends on.
     view_dependencies: dict[RelationKey, set[RelationKey]]
 
+    # Mapping from a materialized view to the set of views/matviews it reads from.
+    matview_dependencies: dict[RelationKey, set[RelationKey]]
+
     # Mapping from a view to the set of table columns it reads.
     view_column_dependencies: dict[RelationKey, set[ColumnKey]]
 

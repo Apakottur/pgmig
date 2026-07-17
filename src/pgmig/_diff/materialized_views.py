@@ -1,59 +1,62 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, recreated_matview_keys
-from pgmig._keys import RelationKey
+from pgmig._diff._context import context
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    collect_relations,
+    ctx_iter_schema_pairs,
+    diff_comment_statements,
+    recreated_matview_keys,
+    topological_sort,
+)
 from pgmig._sql import qualified
 
 
 def generate() -> Iterator[Statement]:
     """
-    Generate the migration SQL of materialized views. Creates are phased after the tables and
-    functions a matview reads from exist; drops run before those objects are dropped. A changed
-    definition is a drop-and-recreate (there is no CREATE OR REPLACE MATERIALIZED VIEW). Creates
-    use WITH NO DATA: the matview is created unpopulated and the user runs REFRESH themselves.
+    Generate the migration SQL of materialized views, ordered by their dependencies.
 
-    A matview reading a table column whose type changes is also dropped-and-recreated: Postgres
-    refuses ALTER COLUMN ... TYPE while a matview reads the column, and the type change leaves
-    the matview definition unchanged, so only the matview-on-column edge catches it. The drop
-    lands in VIEW_DROP (before the TABLE-phase change) and the recreate in VIEW_CREATE (after).
-    Matviews cannot depend on other managed views/matviews (that pairing is refused upstream),
-    so each matview is independent -- no transitive cascade is needed.
+    Creates run in MATVIEW_CREATE (after VIEW_CREATE, so any plain view a matview reads already
+    exists) in dependency-first order; drops run in MATVIEW_DROP (before VIEW_DROP, so a matview
+    is gone before the view it reads) in dependent-first order. Matview-on-view ordering is thus
+    a phase invariant; matview-on-matview ordering is the topological sort here. Creates use
+    WITH NO DATA (the matview is unpopulated and the user runs REFRESH themselves).
+
+    A changed definition is a drop-and-recreate (there is no CREATE OR REPLACE MATERIALIZED
+    VIEW); so is reading a retyped table column, or reading a view/matview that is itself
+    recreated. recreated_matview_keys is the single source of truth for that decision, shared
+    with the matview-index differ so both agree on which matviews are recreated.
     """
-    # Matviews the migration drops and recreates (definition changed, or reading a retyped
-    # column). Shared with the matview-index differ so both agree on which matviews are recreated.
-    recreated_keys = recreated_matview_keys()
+    source, target = context.source, context.target
+    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name)
+    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name)
 
-    for schema_name, src_views, dst_views, pairs in ctx_iter_object_pairs(
-        lambda schema: schema.materialized_view_by_name
-    ):
-        # Matviews recreated (definition changed, or reading a retyped column): the drop resets
-        # the comment, so it must be re-emitted even when unchanged.
-        recreated: set[str] = set()
-        for name, src_view, dst_view in pairs:
-            qualified_name = qualified(schema_name, name)
+    recreate = recreated_matview_keys()
+    drop_only = src_matviews.keys() - dst_matviews.keys()
+    create_only = dst_matviews.keys() - src_matviews.keys()
 
-            # Present in target only: create it.
-            if src_view is None:
-                yield Statement(
-                    Phase.VIEW_CREATE,
-                    f"CREATE MATERIALIZED VIEW {qualified_name} AS {dst_views[name].definition} WITH NO DATA;",
-                )
-            # Present in source only: drop it.
-            elif dst_view is None:
-                yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
-            # Present in both and recreated (changed definition, or reading a retyped column):
-            # drop and recreate. A type change leaves the definition unchanged, so the column
-            # edge is the only signal in that case.
-            elif RelationKey(schema_name, name) in recreated_keys:
-                yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
-                yield Statement(
-                    Phase.VIEW_CREATE,
-                    f"CREATE MATERIALIZED VIEW {qualified_name} AS {dst_view.definition} WITH NO DATA;",
-                )
-                recreated.add(name)
+    # Drops: dependent-first, so reverse the source graph's dependency-first order.
+    drops = drop_only | recreate
+    for key in reversed(topological_sort(drops, source.matview_dependencies)):
+        yield Statement(Phase.MATVIEW_DROP, f"DROP MATERIALIZED VIEW {qualified(key.schema, key.name)};")
 
-        # Sync comments for target matviews, after the matviews they annotate exist.
+    # Creates: dependency-first over the target graph.
+    creates = create_only | recreate
+    for key in topological_sort(creates, target.matview_dependencies):
+        matview = dst_matviews[key]
+        yield Statement(
+            Phase.MATVIEW_CREATE,
+            f"CREATE MATERIALIZED VIEW {qualified(key.schema, key.name)} AS {matview.definition} WITH NO DATA;",
+        )
+
+    # Comments, after the matviews they annotate exist. A recreated matview re-emits its comment
+    # (the drop reset it), so pass the recreated names per schema.
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_schema_matviews = src_schema.materialized_view_by_name if src_schema else {}
+        dst_schema_matviews = dst_schema.materialized_view_by_name if dst_schema else {}
+        recreated_names = {key.name for key in recreate if key.schema == schema_name}
         for sql in diff_comment_statements(
-            schema_name, src_views, dst_views, kind="MATERIALIZED VIEW", recreated=recreated
+            schema_name, src_schema_matviews, dst_schema_matviews, kind="MATERIALIZED VIEW", recreated=recreated_names
         ):
-            yield Statement(Phase.VIEW_CREATE, sql)
+            yield Statement(Phase.MATVIEW_CREATE, sql)
