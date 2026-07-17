@@ -197,3 +197,4 @@ daterange
 deferrability
 condeferrable
 condeferred
+tablespaces

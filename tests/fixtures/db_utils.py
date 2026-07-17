@@ -1,5 +1,6 @@
 import hashlib
 import re
+from pathlib import Path
 
 import tenacity
 
@@ -7,6 +8,9 @@ from pgmig._db import DbConnection
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
+
+# SQL that wipes a database back to a freshly-created state (see the file for details).
+_RESET_SQL = (Path(__file__).parent / "db_reset.sql").read_text(encoding="utf-8")
 
 
 # Postgres truncates identifiers past this length, which would silently collapse
@@ -69,3 +73,10 @@ async def recreate_database(admin_conn: DbConnection, db_name: str) -> None:
 
     # Create the database.
     await admin_conn.execute(f"CREATE DATABASE {db_name}")
+
+
+async def reset_database(conn: DbConnection) -> None:
+    """
+    Reset a database to the state of a freshly created one, reusing an open connection.
+    """
+    await conn.execute(_RESET_SQL)
