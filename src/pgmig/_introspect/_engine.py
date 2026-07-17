@@ -79,10 +79,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
             conn=conn,
             db_introspection_result=db_introspection_result,
         ):
-            # Use an empty search path to make introspection independent of the database's own search path.
-            await conn.execute("SET LOCAL search_path = ''")
-
-            # Get all the unsupported findings.
+            # Look for any unsupported state.
             all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
             if all_findings:
                 message = "pgmig cannot process this database:\n" + "\n".join(
@@ -90,6 +87,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
                 )
                 raise PgmigUnsupportedError(message)
 
+            # Run all the introspections.
             for load in _LOADERS:
                 await load()
 
