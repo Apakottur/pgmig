@@ -10,6 +10,7 @@ from pgmig._diff._core import (
     recreated_matview_keys,
     topological_sort,
 )
+from pgmig._keys import RelationKey
 from pgmig._sql import qualified
 
 
@@ -29,8 +30,8 @@ def generate() -> Iterator[Statement]:
     with the matview-index differ so both agree on which matviews are recreated.
     """
     source, target = context.source, context.target
-    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name)
-    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name)
+    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
+    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name, RelationKey)
 
     recreate = recreated_matview_keys()
     drop_only = src_matviews.keys() - dst_matviews.keys()

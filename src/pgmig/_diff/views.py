@@ -10,6 +10,7 @@ from pgmig._diff._core import (
     recreated_view_keys,
     topological_sort,
 )
+from pgmig._keys import RelationKey
 from pgmig._sql import qualified
 
 
@@ -24,8 +25,8 @@ def generate() -> Iterator[Statement]:
     still reads, and the dependents must be rebuilt afterwards.
     """
     source, target = context.source, context.target
-    src_views = collect_relations(source, lambda schema: schema.view_by_name)
-    dst_views = collect_relations(target, lambda schema: schema.view_by_name)
+    src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
+    dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
 
     recreate = recreated_view_keys()
     drop_only = src_views.keys() - dst_views.keys()

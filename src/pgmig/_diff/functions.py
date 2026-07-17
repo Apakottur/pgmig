@@ -81,16 +81,15 @@ def _topological_drop_order(late: dict[FunctionKey, tuple[str, Function]]) -> li
     `topological_sort` orders dependencies-first (a node after everything in its edge set),
     which is the opposite of what a drop needs. Feeding it the reversed graph -- each routine
     mapped to the late routines that depend on it -- makes it emit a routine before its
-    dependencies, i.e. drop order. Edges are restricted to the late set.
+    dependencies, i.e. drop order. topological_sort ignores edges leaving the node set, so a
+    dependency outside the late set needs no manual filtering here.
     """
-    keys = set(late)
     # dependents[G] = late routines that depend on G (each must be dropped before G).
-    dependents: dict[FunctionKey, set[FunctionKey]] = {key: set() for key in keys}
-    for key in keys:
-        for dep in late[key][1].depends_on_functions:
-            if dep in keys:
-                dependents[dep].add(key)
-    return topological_sort(keys, dependents)
+    dependents: dict[FunctionKey, set[FunctionKey]] = {}
+    for key, (_schema_name, function) in late.items():
+        for dep in function.depends_on_functions:
+            dependents.setdefault(dep, set()).add(key)
+    return topological_sort(set(late), dependents)
 
 
 def _function_comment_statements(
