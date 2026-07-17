@@ -82,7 +82,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
             # One transaction for the whole introspection so every guard and loader reads the
             # same REPEATABLE READ snapshot (an object dropped mid-introspection is then either
             # wholly present or wholly absent, never half-seen).
-            async with conn.snapshot():
+            async with conn.snapshot():  # pragma: no branch
                 # Get all the unsupported findings.
                 all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
                 if all_findings:
