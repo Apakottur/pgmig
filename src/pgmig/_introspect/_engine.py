@@ -79,11 +79,9 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
             conn=conn,
             db_introspection_result=db_introspection_result,
         ):
-            # One transaction for the whole introspection so every guard and loader reads the
-            # same REPEATABLE READ snapshot (an object dropped mid-introspection is then either
-            # wholly present or wholly absent, never half-seen).
+            # Run all the introspection on a single snapshot.
             async with conn.snapshot():  # pragma: no branch
-                # Get all the unsupported findings.
+                # Look for any unsupported state.
                 all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
                 if all_findings:
                     message = "pgmig cannot process this database:\n" + "\n".join(
@@ -91,6 +89,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
                     )
                     raise PgmigUnsupportedError(message)
 
+                # Run all the introspections.
                 for load in _LOADERS:
                     await load()
 
