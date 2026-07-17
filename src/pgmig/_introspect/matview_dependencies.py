@@ -1,6 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 from pgmig._sql import qualified
 
 # pg_class.relkind -> the object noun used in the finding message.
@@ -28,8 +28,8 @@ async def load() -> None:
     once that pairing is ruled out.
     """
     for row in await run_introspection_query("matview_dependencies.sql", _MatviewDependencyRow):
-        dependent = ViewKey(row.dependent_schema, row.dependent_view)
-        referenced = ViewKey(row.referenced_schema, row.referenced_view)
+        dependent = RelationKey(row.dependent_schema, row.dependent_view)
+        referenced = RelationKey(row.referenced_schema, row.referenced_view)
         context.db_introspection_result.matview_dependencies.setdefault(dependent, set()).add(referenced)
 
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
-from pgmig._keys import ColumnKey, CompositeTypeKey, FunctionKey, RelationKey, ViewKey
+from pgmig._keys import ColumnKey, CompositeTypeKey, FunctionKey, RelationKey
 
 
 @dataclass(frozen=True)
@@ -145,6 +145,10 @@ class Table:
     comment: str | None
     owner: str
     unlogged: bool  # UNLOGGED table (relpersistence 'u'); a partitioned parent is always logged
+    # Replica identity: pg_class.relreplident ('d' default, 'n' nothing, 'f' full, 'i' using
+    # index). replica_identity_index holds the index name when 'i', else None.
+    replica_identity: str
+    replica_identity_index: str | None
 
     # Declarative partitioning metadata.
     partition_strategy: str | None
@@ -201,6 +205,7 @@ class Sequence:
     cycle: bool
     comment: str | None
     owned_by: ColumnKey | None
+    unlogged: bool  # UNLOGGED sequence (relpersistence 'u'); PG15+ only
 
 
 @dataclass(frozen=True)
@@ -349,13 +354,13 @@ class DbIntrospectionResult:
     extension_by_name: dict[str, Extension]
 
     # Mapping from a view to the set of views it depends on.
-    view_dependencies: dict[ViewKey, set[ViewKey]]
+    view_dependencies: dict[RelationKey, set[RelationKey]]
 
     # Mapping from a materialized view to the set of views/matviews it reads from.
-    matview_dependencies: dict[ViewKey, set[ViewKey]]
+    matview_dependencies: dict[RelationKey, set[RelationKey]]
 
     # Mapping from a view to the set of table columns it reads.
-    view_column_dependencies: dict[ViewKey, set[ColumnKey]]
+    view_column_dependencies: dict[RelationKey, set[ColumnKey]]
 
     # Mapping from a composite type to the set of composite types it depends on.
     composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]

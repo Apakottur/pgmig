@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 from pgmig._models import DbIntrospectionResult, Schema, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -196,6 +196,7 @@ class Phase(Enum):
     INDEX = auto()
     CONSTRAINT = auto()
     COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
+    REPLICA_IDENTITY = auto()  # After INDEX/CONSTRAINT: USING INDEX references an index by name.
     # After the column defaults / expression indexes / check constraints that depend on a routine.
     FUNCTION_DROP_LATE = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
@@ -277,25 +278,25 @@ def ctx_iter_object_pairs(
 
 def collect_relations(
     db_introspection_result: DbIntrospectionResult, select: Callable[[Schema], Mapping[str, _ObjT]]
-) -> dict[ViewKey, _ObjT]:
+) -> dict[RelationKey, _ObjT]:
     """
     Flatten every schema's objects (as picked by `select`) into one (schema, name) -> object
     map. View/matview ordering is global because a dependency can cross schemas.
     """
-    objects: dict[ViewKey, _ObjT] = {}
+    objects: dict[RelationKey, _ObjT] = {}
     for schema_name, schema in db_introspection_result.schema_by_name.items():
         for name, obj in select(schema).items():
-            objects[ViewKey(schema_name, name)] = obj
+            objects[RelationKey(schema_name, name)] = obj
     return objects
 
 
-def dependents_closure(seeds: set[ViewKey], edges: Mapping[ViewKey, set[ViewKey]]) -> set[ViewKey]:
+def dependents_closure(seeds: set[RelationKey], edges: Mapping[RelationKey, set[RelationKey]]) -> set[RelationKey]:
     """
     Every relation that transitively reads any relation in `seeds`, plus the seeds themselves.
     Used for the recreate cascade: recreating a relation forces every relation that reads it
     (directly or through a chain) to be recreated too. Edges are dependent -> the set it reads.
     """
-    reverse: dict[ViewKey, set[ViewKey]] = {}
+    reverse: dict[RelationKey, set[RelationKey]] = {}
     for node, node_deps in edges.items():
         for dep in node_deps:
             reverse.setdefault(dep, set()).add(node)
@@ -311,7 +312,7 @@ def dependents_closure(seeds: set[ViewKey], edges: Mapping[ViewKey, set[ViewKey]
     return result
 
 
-def recreated_view_keys() -> set[ViewKey]:
+def recreated_view_keys() -> set[RelationKey]:
     """
     Plain views the migration drops and recreates: a changed definition or option set (CREATE OR
     REPLACE VIEW cannot reshape columns, and options live outside the definition), or reading a
@@ -333,7 +334,7 @@ def recreated_view_keys() -> set[ViewKey]:
     return dependents_closure(changed | context.retyped_column_readers, source.view_dependencies) & shared
 
 
-def recreated_matview_keys() -> set[ViewKey]:
+def recreated_matview_keys() -> set[RelationKey]:
     """
     Materialized views present on both sides that the migration drops and recreates: the
     definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW), the matview reads a

@@ -190,3 +190,6 @@ autovacuum
 retargeted
 nextval
 idseq
+relreplident
+indisreplident
+uidx
