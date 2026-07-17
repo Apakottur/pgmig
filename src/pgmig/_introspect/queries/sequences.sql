@@ -10,6 +10,7 @@ SELECT
     s.seqmax AS seq_max,
     s.seqcache AS seq_cache,
     s.seqcycle AS seq_cycle,
+    c.relpersistence AS seq_persistence,
     obj_description(c.oid, 'pg_class') AS seq_comment,
     -- Manual OWNED BY target (deptype 'a' to a column). NULL for a truly standalone
     -- sequence. A serial/identity backing sequence carries the same 'a'/'i' dependency but
