@@ -103,9 +103,7 @@ async def _persistent_dbs(
     _admin_conn: DbConnection,
 ) -> AsyncIterator[tuple[str, str, DbConnection, DbConnection]]:
     """
-    Create the source and target databases once for the whole session and hold a connection
-    open to each. Tests reset these to empty (see `gen_setup`) rather than paying a
-    DROP/CREATE DATABASE and reconnect per test.
+    Create the source and target databases once for the whole session and hold a connection open to each.
     """
     src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
     dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
@@ -128,9 +126,7 @@ async def gen_setup(
     _persistent_dbs: tuple[str, str, DbConnection, DbConnection],
 ) -> GenerateSetup:
     """
-    Main fixture for testing `generate`. The databases are reset (not recreated) and their
-    connections outlive the test, so there is no teardown -- this fixture returns rather than
-    yields.
+    Main fixture for testing `generate`.
     """
     src_db_name, dst_db_name, src_conn, dst_conn = _persistent_dbs
 
@@ -138,6 +134,7 @@ async def gen_setup(
     await reset_database(src_conn)
     await reset_database(dst_conn)
 
+    # Return the setup.
     return GenerateSetup(
         src_db_name=src_db_name,
         dst_db_name=dst_db_name,

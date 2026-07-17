@@ -1,10 +1,4 @@
--- Reset a database to the state of a freshly created one, on an open connection -- no
--- DROP/CREATE DATABASE round-trip and no reconnect. Reused across tests on a persistent
--- connection, this is roughly an order of magnitude faster than dropping and recreating.
---
--- It drops the object classes the tests exercise: schemas, extensions, and per-database
--- settings. Global objects (roles, tablespaces) are never created by the tests. If a future
--- test leaks state this misses, extend this file and add a test covering it.
+-- Reset a database to the state of a freshly created one.
 DO $$
 DECLARE
     entry record;

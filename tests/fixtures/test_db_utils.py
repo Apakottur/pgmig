@@ -40,21 +40,19 @@ def test_deterministic() -> None:
     assert get_unique_postgres_name("pgmig_src", "some/branch") == get_unique_postgres_name("pgmig_src", "some/branch")
 
 
-async def test_reset_database_drops_tables_and_columns(gen_setup: GenerateSetup) -> None:
+async def test_reset_database(gen_setup: GenerateSetup) -> None:
     """
-    reset_database wipes user objects: after creating a table with columns, resetting the
-    database leaves the public schema empty.
+    Sanity check that `reset_database` wipes user objects.
     """
-    conn = gen_setup.src
-    await conn.execute("CREATE TABLE widget (id integer, label text)")
+    await gen_setup.src.execute("CREATE TABLE widget (id integer, label text)")
 
-    before = await conn.execute(
+    before = await gen_setup.src.execute(
         "SELECT column_name FROM information_schema.columns "
         "WHERE table_schema = 'public' AND table_name = 'widget' ORDER BY column_name"
     )
     assert [row[0] for row in before] == ["id", "label"]
 
-    await reset_database(conn)
+    await reset_database(gen_setup.src)
 
-    after = await conn.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+    after = await gen_setup.src.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
     assert after[0][0] == 0
