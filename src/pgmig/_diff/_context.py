@@ -4,11 +4,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
 
-from pgmig._keys import ColumnKey, ViewKey
+from pgmig._keys import ColumnKey, RelationKey
 from pgmig._models import DbIntrospectionResult
 
 
-def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[ViewKey]:
+def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[RelationKey]:
     """
     Views/matviews that read (in the source) a table column whose type changes between source
     and target. Such a reader must be dropped and recreated around the ALTER COLUMN ... TYPE:
@@ -61,7 +61,7 @@ class _ContextData:
     ignore_owner: bool
 
     @cached_property
-    def retyped_column_readers(self) -> set[ViewKey]:
+    def retyped_column_readers(self) -> set[RelationKey]:
         return _get_retyped_column_readers(self.source, self.target)
 
 
@@ -119,7 +119,7 @@ class _Context:
         return _context.get().ignore_owner
 
     @property
-    def retyped_column_readers(self) -> set[ViewKey]:
+    def retyped_column_readers(self) -> set[RelationKey]:
         return _context.get().retyped_column_readers
 
 

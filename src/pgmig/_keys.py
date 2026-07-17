@@ -2,16 +2,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, order=True)
-class ViewKey:
-    """
-    Full view identifier within a database.
-    """
-
-    schema: str
-    name: str
-
-
-@dataclass(frozen=True, order=True)
 class FunctionKey:
     """
     Full function identifier within a database (schema plus overload signature).

@@ -1,12 +1,12 @@
 import pytest
 
 from pgmig._diff._core import topological_sort
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 
-A = ViewKey("public", "a")
-B = ViewKey("public", "b")
-C = ViewKey("public", "c")
-D = ViewKey("public", "d")
+A = RelationKey("public", "a")
+B = RelationKey("public", "b")
+C = RelationKey("public", "c")
+D = RelationKey("public", "d")
 
 
 def test_topological_sort_dependencies_first() -> None:

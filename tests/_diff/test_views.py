@@ -1,9 +1,9 @@
 from pgmig._diff.views import _dependents_closure
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 
-A = ViewKey("public", "a")
-B = ViewKey("public", "b")
-C = ViewKey("public", "c")
+A = RelationKey("public", "a")
+B = RelationKey("public", "b")
+C = RelationKey("public", "c")
 
 
 def test_dependents_closure_transitive() -> None:

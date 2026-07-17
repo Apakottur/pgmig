@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, recreated_matview_keys
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 from pgmig._sql import qualified
 
 
@@ -44,7 +44,7 @@ def generate() -> Iterator[Statement]:
             # Present in both and recreated (changed definition, or reading a retyped column):
             # drop and recreate. A type change leaves the definition unchanged, so the column
             # edge is the only signal in that case.
-            elif ViewKey(schema_name, name) in recreated_keys:
+            elif RelationKey(schema_name, name) in recreated_keys:
                 yield Statement(Phase.VIEW_DROP, f"DROP MATERIALIZED VIEW {qualified_name};")
                 yield Statement(
                     Phase.VIEW_CREATE,

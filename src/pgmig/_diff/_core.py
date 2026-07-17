@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 from pgmig._models import Schema, Table
 from pgmig._sql import comment_on, ident, qualified
 
@@ -274,7 +274,7 @@ def ctx_iter_object_pairs(
         yield schema_name, src_objs, dst_objs, pairs
 
 
-def recreated_matview_keys() -> set[ViewKey]:
+def recreated_matview_keys() -> set[RelationKey]:
     """
     Materialized views present on both sides that the migration drops and recreates: either the
     definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW) or the matview reads a
@@ -288,12 +288,12 @@ def recreated_matview_keys() -> set[ViewKey]:
     plain create or drop, not a recreate, and is absent here.
     """
     column_readers = context.retyped_column_readers
-    keys: set[ViewKey] = set()
+    keys: set[RelationKey] = set()
     for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
         src_views = src_schema.materialized_view_by_name if src_schema else {}
         dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
         for name in src_views.keys() & dst_views.keys():
-            key = ViewKey(schema_name, name)
+            key = RelationKey(schema_name, name)
             if src_views[name].definition != dst_views[name].definition or key in column_readers:
                 keys.add(key)
     return keys
