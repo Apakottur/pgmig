@@ -30,12 +30,14 @@ class DbConnection:
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, dsn: str, auto_commit: bool = True) -> AsyncIterator[Self]:
+    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
         """
-        Connection context.
+        Connection context. Autocommit: the apply path runs statements that cannot execute
+        inside a transaction block (e.g. CREATE INDEX CONCURRENTLY); read-only introspection
+        opens its own transaction explicitly via `snapshot`.
         """
         try:
-            conn = await psycopg.AsyncConnection.connect(dsn, autocommit=auto_commit)
+            conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
         except psycopg.Error as error:
             raise _PgmigError(f"Could not connect to database: {error}") from error
 
@@ -65,15 +67,16 @@ class DbReadOnlyConnection(DbConnection):
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, dsn: str, auto_commit: bool = True) -> AsyncIterator[Self]:
+    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
         """
         Read-only connection context.
         """
-        async with super().connect(dsn=dsn, auto_commit=auto_commit) as conn:
+        async with super().connect(dsn=dsn) as conn:
             # Force all subsequent transactions to be read-only.
             await conn.driver_conn.set_read_only(True)
 
-            # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
+            # Use REPEATABLE READ so a single transaction (opened by `snapshot`) reads one
+            # consistent snapshot of the database across every introspection query.
             await conn.driver_conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
 
             # Use an empty search path so introspection is independent of the database's own search
@@ -81,6 +84,17 @@ class DbReadOnlyConnection(DbConnection):
             await conn.driver_conn.execute("SET search_path = ''")
 
             yield conn
+
+    @asynccontextmanager
+    async def snapshot(self) -> AsyncIterator[None]:
+        """
+        Run the enclosed reads inside a single transaction. Because the connection is
+        autocommit and REPEATABLE READ, this is what actually pins one snapshot: without an
+        explicit transaction each query would run in its own, so an object dropped or created
+        between two queries could be seen inconsistently.
+        """
+        async with self.driver_conn.transaction():
+            yield
 
     async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
         """

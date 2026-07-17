@@ -76,18 +76,19 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
             conn=conn,
             db_introspection_result=db_introspection_result,
         ):
-            # Use an empty search path to make introspection independent of the database's own search path.
-            await conn.execute("SET LOCAL search_path = ''")
+            # One transaction for the whole introspection so every guard and loader reads the
+            # same REPEATABLE READ snapshot (an object dropped mid-introspection is then either
+            # wholly present or wholly absent, never half-seen).
+            async with conn.snapshot():
+                # Get all the unsupported findings.
+                all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
+                if all_findings:
+                    message = "pgmig cannot process this database:\n" + "\n".join(
+                        f"  - {finding}" for finding in all_findings
+                    )
+                    raise PgmigUnsupportedError(message)
 
-            # Get all the unsupported findings.
-            all_findings = [finding for guard in _UNSUPPORTED_GUARDS for finding in await guard()]
-            if all_findings:
-                message = "pgmig cannot process this database:\n" + "\n".join(
-                    f"  - {finding}" for finding in all_findings
-                )
-                raise PgmigUnsupportedError(message)
-
-            for load in _LOADERS:
-                await load()
+                for load in _LOADERS:
+                    await load()
 
     return db_introspection_result
