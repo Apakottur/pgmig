@@ -138,3 +138,48 @@ async def test_foreign_key_dropped_with_its_own_table_before_referenced_table(ge
             'DROP TABLE "public"."team"',
         ],
     )
+
+
+async def test_foreign_key_validate(gen_setup: GenerateSetup) -> None:
+    """
+    Foreign key is NOT VALID in source, valid in target (same definition) ->
+    VALIDATE CONSTRAINT in place, not a drop-and-recheck under a stronger lock.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT VALID"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=['ALTER TABLE "public"."person" VALIDATE CONSTRAINT "person_team_fkey"'],
+    )
+
+
+async def test_foreign_key_becomes_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    Foreign key is valid in source, NOT VALID in target -> Postgres has no un-validate
+    ALTER, so drop and re-add it NOT VALID.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT VALID"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) NOT VALID",
+        ],
+    )
+
+
+async def test_foreign_key_add_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    New foreign key created NOT VALID -> the NOT VALID rides in the definition.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT VALID"],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) NOT VALID"
+        ],
+    )
