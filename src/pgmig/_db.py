@@ -29,16 +29,26 @@ class DbConnection:
         self.driver_conn = conn
 
     @classmethod
-    @asynccontextmanager
-    async def connect(cls, *, dsn: str, auto_commit: bool = True) -> AsyncIterator[Self]:
+    async def _open(cls, dsn: str, *, autocommit: bool) -> psycopg.AsyncConnection[Any]:
         """
-        Connection context.
+        Open the underlying driver connection, wrapping any driver error.
         """
         try:
-            conn = await psycopg.AsyncConnection.connect(dsn, autocommit=auto_commit)
+            return await psycopg.AsyncConnection.connect(dsn, autocommit=autocommit)
         except psycopg.Error as error:
             raise _PgmigError(f"Could not connect to database: {error}") from error
 
+    @classmethod
+    @asynccontextmanager
+    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
+        """
+        Connection context.
+
+        Autocommit is on: this connection runs generated migration SQL, which includes
+        statements that cannot run inside a transaction block (e.g. CREATE INDEX
+        CONCURRENTLY).
+        """
+        conn = await cls._open(dsn, autocommit=True)
         async with conn:
             yield cls(dsn=dsn, conn=conn)
 
@@ -65,22 +75,30 @@ class DbReadOnlyConnection(DbConnection):
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, dsn: str, auto_commit: bool = True) -> AsyncIterator[Self]:
+    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
         """
         Read-only connection context.
+
+        Autocommit is off so a single REPEATABLE READ transaction spans every introspection
+        query: without it each query is its own transaction with its own snapshot, and
+        concurrent DDL on a live database could tear the result (an object seen by one loader
+        but gone by the next). The transaction opens on the first statement below and is held
+        open (never committed) for the connection's lifetime; the read-only flag and empty
+        search path apply to it.
         """
-        async with super().connect(dsn=dsn, auto_commit=auto_commit) as conn:
-            # Force all subsequent transactions to be read-only.
-            await conn.driver_conn.set_read_only(True)
+        conn = await cls._open(dsn, autocommit=False)
+        async with conn:
+            # Read-only and REPEATABLE READ must be set before the transaction begins (no
+            # statement has run yet), so they govern the snapshot the loaders share.
+            await conn.set_read_only(True)
+            await conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
 
-            # Use REPEATABLE READ so that all introspection is done on a single snapshot of the database.
-            await conn.driver_conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
+            # Empty search path so introspection is independent of the database's own search
+            # path: pg_get_*def()/format_type() then emit fully schema-qualified names. This
+            # first statement opens the shared transaction.
+            await conn.execute("SET search_path = ''")
 
-            # Use an empty search path so introspection is independent of the database's own search
-            # path: pg_get_*def()/format_type() then emit fully schema-qualified names.
-            await conn.driver_conn.execute("SET search_path = ''")
-
-            yield conn
+            yield cls(dsn=dsn, conn=conn)
 
     async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
         """
