@@ -198,3 +198,4 @@ deferrability
 condeferrable
 condeferred
 tablespaces
+commitish
