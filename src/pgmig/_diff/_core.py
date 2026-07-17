@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 _Renamable = TypeVar("_Renamable")
 _ObjT = TypeVar("_ObjT")
+_KeyT = TypeVar("_KeyT")
 _SortableT = TypeVar("_SortableT", bound="SupportsRichComparison")
 
 
@@ -281,16 +282,20 @@ def ctx_iter_object_pairs(
 
 
 def collect_relations(
-    db_introspection_result: DbIntrospectionResult, select: Callable[[Schema], Mapping[str, _ObjT]]
-) -> dict[RelationKey, _ObjT]:
+    db_introspection_result: DbIntrospectionResult,
+    select: Callable[[Schema], Mapping[str, _ObjT]],
+    key_factory: Callable[[str, str], _KeyT],
+) -> dict[_KeyT, _ObjT]:
     """
     Flatten every schema's objects (as picked by `select`) into one (schema, name) -> object
-    map. View/matview ordering is global because a dependency can cross schemas.
+    map, keyed by `key_factory(schema_name, name)` (RelationKey for views/matviews,
+    CompositeTypeKey for composite types). Global flattening is needed for object kinds whose
+    create/drop order crosses schemas, so the whole set orders as one.
     """
-    objects: dict[RelationKey, _ObjT] = {}
+    objects: dict[_KeyT, _ObjT] = {}
     for schema_name, schema in db_introspection_result.schema_by_name.items():
         for name, obj in select(schema).items():
-            objects[RelationKey(schema_name, name)] = obj
+            objects[key_factory(schema_name, name)] = obj
     return objects
 
 
@@ -327,8 +332,8 @@ def recreated_view_keys() -> set[RelationKey]:
     must itself be recreated.
     """
     source, target = context.source, context.target
-    src_views = collect_relations(source, lambda schema: schema.view_by_name)
-    dst_views = collect_relations(target, lambda schema: schema.view_by_name)
+    src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
+    dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
     shared = src_views.keys() & dst_views.keys()
     changed = {
         key
@@ -353,8 +358,8 @@ def recreated_matview_keys() -> set[RelationKey]:
     plain create or drop, not a recreate, and is absent here.
     """
     source, target = context.source, context.target
-    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name)
-    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name)
+    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
+    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name, RelationKey)
     both = src_matviews.keys() & dst_matviews.keys()
 
     column_readers = context.retyped_column_readers
