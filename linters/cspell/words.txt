@@ -197,4 +197,5 @@ daterange
 deferrability
 condeferrable
 condeferred
+tablespaces
 commitish

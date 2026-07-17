@@ -1,4 +1,5 @@
-from tests.fixtures.db_utils import _MAX_IDENTIFIER_LEN, get_unique_postgres_name
+from tests._api.generate_setup import GenerateSetup
+from tests.fixtures.db_utils import _MAX_IDENTIFIER_LEN, get_unique_postgres_name, reset_database
 
 
 def test_simple_branch() -> None:
@@ -37,3 +38,21 @@ def test_long_names_stay_unique_by_hash() -> None:
 
 def test_deterministic() -> None:
     assert get_unique_postgres_name("pgmig_src", "some/branch") == get_unique_postgres_name("pgmig_src", "some/branch")
+
+
+async def test_reset_database(gen_setup: GenerateSetup) -> None:
+    """
+    Sanity check that `reset_database` wipes user objects.
+    """
+    await gen_setup.src.execute("CREATE TABLE widget (id integer, label text)")
+
+    before = await gen_setup.src.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'widget' ORDER BY column_name"
+    )
+    assert [row[0] for row in before] == ["id", "label"]
+
+    await reset_database(gen_setup.src)
+
+    after = await gen_setup.src.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+    assert after[0][0] == 0

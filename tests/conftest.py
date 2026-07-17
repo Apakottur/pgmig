@@ -7,7 +7,13 @@ import shpyx
 
 from pgmig._db import DbConnection
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import get_dsn, get_unique_postgres_name, recreate_database, wait_for_db_connection
+from tests.fixtures.db_utils import (
+    get_dsn,
+    get_unique_postgres_name,
+    recreate_database,
+    reset_database,
+    wait_for_db_connection,
+)
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -91,32 +97,49 @@ async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnect
         shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
+@pytest.fixture(scope="session")
+async def _persistent_dbs(
+    _unique_key: str,
+    _admin_conn: DbConnection,
+) -> AsyncIterator[tuple[str, str, DbConnection, DbConnection]]:
+    """
+    Create the source and target databases once for the whole session and hold a connection open to each.
+    """
+    src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
+    dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
+
+    # Create the DBs.
+    await recreate_database(_admin_conn, src_db_name)
+    await recreate_database(_admin_conn, dst_db_name)
+
+    async with (
+        DbConnection.connect(dsn=get_dsn(src_db_name)) as src_conn,
+        DbConnection.connect(dsn=get_dsn(dst_db_name)) as dst_conn,
+    ):
+        yield src_db_name, dst_db_name, src_conn, dst_conn
+
+
 @pytest.fixture(scope="function")
 async def gen_setup(
     _unique_key: str,
     _pg_major: int,
-    _admin_conn: DbConnection,
-) -> AsyncIterator[GenerateSetup]:
+    _persistent_dbs: tuple[str, str, DbConnection, DbConnection],
+) -> GenerateSetup:
     """
     Main fixture for testing `generate`.
     """
-    # Get the database names and DSNs.
-    src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
-    dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
-    src_db_dsn = get_dsn(src_db_name)
-    dst_db_dsn = get_dsn(dst_db_name)
+    src_db_name, dst_db_name, src_conn, dst_conn = _persistent_dbs
 
-    # Recreate the DBs before each test.
-    await recreate_database(_admin_conn, src_db_name)
-    await recreate_database(_admin_conn, dst_db_name)
+    # Reset the persistent DBs to empty before each test.
+    await reset_database(src_conn)
+    await reset_database(dst_conn)
 
-    # Create DB connections and yield for the test.
-    async with DbConnection.connect(dsn=src_db_dsn) as src_conn, DbConnection.connect(dsn=dst_db_dsn) as dst_conn:
-        yield GenerateSetup(
-            src_db_name=src_db_name,
-            dst_db_name=dst_db_name,
-            src_conn=src_conn,
-            dst_conn=dst_conn,
-            pg_major=_pg_major,
-            unique_key=_unique_key,
-        )
+    # Return the setup.
+    return GenerateSetup(
+        src_db_name=src_db_name,
+        dst_db_name=dst_db_name,
+        src_conn=src_conn,
+        dst_conn=dst_conn,
+        pg_major=_pg_major,
+        unique_key=_unique_key,
+    )
