@@ -6,7 +6,7 @@ from pgmig._diff._core import (
     _diff_comments,
     ctx_iter_object_pairs,
     ctx_iter_schema_pairs,
-    topological_sort,
+    topological_drop_order,
 )
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import FunctionKey, RelationKey
@@ -77,19 +77,11 @@ def _dropped_relations() -> set[RelationKey]:
 def _topological_drop_order(late: dict[FunctionKey, tuple[str, Function]]) -> list[FunctionKey]:
     """
     Order the late-drop set so a routine is dropped before the routines it depends on.
-
-    `topological_sort` orders dependencies-first (a node after everything in its edge set),
-    which is the opposite of what a drop needs. Feeding it the reversed graph -- each routine
-    mapped to the late routines that depend on it -- makes it emit a routine before its
-    dependencies, i.e. drop order. topological_sort ignores edges leaving the node set, so a
-    dependency outside the late set needs no manual filtering here.
+    Edges are each routine's forward function dependencies; `topological_drop_order` reverses
+    the dependency-first sort and drops those outside the late set.
     """
-    # dependents[G] = late routines that depend on G (each must be dropped before G).
-    dependents: dict[FunctionKey, set[FunctionKey]] = {}
-    for key, (_schema_name, function) in late.items():
-        for dep in function.depends_on_functions:
-            dependents.setdefault(dep, set()).add(key)
-    return topological_sort(set(late), dependents)
+    edges = {key: set(value[1].depends_on_functions) for key, value in late.items()}
+    return topological_drop_order(set(late), edges)
 
 
 def _function_comment_statements(
