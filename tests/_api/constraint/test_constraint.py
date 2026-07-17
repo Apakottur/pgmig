@@ -301,6 +301,47 @@ async def test_constraint_check_unchanged(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_constraint_check_validate(gen_setup: GenerateSetup) -> None:
+    """
+    Check constraint is NOT VALID in source, valid in target (same expression) ->
+    VALIDATE CONSTRAINT in place, not a drop-and-recheck under a stronger lock.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer)"],
+        src=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT VALID"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)"],
+        diff=['ALTER TABLE "public"."person" VALIDATE CONSTRAINT "person_age_check"'],
+    )
+
+
+async def test_constraint_check_becomes_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    Check constraint is valid in source, NOT VALID in target -> Postgres has no
+    un-validate ALTER, so drop and re-add it NOT VALID.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer)"],
+        src=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT VALID"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT VALID',
+        ],
+    )
+
+
+async def test_constraint_add_check_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    New check constraint created NOT VALID -> the NOT VALID rides in the definition.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer)"],
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT VALID"],
+        diff=['ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT VALID'],
+    )
+
+
 async def test_constraint_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a constraint present on both sides -> COMMENT ON CONSTRAINT.

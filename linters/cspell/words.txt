@@ -193,6 +193,7 @@ idseq
 relreplident
 indisreplident
 uidx
+daterange
 deferrability
 condeferrable
 condeferred
