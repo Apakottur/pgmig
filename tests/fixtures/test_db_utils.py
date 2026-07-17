@@ -1,6 +1,4 @@
-from tests.fixtures.db_utils import get_unique_postgres_name
-
-_MAX_IDENTIFIER_LEN = 63
+from tests.fixtures.db_utils import _MAX_IDENTIFIER_LEN, get_unique_postgres_name
 
 
 def test_simple_branch() -> None:

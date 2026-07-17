@@ -111,7 +111,7 @@ class Trigger:
     comment: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Constraint:
     """
     A Postgres primary key, unique, check, or foreign key constraint, owned by a table.
@@ -133,7 +133,7 @@ class Constraint:
         return self.contype == "f"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
@@ -251,7 +251,7 @@ class Function:
         return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnumType:
     """
     A Postgres enum type, owned by a schema.
@@ -278,7 +278,7 @@ class View:
     options: tuple[str, ...]
 
 
-@dataclass
+@dataclass(frozen=True)
 class MaterializedView:
     """
     A Postgres materialized view, owned by a schema.
@@ -300,7 +300,7 @@ class CompositeField:
     type: str  # format_type(atttypid, atttypmod)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CompositeType:
     """
     A Postgres standalone composite type (CREATE TYPE ... AS (...)), owned by a schema.
@@ -311,7 +311,7 @@ class CompositeType:
     comment: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -325,7 +325,7 @@ class Domain:
     comment: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Schema:
     """
     A Postgres schema (namespace) and the objects it contains.
