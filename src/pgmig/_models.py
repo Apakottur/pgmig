@@ -201,6 +201,7 @@ class Sequence:
     cycle: bool
     comment: str | None
     owned_by: ColumnKey | None
+    unlogged: bool  # UNLOGGED sequence (relpersistence 'u'); PG15+ only
 
 
 @dataclass(frozen=True)
