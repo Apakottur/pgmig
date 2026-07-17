@@ -1,9 +1,18 @@
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
 from pgmig._introspect._context import context
+
+# Static introspection queries dir.
+_QUERIES_DIR = Path(__file__).parent / "queries"
+
+
+@lru_cache
+def _read_query(file_name: str) -> str:
+    return (_QUERIES_DIR / file_name).read_text(encoding="utf-8")
 
 
 class _QueryRow(BaseModel):
@@ -44,9 +53,6 @@ _RowT = TypeVar("_RowT", bound=_QueryRow)
 
 async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:
     """
-    Load a bundled SQL query from the queries directory and run it on the current
-    introspection connection, parsing each row into the given Pydantic model.
+    Run the introspection query, parsing each row into the given model.
     """
-    file_path = Path(__file__).parent.joinpath("queries").joinpath(file_name)
-    query = file_path.read_text(encoding="utf-8")
-    return await context.conn.introspect(query, model)
+    return await context.conn.introspect(_read_query(file_name), model)
