@@ -410,6 +410,39 @@ def _persistence_statements(schema_name: str, src_table: Table, dst_table: Table
     return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} {action};"]
 
 
+def _replica_identity_clause(table: Table) -> str:
+    """
+    Render the REPLICA IDENTITY clause matching a table's stored relreplident.
+    """
+    match table.replica_identity:
+        case "d":
+            return "REPLICA IDENTITY DEFAULT"
+        case "n":
+            return "REPLICA IDENTITY NOTHING"
+        case "f":
+            return "REPLICA IDENTITY FULL"
+        case "i":
+            # replica_identity_index is always set when relreplident is 'i' (see tables.sql).
+            return f"REPLICA IDENTITY USING INDEX {ident(table.replica_identity_index or '')}"
+        case _:
+            raise PgmigUnsupportedError(f"Unknown replica identity: {table.replica_identity!r}")
+
+
+def _replica_identity_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... REPLICA IDENTITY when the (mode, index) pair differs from source.
+    An absent source table (a fresh CREATE) starts at the default ('d'), so a non-default
+    target identity is emitted for a new table too. The statement lands in the
+    REPLICA_IDENTITY phase because USING INDEX references an index by name, which must exist
+    (created/renamed in the INDEX/CONSTRAINT phases) first.
+    """
+    src_identity = ("d", None) if src_table is None else (src_table.replica_identity, src_table.replica_identity_index)
+    dst_identity = (dst_table.replica_identity, dst_table.replica_identity_index)
+    if src_identity == dst_identity:
+        return []
+    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} {_replica_identity_clause(dst_table)};"]
+
+
 def _table_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
     """
     Emit COMMENT ON TABLE when the comment differs (absent source table = no comment).
@@ -527,6 +560,9 @@ def generate() -> Iterator[Statement]:
         rendered += _column_comment_statements(schema_name, None, dst_table)
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
+        # Replica identity is phased after the table's indexes exist (USING INDEX).
+        for sql in _replica_identity_statements(schema_name, None, dst_table):
+            yield Statement(Phase.REPLICA_IDENTITY, sql)
 
     # Alter: membership transitions, then columns (skipped for a partition child, whose
     # columns are inherited), then owner and comments.
@@ -555,6 +591,10 @@ def generate() -> Iterator[Statement]:
         # after the CONSTRAINT-phase DROP CONSTRAINT.
         for sql in deferred_drop_not_null:
             yield Statement(Phase.COLUMN_DROP_NOT_NULL, sql)
+        # Replica identity is phased after INDEX/CONSTRAINT so a USING INDEX target exists;
+        # outside the is_partition gate, as a partition child carries its own identity.
+        for sql in _replica_identity_statements(schema_name, src_table, dst_table):
+            yield Statement(Phase.REPLICA_IDENTITY, sql)
 
     # Drop: skip a partition whose parent is also dropped (the parent's DROP TABLE
     # cascades to it). Attached objects are dropped with the table.

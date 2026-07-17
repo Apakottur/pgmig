@@ -195,6 +195,7 @@ class Phase(Enum):
     INDEX = auto()
     CONSTRAINT = auto()
     COLUMN_DROP_NOT_NULL = auto()  # After a covering primary key is dropped in CONSTRAINT.
+    REPLICA_IDENTITY = auto()  # After INDEX/CONSTRAINT: USING INDEX references an index by name.
     # After the column defaults / expression indexes / check constraints that depend on a routine.
     FUNCTION_DROP_LATE = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
