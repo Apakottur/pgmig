@@ -193,3 +193,4 @@ idseq
 relreplident
 indisreplident
 uidx
+daterange
