@@ -1,6 +1,6 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._keys import ColumnKey, ViewKey
+from pgmig._keys import ColumnKey, RelationKey
 
 
 class _ViewColumnDependencyRow(_QueryRow):
@@ -19,6 +19,6 @@ async def load() -> None:
     alter or drop a column a view or matview reads.
     """
     for row in await run_introspection_query("view_column_dependencies.sql", _ViewColumnDependencyRow):
-        view = ViewKey(row.view_schema, row.view_name)
+        view = RelationKey(row.view_schema, row.view_name)
         column = ColumnKey(row.table_schema, row.table_name, row.column_name)
         context.db_introspection_result.view_column_dependencies.setdefault(view, set()).add(column)

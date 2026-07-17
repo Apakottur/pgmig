@@ -2,26 +2,26 @@ from collections.abc import Iterator
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, topological_sort
-from pgmig._keys import ViewKey
+from pgmig._keys import RelationKey
 from pgmig._models import DbIntrospectionResult, View
 from pgmig._sql import qualified
 
-_Edges = dict[ViewKey, set[ViewKey]]  # key -> the views it reads from
+_Edges = dict[RelationKey, set[RelationKey]]  # key -> the views it reads from
 
 
-def _collect_views(db_introspection_result: DbIntrospectionResult) -> dict[ViewKey, View]:
+def _collect_views(db_introspection_result: DbIntrospectionResult) -> dict[RelationKey, View]:
     """
     Flatten every schema's views into one (schema, name) -> View map. View-on-view
     ordering is global because a dependency can cross schemas.
     """
-    views: dict[ViewKey, View] = {}
+    views: dict[RelationKey, View] = {}
     for schema_name, schema in db_introspection_result.schema_by_name.items():
         for name, view in schema.view_by_name.items():
-            views[ViewKey(schema_name, name)] = view
+            views[RelationKey(schema_name, name)] = view
     return views
 
 
-def _dependents_closure(seeds: set[ViewKey], edges: _Edges) -> set[ViewKey]:
+def _dependents_closure(seeds: set[RelationKey], edges: _Edges) -> set[RelationKey]:
     """
     Every view that transitively reads any view in `seeds`, plus the seeds themselves.
     Used for the recreate cascade: dropping and recreating a view forces every view that

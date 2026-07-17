@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
-from pgmig._keys import ColumnKey, CompositeTypeKey, FunctionKey, RelationKey, ViewKey
+from pgmig._keys import ColumnKey, CompositeTypeKey, FunctionKey, RelationKey
 
 
 @dataclass(frozen=True)
@@ -354,10 +354,10 @@ class DbIntrospectionResult:
     extension_by_name: dict[str, Extension]
 
     # Mapping from a view to the set of views it depends on.
-    view_dependencies: dict[ViewKey, set[ViewKey]]
+    view_dependencies: dict[RelationKey, set[RelationKey]]
 
     # Mapping from a view to the set of table columns it reads.
-    view_column_dependencies: dict[ViewKey, set[ColumnKey]]
+    view_column_dependencies: dict[RelationKey, set[ColumnKey]]
 
     # Mapping from a composite type to the set of composite types it depends on.
     composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]
