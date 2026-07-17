@@ -32,9 +32,7 @@ class DbConnection:
     @asynccontextmanager
     async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
         """
-        Connection context. Autocommit: the apply path runs statements that cannot execute
-        inside a transaction block (e.g. CREATE INDEX CONCURRENTLY); read-only introspection
-        opens its own transaction explicitly via `snapshot`.
+        Connection context.
         """
         try:
             conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
@@ -75,15 +73,13 @@ class DbReadOnlyConnection(DbConnection):
             # Force all subsequent transactions to be read-only.
             await conn.driver_conn.set_read_only(True)
 
-            # Use REPEATABLE READ so a single transaction (opened by `snapshot`) reads one
-            # consistent snapshot of the database across every introspection query.
+            # Use REPEATABLE READ so that the enclosed reads are done on a single consistent snapshot of the database.
             await conn.driver_conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
 
-            # Use an empty search path so introspection is independent of the database's own search
-            # path: pg_get_*def()/format_type() then emit fully schema-qualified names.
+            # Use an empty search path so introspection is independent of the database's own search path.
             await conn.driver_conn.execute("SET search_path = ''")
 
-            # Run the enclosed reads inside a single transaction to guarantee a consistent snapshot.
+            # Run the enclosed reads inside a single transaction to guarantee a consistent snapshot of the database.
             async with conn.driver_conn.transaction():
                 yield conn
 

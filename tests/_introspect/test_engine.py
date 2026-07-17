@@ -24,11 +24,17 @@ async def test_read_only_snapshot_pins_one_view(gen_setup: GenerateSetup) -> Non
     Ensure that introspection is done on a single snapshot of the DB.
     """
     probe = "SELECT count(*) FROM pg_class WHERE relname = 'snap_probe'"
+
     async with DbReadOnlyConnection.connect(dsn=gen_setup.src.dsn) as read_only_conn:
+        # Run the probe before the table is created.
         before = await read_only_conn.execute(probe)
-        # A separate (autocommit) connection creates and commits the table mid-snapshot.
+
+        # Create the table on a separate (auto-committed) connection.
         await gen_setup.src.execute("CREATE TABLE snap_probe (x int)")
+
+        # Run the probe after the table is created.
         after = await read_only_conn.execute(probe)
 
+    # The table should not be visible to the read-only connection, both before and after the table is created.
     assert before == [(0,)]
     assert after == [(0,)], "snapshot leaked a concurrently-created table -> reads not on one snapshot"
