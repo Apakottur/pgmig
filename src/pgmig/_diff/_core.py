@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._keys import ViewKey
-from pgmig._models import Schema, Table
+from pgmig._models import DbIntrospectionResult, Schema, Table
 from pgmig._sql import comment_on, ident, qualified
 
 if TYPE_CHECKING:
@@ -183,7 +183,8 @@ class Phase(Enum):
     """
 
     FOREIGN_KEY_DROP = auto()  # Before a referenced table / key is dropped.
-    VIEW_DROP = auto()  # Before the tables/functions a view/matview reads from are dropped.
+    MATVIEW_DROP = auto()  # Before the views/tables/functions a matview reads are dropped (incl. VIEW_DROP).
+    VIEW_DROP = auto()  # Before the tables/functions a view reads from are dropped.
     TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
@@ -198,8 +199,9 @@ class Phase(Enum):
     # After the column defaults / expression indexes / check constraints that depend on a routine.
     FUNCTION_DROP_LATE = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
-    VIEW_CREATE = auto()  # After the tables/functions a view/matview reads from exist.
-    MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in VIEW_CREATE.
+    VIEW_CREATE = auto()  # After the tables/functions a view reads from exist.
+    MATVIEW_CREATE = auto()  # After VIEW_CREATE: a matview may read a plain view (and tables/functions).
+    MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in MATVIEW_CREATE.
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
@@ -273,29 +275,101 @@ def ctx_iter_object_pairs(
         yield schema_name, src_objs, dst_objs, pairs
 
 
+def collect_relations(
+    db_introspection_result: DbIntrospectionResult, select: Callable[[Schema], Mapping[str, _ObjT]]
+) -> dict[ViewKey, _ObjT]:
+    """
+    Flatten every schema's objects (as picked by `select`) into one (schema, name) -> object
+    map. View/matview ordering is global because a dependency can cross schemas.
+    """
+    objects: dict[ViewKey, _ObjT] = {}
+    for schema_name, schema in db_introspection_result.schema_by_name.items():
+        for name, obj in select(schema).items():
+            objects[ViewKey(schema_name, name)] = obj
+    return objects
+
+
+def dependents_closure(seeds: set[ViewKey], edges: Mapping[ViewKey, set[ViewKey]]) -> set[ViewKey]:
+    """
+    Every relation that transitively reads any relation in `seeds`, plus the seeds themselves.
+    Used for the recreate cascade: recreating a relation forces every relation that reads it
+    (directly or through a chain) to be recreated too. Edges are dependent -> the set it reads.
+    """
+    reverse: dict[ViewKey, set[ViewKey]] = {}
+    for node, node_deps in edges.items():
+        for dep in node_deps:
+            reverse.setdefault(dep, set()).add(node)
+
+    result = set(seeds)
+    stack = list(seeds)
+    while stack:
+        current = stack.pop()
+        for dependent in reverse.get(current, set()):
+            if dependent not in result:
+                result.add(dependent)
+                stack.append(dependent)
+    return result
+
+
+def recreated_view_keys() -> set[ViewKey]:
+    """
+    Plain views the migration drops and recreates: a changed definition or option set (CREATE OR
+    REPLACE VIEW cannot reshape columns, and options live outside the definition), or reading a
+    table column whose type changes -- plus every view that transitively reads one of those
+    (Postgres refuses to drop a view another view still reads).
+
+    Shared by the view diff and the matview recreate cascade: a matview reading a recreated view
+    must itself be recreated.
+    """
+    source, target = context.source, context.target
+    src_views = collect_relations(source, lambda schema: schema.view_by_name)
+    dst_views = collect_relations(target, lambda schema: schema.view_by_name)
+    shared = src_views.keys() & dst_views.keys()
+    changed = {
+        key
+        for key in shared
+        if src_views[key].definition != dst_views[key].definition or src_views[key].options != dst_views[key].options
+    }
+    return dependents_closure(changed | context.retyped_column_readers, source.view_dependencies) & shared
+
+
 def recreated_matview_keys() -> set[ViewKey]:
     """
-    Materialized views present on both sides that the migration drops and recreates: either the
-    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW) or the matview reads a
+    Materialized views present on both sides that the migration drops and recreates: the
+    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW), the matview reads a
     table column whose type changes (Postgres refuses ALTER COLUMN ... TYPE while the column is
-    read, and the type change leaves the definition text unchanged, so only the column edge
-    catches it).
+    read, and the type change leaves the definition unchanged, so only the column edge catches
+    it), or the matview reads a view or matview that is itself recreated -- propagated to a fixed
+    point over matview-on-matview edges.
 
     The single source of truth for the recreate decision, consumed by both the matview diff
     (which drops and recreates) and the matview-index differ (a recreated matview loses its
     indexes, so every target index is created fresh). A matview present on only one side is a
     plain create or drop, not a recreate, and is absent here.
     """
+    source, target = context.source, context.target
+    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name)
+    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name)
+    both = src_matviews.keys() & dst_matviews.keys()
+
     column_readers = context.retyped_column_readers
-    keys: set[ViewKey] = set()
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_views = src_schema.materialized_view_by_name if src_schema else {}
-        dst_views = dst_schema.materialized_view_by_name if dst_schema else {}
-        for name in src_views.keys() & dst_views.keys():
-            key = ViewKey(schema_name, name)
-            if src_views[name].definition != dst_views[name].definition or key in column_readers:
-                keys.add(key)
-    return keys
+    recreated_views = recreated_view_keys()
+    edges = source.matview_dependencies
+
+    # Seed: changed definition, retyped-column reader, or a matview reading a recreated plain view
+    # (edges to plain views intersect recreated_views; edges to matviews intersect below).
+    recreated = {
+        key
+        for key in both
+        if src_matviews[key].definition != dst_matviews[key].definition
+        or key in column_readers
+        or edges.get(key, set()) & recreated_views
+    }
+    # Propagate to a fixed point over matview-on-matview edges: a matview reading a recreated
+    # matview must itself be recreated.
+    while added := {key for key in both if key not in recreated and edges.get(key, set()) & recreated}:
+        recreated |= added
+    return recreated
 
 
 class RenameDiff(NamedTuple):
