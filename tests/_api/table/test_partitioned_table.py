@@ -214,15 +214,107 @@ async def test_partitioned_table_cross_schema(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_partitioned_table_key_change_raises(gen_setup: GenerateSetup) -> None:
+async def test_partitioned_table_strategy_change_recreates(gen_setup: GenerateSetup) -> None:
     """
-    Changing the partition key/strategy is impossible in place; refuse loudly rather than
-    emit a data-destructive DROP + CREATE.
+    Changing the partition strategy (RANGE -> LIST) has no in-place ALTER, so the whole
+    partition subtree is destructively recreated: DROP the parent (its partitions cascade,
+    DELETING THEIR DATA), then re-CREATE the parent with the new strategy and each target
+    partition -- parent before child.
     """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)"],
-        dst=["CREATE TABLE events (id integer, region text) PARTITION BY LIST (region)"],
-        match=r"Partition key/strategy change is not supported",
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE events (id integer, region text) PARTITION BY RANGE (id)",
+            "CREATE TABLE events_p PARTITION OF events FOR VALUES FROM (1) TO (100)",
+        ],
+        dst=[
+            "CREATE TABLE events (id integer, region text) PARTITION BY LIST (region)",
+            "CREATE TABLE events_p PARTITION OF events FOR VALUES IN ('us')",
+        ],
+        diff=[
+            'DROP TABLE "public"."events"',
+            'CREATE TABLE "public"."events" ("id" integer, "region" text) PARTITION BY LIST (region)',
+            'CREATE TABLE "public"."events_p" PARTITION OF "public"."events" FOR VALUES IN (\'us\')',
+        ],
+    )
+
+
+async def test_partitioned_table_key_column_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    Changing the partition key columns (RANGE (a) -> RANGE (b)) keeps the strategy but still
+    has no in-place ALTER, so the parent is destructively recreated.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE t (a integer, b integer) PARTITION BY RANGE (a)"],
+        dst=["CREATE TABLE t (a integer, b integer) PARTITION BY RANGE (b)"],
+        diff=[
+            'DROP TABLE "public"."t"',
+            'CREATE TABLE "public"."t" ("a" integer, "b" integer) PARTITION BY RANGE (b)',
+        ],
+    )
+
+
+async def test_partitioned_table_key_expression_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    Changing the partition key to an expression (RANGE (a) -> RANGE ((a + b))) is a key
+    change and triggers the same destructive recreate.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE t (a integer, b integer) PARTITION BY RANGE (a)"],
+        dst=["CREATE TABLE t (a integer, b integer) PARTITION BY RANGE ((a + b))"],
+        diff=[
+            'DROP TABLE "public"."t"',
+            'CREATE TABLE "public"."t" ("a" integer, "b" integer) PARTITION BY RANGE (((a + b)))',
+        ],
+    )
+
+
+async def test_partitioned_table_subpartition_key_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    A sub-partition (itself partitioned) whose own key changes is recreated while its
+    unchanged parent survives: only the sub-partition subtree is dropped (its parent is not),
+    then the sub-partition and its leaf are recreated under the surviving parent, parent
+    before child.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE g (id integer, region text) PARTITION BY RANGE (id)"],
+        src=[
+            "CREATE TABLE p PARTITION OF g FOR VALUES FROM (1) TO (100) PARTITION BY LIST (region)",
+            "CREATE TABLE l PARTITION OF p FOR VALUES IN ('us')",
+        ],
+        dst=[
+            "CREATE TABLE p PARTITION OF g FOR VALUES FROM (1) TO (100) PARTITION BY RANGE (region)",
+            "CREATE TABLE l PARTITION OF p FOR VALUES FROM ('a') TO ('z')",
+        ],
+        diff=[
+            'DROP TABLE "public"."p"',
+            'CREATE TABLE "public"."p" PARTITION OF "public"."g" '
+            "FOR VALUES FROM (1) TO (100) PARTITION BY RANGE (region)",
+            'CREATE TABLE "public"."l" PARTITION OF "public"."p" FOR VALUES FROM (\'a\') TO (\'z\')',
+        ],
+    )
+
+
+async def test_partitioned_table_recreate_preserves_primary_key(gen_setup: GenerateSetup) -> None:
+    """
+    A recreated parent's own objects (here a primary key) are re-emitted from scratch: the
+    recreate removes the parent from the source model so every generator treats it as newly
+    created, so the constraint diff re-adds the PK in the CONSTRAINT phase and the migration
+    converges even though the PK is unchanged.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)",
+            "ALTER TABLE events ADD CONSTRAINT events_pkey PRIMARY KEY (id)",
+        ],
+        dst=[
+            "CREATE TABLE events (id integer NOT NULL) PARTITION BY HASH (id)",
+            "ALTER TABLE events ADD CONSTRAINT events_pkey PRIMARY KEY (id)",
+        ],
+        diff=[
+            'DROP TABLE "public"."events"',
+            'CREATE TABLE "public"."events" ("id" integer NOT NULL) PARTITION BY HASH (id)',
+            'ALTER TABLE "public"."events" ADD CONSTRAINT "events_pkey" PRIMARY KEY (id)',
+        ],
     )
 
 
