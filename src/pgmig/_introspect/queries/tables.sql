@@ -28,6 +28,21 @@ SELECT
     -- the schema filter below excludes, and partitioned parents cannot be unlogged, so
     -- only 'p'/'u' reach the loader.
     c.relpersistence AS table_persistence,
+    -- Replica identity: 'd' default, 'n' nothing, 'f' full, 'i' using index. Logical
+    -- replication depends on it, so a difference must be diffed. For 'i', resolve the
+    -- identity index's (schema-local, unqualified) name via pg_index.indisreplident.
+    c.relreplident AS table_replica_identity,
+    CASE WHEN c.relreplident = 'i' THEN
+    (
+        SELECT
+            ri.relname
+        FROM
+            pg_index ix
+            JOIN pg_class ri ON ri.oid = ix.indexrelid
+        WHERE
+            ix.indrelid = c.oid
+            AND ix.indisreplident)
+    END AS table_replica_identity_index,
     a.attidentity AS column_identity,
     a.attgenerated AS column_generated,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,

@@ -195,6 +195,10 @@ class Table:
     comment: str | None
     owner: str
     unlogged: bool  # UNLOGGED table (relpersistence 'u'); a partitioned parent is always logged
+    # Replica identity: pg_class.relreplident ('d' default, 'n' nothing, 'f' full, 'i' using
+    # index). replica_identity_index holds the index name when 'i', else None.
+    replica_identity: str
+    replica_identity_index: str | None
 
     # Declarative partitioning metadata.
     partition_strategy: str | None

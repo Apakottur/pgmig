@@ -9,6 +9,8 @@ class _TableRow(_QueryRow):
     table_comment: str | None
     table_owner: str
     table_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
+    table_replica_identity: str  # pg_class.relreplident: 'd' / 'n' / 'f' / 'i'
+    table_replica_identity_index: str | None  # index name when relreplident is 'i', else NULL
     # Column fields are all NULL together for the single phantom row a zero-column table
     # yields through the LEFT JOIN (see tables.sql); a real column row has them all set.
     column_name: str | None
@@ -56,6 +58,8 @@ async def load() -> None:
                 comment=table_row.table_comment,
                 owner=table_row.table_owner,
                 unlogged=table_row.table_persistence == "u",
+                replica_identity=table_row.table_replica_identity,
+                replica_identity_index=table_row.table_replica_identity_index,
                 partition_strategy=table_row.partition_strategy,
                 partition_key=table_row.partition_key,
                 partition_bound=table_row.partition_bound,
