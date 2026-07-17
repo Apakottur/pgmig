@@ -2,7 +2,33 @@ import pytest
 
 from pgmig import PgmigUnsupportedError
 from pgmig._diff.tables import _alter_shared_column, _column_def, _parenthesize_generation
-from pgmig._models import Column
+from pgmig._models import Column, Table
+
+
+def _plain_column(name: str) -> Column:
+    """A minimal plain integer column for the Table-level unit tests."""
+    return _generated_column(name, generated="", expression=None)
+
+
+def _table(columns: list[Column]) -> Table:
+    """A minimal Table wrapping `columns`, with every non-column field at its empty default."""
+    return Table(
+        name="t",
+        columns=columns,
+        comment=None,
+        owner="o",
+        unlogged=False,
+        replica_identity="d",
+        replica_identity_index=None,
+        partition_strategy=None,
+        partition_key=None,
+        partition_bound=None,
+        partition_parent=None,
+        index_by_name={},
+        constraint_by_name={},
+        foreign_key_by_name={},
+        trigger_by_name={},
+    )
 
 
 def _generated_column(name: str, *, generated: str, expression: str | None, not_null: bool = False) -> Column:
@@ -44,6 +70,29 @@ def _alter(src: Column, dst: Column) -> tuple[list[str], list[str]]:
         pk_columns=set(),
         src_pk_columns=set(),
     )
+
+
+def test_column_by_name_indexes_columns() -> None:
+    """
+    column_by_name maps each column's name to the column, and returns None (via .get) for an
+    absent name -- the same membership answer the ad-hoc index/scan sites relied on.
+    """
+    a = _plain_column("a")
+    b = _plain_column("b")
+    table = _table([a, b])
+    assert table.column_by_name == {"a": a, "b": b}
+    assert table.column_by_name.get("missing") is None
+
+
+def test_column_by_name_reflects_appended_columns() -> None:
+    """
+    It is a plain (recomputed) property, so a column appended after the Table is built -- as
+    introspection does, growing `columns` row by row -- is reflected on the next access.
+    """
+    table = _table([_plain_column("a")])
+    c = _plain_column("c")
+    table.columns.append(c)
+    assert table.column_by_name["c"] is c
 
 
 def test_virtual_generated_column_emitted() -> None:

@@ -30,7 +30,7 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
         src_tables = source.schema_by_name[schema_name].table_by_name
         dst_tables = target.schema_by_name[schema_name].table_by_name
         for table_name in src_tables.keys() & dst_tables.keys():
-            dst_columns = {column.name: column for column in dst_tables[table_name].columns}
+            dst_columns = dst_tables[table_name].column_by_name
             for src_column in src_tables[table_name].columns:
                 dst_column = dst_columns.get(src_column.name)
                 if dst_column is not None and src_column.type != dst_column.type:

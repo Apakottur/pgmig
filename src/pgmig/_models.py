@@ -172,6 +172,17 @@ class Table:
         """Whether this table is a partition of some parent."""
         return self.partition_parent is not None
 
+    @property
+    def column_by_name(self) -> dict[str, Column]:
+        """
+        The table's columns indexed by name.
+
+        A plain (recomputed) property rather than a cached one: `columns` is appended to
+        row by row during introspection, so a value cached before loading finished would go
+        stale. Recomputing on each access keeps it correct at the cost of rebuilding the dict.
+        """
+        return {column.name: column for column in self.columns}
+
     def get_primary_key_columns(self) -> set[str]:
         """
         Columns covered by a primary key constraint.

@@ -241,8 +241,8 @@ def _alter_columns(
     """
     statements: list[str] = []
     deferred_drop_not_null: list[str] = []
-    src_columns = {column.name: column for column in src_table.columns}
-    dst_columns = {column.name: column for column in dst_table.columns}
+    src_columns = src_table.column_by_name
+    dst_columns = dst_table.column_by_name
 
     for column_name in sorted(src_columns.keys() | dst_columns.keys()):
         if column_name not in src_columns:
@@ -459,8 +459,8 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     Emit COMMENT ON COLUMN for every target column whose comment differs from the
     source (absent source column = no comment). A separate statement; not inline.
     """
-    src_columns = {column.name: column for column in src_table.columns} if src_table else {}
-    dst_columns = {column.name: column for column in dst_table.columns}
+    src_columns = src_table.column_by_name if src_table else {}
+    dst_columns = dst_table.column_by_name
 
     return _diff_comments(
         src_columns,
