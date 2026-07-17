@@ -81,7 +81,8 @@ async def test_function_drop_diamond_ordered(gen_setup: GenerateSetup) -> None:
     """
     A diamond of dependencies (top -> mid1, mid2 -> leaf), all dropped: leaf is depended on
     by two late routines, so it is dropped only after both, exercising the multi-dependent
-    ordering.
+    ordering. The two independent mids are ordered arbitrarily-but-deterministically (mid2
+    before mid1, the reverse of the dependency-first sort's ties).
     """
     await gen_setup.assert_diff(
         src=[
@@ -93,8 +94,8 @@ async def test_function_drop_diamond_ordered(gen_setup: GenerateSetup) -> None:
         dst=[],
         diff=[
             'DROP FUNCTION "public"."top"()',
-            'DROP FUNCTION "public"."mid1"()',
             'DROP FUNCTION "public"."mid2"()',
+            'DROP FUNCTION "public"."mid1"()',
             'DROP FUNCTION "public"."leaf"()',
         ],
     )

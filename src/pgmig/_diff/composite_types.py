@@ -7,6 +7,7 @@ from pgmig._diff._core import (
     collect_relations,
     ctx_iter_object_pairs,
     diff_comment_statements,
+    topological_drop_order,
     topological_sort,
 )
 from pgmig._errors import PgmigUnsupportedError
@@ -42,9 +43,9 @@ def generate() -> Iterator[Statement]:
         fields = ", ".join(f"{ident(field.name)} {field.type}" for field in dst_types[key].fields)
         yield Statement(Phase.TYPE_CREATE, f"CREATE TYPE {qualified(key.schema, key.name)} AS ({fields});")
 
-    # Drops: dependents-first, the reverse of the source graph's dependencies-first order.
+    # Drops: dependents-first over the source graph.
     drop_keys = src_types.keys() - dst_types.keys()
-    for key in reversed(topological_sort(drop_keys, source.composite_type_dependencies)):
+    for key in topological_drop_order(drop_keys, source.composite_type_dependencies):
         yield Statement(Phase.TYPE_DROP, f"DROP TYPE {qualified(key.schema, key.name)};")
 
     # Sync comments for target composite types, after the types they annotate exist.

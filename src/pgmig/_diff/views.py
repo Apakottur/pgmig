@@ -8,6 +8,7 @@ from pgmig._diff._core import (
     ctx_iter_schema_pairs,
     diff_comment_statements,
     recreated_view_keys,
+    topological_drop_order,
     topological_sort,
 )
 from pgmig._keys import RelationKey
@@ -32,9 +33,9 @@ def generate() -> Iterator[Statement]:
     drop_only = src_views.keys() - dst_views.keys()
     create_only = dst_views.keys() - src_views.keys()
 
-    # Drops: dependent-first, so reverse the source graph's dependency-first order.
+    # Drops: dependent-first over the source graph.
     drops = drop_only | recreate
-    for key in reversed(topological_sort(drops, source.view_dependencies)):
+    for key in topological_drop_order(drops, source.view_dependencies):
         yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(key.schema, key.name)};")
 
     # Creates: dependency-first over the target graph.

@@ -57,6 +57,18 @@ def topological_sort(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_Sor
     return order
 
 
+def topological_drop_order(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_SortableT]]) -> list[_SortableT]:
+    """
+    Order `nodes` dependents-first for dropping: a node appears before every node it points to
+    in `edges`, so an object is dropped before the objects it depends on (Postgres refuses to
+    drop something another kept object still references).
+
+    The reverse of `topological_sort`'s dependency-first order over the same forward `edges`
+    (object -> the set it depends on). Every drop path shares this idiom.
+    """
+    return list(reversed(topological_sort(nodes, edges)))
+
+
 class _Commented(Protocol):
     """
     Any object carrying an optional comment. Declared as a read-only property so plain
