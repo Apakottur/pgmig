@@ -118,11 +118,15 @@ class Constraint:
     """
 
     name: str
-    # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
+    # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent. Carries the
+    # trailing DEFERRABLE / INITIALLY DEFERRED clause, so the deferrable/deferred booleans
+    # below are what the diff compares against once that clause is set aside.
     definition: str
     contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
     comment: str | None
+    deferrable: bool  # condeferrable: DEFERRABLE
+    deferred: bool  # condeferred: DEFERRABLE INITIALLY DEFERRED (implies deferrable)
 
     @property
     def is_primary_key(self) -> bool:

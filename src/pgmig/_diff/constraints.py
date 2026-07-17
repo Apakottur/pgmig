@@ -40,16 +40,79 @@ def _extract_validations(
     return src, dst, validations
 
 
+def _base_definition(constraint: Constraint) -> str:
+    """
+    The pg_get_constraintdef output with its trailing deferrability clause removed, so two
+    constraints that differ only in DEFERRABLE / INITIALLY DEFERRED compare equal. The suffix
+    is deterministic: " DEFERRABLE INITIALLY DEFERRED" when deferred, " DEFERRABLE" when merely
+    deferrable, nothing otherwise.
+    """
+    if constraint.deferred:
+        return constraint.definition.removesuffix(" DEFERRABLE INITIALLY DEFERRED")
+    if constraint.deferrable:
+        return constraint.definition.removesuffix(" DEFERRABLE")
+    return constraint.definition
+
+
+def _deferrability_clause(constraint: Constraint) -> str:
+    """
+    The ALTER CONSTRAINT deferrability spelling for a constraint's target state, always fully
+    stated so the change converges regardless of the source state.
+    """
+    if not constraint.deferrable:
+        return "NOT DEFERRABLE"
+    return "DEFERRABLE INITIALLY DEFERRED" if constraint.deferred else "DEFERRABLE INITIALLY IMMEDIATE"
+
+
+def _extract_deferrability_alters(
+    prefix: str, src: dict[str, Constraint], dst: dict[str, Constraint]
+) -> tuple[dict[str, Constraint], dict[str, Constraint], list[str]]:
+    """
+    Pull out same-name foreign keys that differ only in their deferrability.
+
+    The DEFERRABLE / INITIALLY DEFERRED clause rides in the pg_get_constraintdef definition, so
+    the generic diff would drop and re-add such a constraint -- and for unique/primary-key
+    constraints that rebuilds the backing index. Foreign keys instead take an in-place
+    ALTER TABLE ... ALTER CONSTRAINT (the only kind Postgres lets change deferrability in place
+    on the supported versions, 14-18); the pair is removed so the generic diff leaves it alone.
+    Every other kind (unique, primary key, check, exclusion) is left to fall through to
+    drop-and-re-add.
+    """
+    src = dict(src)
+    dst = dict(dst)
+    alters: list[str] = []
+    for name in sorted(src.keys() & dst.keys()):
+        src_con, dst_con = src[name], dst[name]
+        if (
+            dst_con.is_foreign_key
+            and src_con.definition != dst_con.definition
+            and _base_definition(src_con) == _base_definition(dst_con)
+        ):
+            alters.append(f"{prefix} ALTER CONSTRAINT {ident(name)} {_deferrability_clause(dst_con)};")
+            del src[name]
+            del dst[name]
+    return src, dst, alters
+
+
 def _diff_constraints(
     *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> tuple[RenameDiff, list[str]]:
+) -> tuple[RenameDiff, list[str], list[str]]:
     """
-    Diff one table's constraints (of a single kind) into a RenameDiff plus the in-place
-    `VALIDATE CONSTRAINT` statements for NOT VALID -> valid transitions.
-    The constraint definition (from pg_get_constraintdef) is already name-independent.
+    Diff one table's constraints (of a single kind) into a RenameDiff plus two lists of in-place
+    ALTERs that spare an otherwise-needless drop + re-add:
+      * deferrability-only changes on foreign keys -> ALTER CONSTRAINT ... [NOT] DEFERRABLE ...
+      * NOT VALID -> valid transitions -> VALIDATE CONSTRAINT
+
+    pg_get_constraintdef bakes both the deferrability clause and NOT VALID into the definition
+    string, so the generic key comparison would see either as a changed definition and drop +
+    re-add it -- rebuilding the backing index (deferrability on unique/primary keys) or
+    re-checking every row under a stronger lock (validation). Each matched pair is pulled out;
+    the remainder falls through to the ordinary diff. The reverse transitions (valid ->
+    NOT VALID, and deferrability on non-foreign-key kinds) have no ALTER form and fall through.
     """
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
     src, dst, validations = _extract_validations(prefix, src, dst)
+    src, dst, alters = _extract_deferrability_alters(prefix, src, dst)
     diff = diff_renamable(
         src,
         dst,
@@ -58,7 +121,7 @@ def _diff_constraints(
         render_rename=lambda old, new: f"{prefix} RENAME CONSTRAINT {ident(old)} TO {ident(new)};",
         render_create=lambda name, constraint: f"{prefix} ADD CONSTRAINT {ident(name)} {constraint.definition};",
     )
-    return diff, validations
+    return diff, alters, validations
 
 
 def generate() -> Iterator[Statement]:
@@ -73,7 +136,7 @@ def generate() -> Iterator[Statement]:
 
         src_constraints = src_table.constraint_by_name if src_table else {}
         dst_constraints = dst_table.constraint_by_name
-        (drops, renames, adds, recreated, renamed_from), validations = _diff_constraints(
+        (drops, renames, adds, recreated, renamed_from), alters, validations = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
@@ -88,8 +151,11 @@ def generate() -> Iterator[Statement]:
             recreated=recreated,
             renamed_from=renamed_from,
         )
+        # `alters` (deferrability-only ALTER CONSTRAINT) is always empty here: no non-foreign-key
+        # constraint kind supports an in-place deferrability change, so those fall through to the
+        # drop + re-add above. Kept in the sequence for the uniform signature.
         # Drops first (frees names), then renames, then adds, then validations, then comments.
-        for sql in (*drops, *renames, *adds, *validations, *comments):
+        for sql in (*drops, *renames, *adds, *alters, *validations, *comments):
             yield Statement(Phase.CONSTRAINT, sql)
 
 
@@ -105,7 +171,7 @@ def generate_foreign_keys() -> Iterator[Statement]:
         # FOREIGN_KEY_DROP phase (before any DROP TABLE), so a referenced table can be
         # dropped even while its referencing table's constraint has not yet cascaded away.
         dst_fks = dst_table.foreign_key_by_name if dst_table else {}
-        (drops, renames, adds, recreated, renamed_from), validations = _diff_constraints(
+        (drops, renames, adds, recreated, renamed_from), alters, validations = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_fks,
@@ -113,10 +179,10 @@ def generate_foreign_keys() -> Iterator[Statement]:
         )
         for sql in drops:
             yield Statement(Phase.FOREIGN_KEY_DROP, sql)
-        # Renames carry no referenced-object dependency, so they ride with the adds.
+        # Renames, deferrability-only ALTER CONSTRAINTs, and validations carry no referenced-object
+        # dependency (validations only touch the constraint's own rows), so they ride with the adds.
         comments = diff_child_comment_statements(
             schema_name, table_name, src_fks, dst_fks, kind="CONSTRAINT", recreated=recreated, renamed_from=renamed_from
         )
-        # Validations only touch the existing constraint's own rows, so they ride with the adds.
-        for sql in (*renames, *adds, *validations, *comments):
+        for sql in (*renames, *alters, *adds, *validations, *comments):
             yield Statement(Phase.FOREIGN_KEY_ADD, sql)

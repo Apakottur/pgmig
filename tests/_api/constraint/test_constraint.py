@@ -127,6 +127,69 @@ async def test_constraint_unchanged(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_constraint_add_unique_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Deferrable unique constraint created -> ADD CONSTRAINT carries the DEFERRABLE clause.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED"],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" '
+            "UNIQUE (email) DEFERRABLE INITIALLY DEFERRED"
+        ],
+    )
+
+
+async def test_constraint_drop_unique_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Deferrable unique constraint dropped -> DROP CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (email text)",
+            "ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED",
+        ],
+        dst=["CREATE TABLE person (email text)"],
+        diff=['ALTER TABLE "public"."person" DROP CONSTRAINT "person_email_key"'],
+    )
+
+
+async def test_constraint_unique_deferrable_state_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    A deferrability-only change on a unique constraint falls back to DROP + ADD: Postgres has no
+    ALTER CONSTRAINT deferrability support for non-foreign-key constraints on any supported
+    version, so the backing index is rebuilt. This pins that behavior (only foreign keys get the
+    ALTER CONSTRAINT fast path).
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_email_key"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" '
+            "UNIQUE (email) DEFERRABLE INITIALLY DEFERRED",
+        ],
+    )
+
+
+async def test_constraint_unique_deferrable_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical deferrable unique constraint on both sides -> no migration SQL.
+    """
+    await gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE person (email text)",
+            "ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
+    )
+
+
 async def test_constraint_primary_key_suppresses_set_not_null(gen_setup: GenerateSetup) -> None:
     """
     Adding a primary key on a source-nullable column emits only ADD CONSTRAINT;

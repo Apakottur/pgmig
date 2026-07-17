@@ -9,6 +9,8 @@ class _ConstraintRow(_QueryRow):
     con_name: str
     con_def: str
     con_type: str
+    con_deferrable: bool
+    con_deferred: bool
     con_columns: list[str] | None
     con_comment: str | None
 
@@ -25,6 +27,8 @@ async def load() -> None:
             contype=con_row.con_type,
             columns=con_row.con_columns or [],
             comment=con_row.con_comment,
+            deferrable=con_row.con_deferrable,
+            deferred=con_row.con_deferred,
         )
         table = context.db_introspection_result.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
         if constraint.is_foreign_key:
