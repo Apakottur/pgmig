@@ -193,3 +193,6 @@ idseq
 relreplident
 indisreplident
 uidx
+deferrability
+condeferrable
+condeferred

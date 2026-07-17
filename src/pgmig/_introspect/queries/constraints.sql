@@ -5,6 +5,8 @@ SELECT
     con.conname AS con_name,
     pg_get_constraintdef(con.oid) AS con_def,
     con.contype AS con_type,
+    con.condeferrable AS con_deferrable,
+    con.condeferred AS con_deferred,
     (
         SELECT
             array_agg(a.attname ORDER BY k.ord)
