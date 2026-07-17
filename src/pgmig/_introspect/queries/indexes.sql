@@ -1,7 +1,7 @@
 -- Indexes (standalone only; constraint-backed indexes are excluded).
 SELECT
     n.nspname AS schema_name,
-    c.relname AS table_name,
+    c.relname AS relation_name,
     ic.relname AS index_name,
     stripped.def AS index_def,
     replace(stripped.def, 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ') AS index_canonical,

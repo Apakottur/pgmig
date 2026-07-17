@@ -5,7 +5,7 @@
 -- extension recreates them).
 SELECT
     n.nspname AS schema_name,
-    c.relname AS view_name,
+    c.relname AS relation_name,
     ic.relname AS index_name,
     pg_get_indexdef(i.indexrelid) AS index_def,
     replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ')
