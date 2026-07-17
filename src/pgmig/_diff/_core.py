@@ -1,3 +1,4 @@
+import heapq
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -35,16 +36,19 @@ def topological_sort(nodes: set[_SortableT], edges: Mapping[_SortableT, set[_Sor
         for dep in node_deps:
             dependents[dep].add(node)
 
-    ready = sorted(node for node, node_deps in deps.items() if not node_deps)
+    # A min-heap keeps the ready set ordered smallest-first: heappop yields the next node in
+    # sorted order (the deterministic tie-break) in O(log n), and a freed dependent is pushed
+    # in O(log n) -- versus pop(0) + a full re-sort every iteration.
+    ready = [node for node, node_deps in deps.items() if not node_deps]
+    heapq.heapify(ready)
     order: list[_SortableT] = []
     while ready:
-        node = ready.pop(0)
+        node = heapq.heappop(ready)
         order.append(node)
         for dependent in dependents[node]:
             deps[dependent].discard(node)
             if not deps[dependent]:
-                ready.append(dependent)
-        ready.sort()
+                heapq.heappush(ready, dependent)
 
     if len(order) != len(nodes):
         cyclic = sorted(nodes - set(order))
