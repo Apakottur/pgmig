@@ -78,4 +78,4 @@ WHERE
 ORDER BY
     n.nspname,
     p.proname,
-    pg_get_function_identity_arguments(p.oid);
+    func_args;

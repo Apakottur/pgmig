@@ -1,46 +1,18 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_comment_statements, topological_sort
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    collect_relations,
+    ctx_iter_schema_pairs,
+    diff_comment_statements,
+    recreated_view_keys,
+    topological_drop_order,
+    topological_sort,
+)
 from pgmig._keys import RelationKey
-from pgmig._models import DbIntrospectionResult, View
 from pgmig._sql import qualified
-
-_Edges = dict[RelationKey, set[RelationKey]]  # key -> the views it reads from
-
-
-def _collect_views(db_introspection_result: DbIntrospectionResult) -> dict[RelationKey, View]:
-    """
-    Flatten every schema's views into one (schema, name) -> View map. View-on-view
-    ordering is global because a dependency can cross schemas.
-    """
-    views: dict[RelationKey, View] = {}
-    for schema_name, schema in db_introspection_result.schema_by_name.items():
-        for name, view in schema.view_by_name.items():
-            views[RelationKey(schema_name, name)] = view
-    return views
-
-
-def _dependents_closure(seeds: set[RelationKey], edges: _Edges) -> set[RelationKey]:
-    """
-    Every view that transitively reads any view in `seeds`, plus the seeds themselves.
-    Used for the recreate cascade: dropping and recreating a view forces every view that
-    reads it (directly or through a chain) to be dropped and recreated too.
-    """
-    reverse: _Edges = {}
-    for node, node_deps in edges.items():
-        for dep in node_deps:
-            reverse.setdefault(dep, set()).add(node)
-
-    result = set(seeds)
-    stack = list(seeds)
-    while stack:
-        current = stack.pop()
-        for dependent in reverse.get(current, set()):
-            if dependent not in result:
-                result.add(dependent)
-                stack.append(dependent)
-    return result
 
 
 def generate() -> Iterator[Statement]:
@@ -48,47 +20,27 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of views, ordered by their view-on-view dependencies.
 
     Creates run in the VIEW_CREATE phase in dependency-first order; drops run in the
-    VIEW_DROP phase in dependent-first order. A changed definition is a drop-and-recreate
-    (CREATE OR REPLACE VIEW cannot reshape columns); every view that transitively reads a
-    recreated view is dragged into the recreate set, since Postgres refuses to drop a view
-    another view still reads and the dependents must be rebuilt afterwards.
+    VIEW_DROP phase in dependent-first order. A changed definition (or option set) is a
+    drop-and-recreate, and every view that transitively reads a recreated one is dragged into
+    the recreate set (see recreated_view_keys) -- Postgres refuses to drop a view another view
+    still reads, and the dependents must be rebuilt afterwards.
     """
     source, target = context.source, context.target
-    src_views = _collect_views(source)
-    dst_views = _collect_views(target)
-    src_edges = source.view_dependencies
-    dst_edges = target.view_dependencies
+    src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
+    dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
 
-    shared = src_views.keys() & dst_views.keys()
-    # A changed definition or a changed option set both force a drop-and-recreate. Options
-    # (security_invoker, security_barrier, check_option) live outside the definition, so a
-    # pure option change leaves `definition` untouched and must be checked separately.
-    changed = {
-        key
-        for key in shared
-        if src_views[key].definition != dst_views[key].definition or src_views[key].options != dst_views[key].options
-    }
-    # A view reading a table column whose type changes must also be recreated: Postgres
-    # refuses ALTER COLUMN ... TYPE while a view reads the column, so the view is dropped in
-    # VIEW_DROP (before the TABLE-phase change) and recreated in VIEW_CREATE. A type change
-    # leaves the view's definition unchanged, so `changed` above never catches this.
-    column_readers = context.retyped_column_readers
-    # A recreate resets the view (and its comment); pull in every view that transitively
-    # reads a changed one. Restrict to shared views -- a create-only view has nothing to
-    # drop, and a drop-only view is already dropped below.
-    recreate = _dependents_closure(changed | column_readers, src_edges) & shared
-
+    recreate = recreated_view_keys()
     drop_only = src_views.keys() - dst_views.keys()
     create_only = dst_views.keys() - src_views.keys()
 
-    # Drops: dependent-first, so reverse the source graph's dependency-first order.
+    # Drops: dependent-first over the source graph.
     drops = drop_only | recreate
-    for key in reversed(topological_sort(drops, src_edges)):
+    for key in topological_drop_order(drops, source.view_dependencies):
         yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(key.schema, key.name)};")
 
     # Creates: dependency-first over the target graph.
     creates = create_only | recreate
-    for key in topological_sort(creates, dst_edges):
+    for key in topological_sort(creates, target.view_dependencies):
         view = dst_views[key]
         # security_invoker, security_barrier and check_option (WITH CHECK OPTION) all live in
         # reloptions; emit them verbatim in a WITH (...) clause between the name and AS.

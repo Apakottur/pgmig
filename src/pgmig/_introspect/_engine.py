@@ -11,6 +11,7 @@ from pgmig._introspect import (
     indexes,
     invalid_indexes,
     materialized_views,
+    matview_dependencies,
     matview_indexes,
     schemas,
     sequences,
@@ -30,7 +31,7 @@ from pgmig._models import DbIntrospectionResult
 # sees every problem at once instead of one per re-run.
 _UNSUPPORTED_GUARDS: list[Guard] = [
     unsupported.check,
-    view_dependencies.check,
+    matview_dependencies.check,
     invalid_indexes.check,
 ]
 
@@ -50,6 +51,7 @@ _LOADERS: list[Loader] = [
     view_dependencies.load,
     view_column_dependencies.load,
     materialized_views.load,
+    matview_dependencies.load,
     matview_indexes.load,
     domains.load,
     composite_types.load,
@@ -66,6 +68,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         schema_by_name={},
         extension_by_name={},
         view_dependencies={},
+        matview_dependencies={},
         view_column_dependencies={},
         composite_type_dependencies={},
     )

@@ -99,18 +99,3 @@ async def test_materialized_view_over_extension_view_not_refused(gen_setup: Gene
             "\n   FROM public.pg_stat_statements WITH NO DATA"
         ],
     )
-
-
-async def test_materialized_view_on_materialized_view_raises(gen_setup: GenerateSetup) -> None:
-    """
-    A materialized view that reads from another materialized view is not supported yet
-    (dependency ordering within the shared view phases).
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=[
-            "CREATE MATERIALIZED VIEW base AS SELECT 1 AS x",
-            "CREATE MATERIALIZED VIEW derived AS SELECT x FROM base",
-        ],
-        match="materialized view",
-    )

@@ -1,23 +1,18 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, topological_sort
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    collect_relations,
+    ctx_iter_object_pairs,
+    diff_comment_statements,
+    topological_drop_order,
+    topological_sort,
+)
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import CompositeTypeKey
-from pgmig._models import CompositeType, DbIntrospectionResult
 from pgmig._sql import ident, qualified
-
-
-def _collect_composite_types(db: DbIntrospectionResult) -> dict[CompositeTypeKey, CompositeType]:
-    """
-    Flatten every schema's composite types into one (schema, name) -> CompositeType map. The
-    create/drop ordering is global because a composite-on-composite dependency can cross schemas.
-    """
-    types: dict[CompositeTypeKey, CompositeType] = {}
-    for schema_name, schema in db.schema_by_name.items():
-        for name, composite_type in schema.composite_type_by_name.items():
-            types[CompositeTypeKey(schema_name, name)] = composite_type
-    return types
 
 
 def generate() -> Iterator[Statement]:
@@ -31,8 +26,8 @@ def generate() -> Iterator[Statement]:
     the target graph; drops are ordered dependents-first (the reverse) over the source graph.
     """
     source, target = context.source, context.target
-    src_types = _collect_composite_types(source)
-    dst_types = _collect_composite_types(target)
+    src_types = collect_relations(source, lambda schema: schema.composite_type_by_name, CompositeTypeKey)
+    dst_types = collect_relations(target, lambda schema: schema.composite_type_by_name, CompositeTypeKey)
 
     # Present in both with differing fields: ALTER TYPE is not supported yet.
     for key in src_types.keys() & dst_types.keys():
@@ -48,9 +43,9 @@ def generate() -> Iterator[Statement]:
         fields = ", ".join(f"{ident(field.name)} {field.type}" for field in dst_types[key].fields)
         yield Statement(Phase.TYPE_CREATE, f"CREATE TYPE {qualified(key.schema, key.name)} AS ({fields});")
 
-    # Drops: dependents-first, the reverse of the source graph's dependencies-first order.
+    # Drops: dependents-first over the source graph.
     drop_keys = src_types.keys() - dst_types.keys()
-    for key in reversed(topological_sort(drop_keys, source.composite_type_dependencies)):
+    for key in topological_drop_order(drop_keys, source.composite_type_dependencies):
         yield Statement(Phase.TYPE_DROP, f"DROP TYPE {qualified(key.schema, key.name)};")
 
     # Sync comments for target composite types, after the types they annotate exist.

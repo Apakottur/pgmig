@@ -11,7 +11,7 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of indexes on materialized views (create, drop, rename).
 
     An index is created after its matview exists, so all statements land in
-    Phase.MATVIEW_INDEX_CREATE, which follows Phase.VIEW_CREATE where matviews are created --
+    Phase.MATVIEW_INDEX_CREATE, which follows Phase.MATVIEW_CREATE where matviews are created --
     the ordering is a phase invariant, independent of generator registration order. A recreated
     matview loses every index; it is therefore diffed against an empty index set so all target
     indexes are created fresh. The shared recreated_matview_keys helper decides which matviews are

@@ -83,7 +83,7 @@ def _owning_column_survives(owned_by: ColumnKey) -> bool:
     """
     schema = context.target.schema_by_name.get(owned_by.schema)
     table = schema.table_by_name.get(owned_by.table) if schema else None
-    return table is not None and any(column.name == owned_by.column for column in table.columns)
+    return table is not None and owned_by.column in table.column_by_name
 
 
 def generate() -> Iterator[Statement]:

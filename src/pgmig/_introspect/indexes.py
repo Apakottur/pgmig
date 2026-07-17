@@ -7,7 +7,14 @@ from pgmig._models import Index, Schema
 
 
 class _HasIndexes(Protocol):
-    index_by_name: dict[str, Index]
+    """
+    Any object owning an index map. Declared as a read-only property so a plain (frozen)
+    dataclass attribute satisfies it -- the loader only mutates the dict in place, never
+    reassigns the attribute itself.
+    """
+
+    @property
+    def index_by_name(self) -> dict[str, Index]: ...
 
 
 _T = TypeVar("_T", bound=_HasIndexes)

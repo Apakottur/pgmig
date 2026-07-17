@@ -111,7 +111,7 @@ class Trigger:
     comment: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Constraint:
     """
     A Postgres primary key, unique, check, or foreign key constraint, owned by a table.
@@ -133,7 +133,7 @@ class Constraint:
         return self.contype == "f"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
@@ -171,6 +171,17 @@ class Table:
     def is_partition(self) -> bool:
         """Whether this table is a partition of some parent."""
         return self.partition_parent is not None
+
+    @property
+    def column_by_name(self) -> dict[str, Column]:
+        """
+        The table's columns indexed by name.
+
+        A plain (recomputed) property rather than a cached one: `columns` is appended to
+        row by row during introspection, so a value cached before loading finished would go
+        stale. Recomputing on each access keeps it correct at the cost of rebuilding the dict.
+        """
+        return {column.name: column for column in self.columns}
 
     def get_primary_key_columns(self) -> set[str]:
         """
@@ -240,7 +251,7 @@ class Function:
         return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnumType:
     """
     A Postgres enum type, owned by a schema.
@@ -267,7 +278,7 @@ class View:
     options: tuple[str, ...]
 
 
-@dataclass
+@dataclass(frozen=True)
 class MaterializedView:
     """
     A Postgres materialized view, owned by a schema.
@@ -289,7 +300,7 @@ class CompositeField:
     type: str  # format_type(atttypid, atttypmod)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CompositeType:
     """
     A Postgres standalone composite type (CREATE TYPE ... AS (...)), owned by a schema.
@@ -300,7 +311,7 @@ class CompositeType:
     comment: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -314,7 +325,7 @@ class Domain:
     comment: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Schema:
     """
     A Postgres schema (namespace) and the objects it contains.
@@ -355,6 +366,9 @@ class DbIntrospectionResult:
 
     # Mapping from a view to the set of views it depends on.
     view_dependencies: dict[RelationKey, set[RelationKey]]
+
+    # Mapping from a materialized view to the set of views/matviews it reads from.
+    matview_dependencies: dict[RelationKey, set[RelationKey]]
 
     # Mapping from a view to the set of table columns it reads.
     view_column_dependencies: dict[RelationKey, set[ColumnKey]]
