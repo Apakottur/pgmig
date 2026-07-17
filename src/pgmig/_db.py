@@ -83,18 +83,9 @@ class DbReadOnlyConnection(DbConnection):
             # path: pg_get_*def()/format_type() then emit fully schema-qualified names.
             await conn.driver_conn.execute("SET search_path = ''")
 
-            yield conn
-
-    @asynccontextmanager
-    async def snapshot(self) -> AsyncIterator[None]:
-        """
-        Run the enclosed reads inside a single transaction. Because the connection is
-        autocommit and REPEATABLE READ, this is what actually pins one snapshot: without an
-        explicit transaction each query would run in its own, so an object dropped or created
-        between two queries could be seen inconsistently.
-        """
-        async with self.driver_conn.transaction():
-            yield
+            # Run the enclosed reads inside a single transaction to guarantee a consistent snapshot.
+            async with conn.driver_conn.transaction():
+                yield conn
 
     async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
         """
