@@ -8,6 +8,16 @@ SELECT
     p.prokind AS func_kind,
     obj_description(p.oid, 'pg_proc') AS func_comment,
     pg_get_userbyid(p.proowner) AS func_owner,
+    -- Effective ACL as a set of (grantee, privilege, grantable). A NULL proacl means the owner
+    -- default, expanded via acldefault('f', owner) -- which grants EXECUTE to PUBLIC, so a
+    -- REVOKE EXECUTE ... FROM PUBLIC surfaces as a diff. See tables.sql for the full rationale.
+    (
+        SELECT
+	    COALESCE(jsonb_agg(jsonb_build_object('grantee', COALESCE(gr.rolname, 'PUBLIC'), 'privilege',
+		acl.privilege_type, 'grantable', acl.is_grantable)), '[]'::jsonb)
+        FROM
+            aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) AS acl
+        LEFT JOIN pg_roles gr ON gr.oid = acl.grantee) AS func_grants,
     EXISTS (
         SELECT
             1
@@ -67,11 +77,11 @@ SELECT
 		jsonb_build_object('kind', 'other', 'schema_name', n.nspname, 'table',
 		    '', 'name', d.classid::regclass::text)
             END AS dep) dep_obj
-        WHERE
-            d.refclassid = 'pg_proc'::regclass
-            AND d.refobjid = p.oid
-            AND d.deptype IN ('n', 'a')
-            AND d.classid <> 'pg_trigger'::regclass), '[]'::jsonb) AS func_dependents,
+    WHERE
+        d.refclassid = 'pg_proc'::regclass
+        AND d.refobjid = p.oid
+        AND d.deptype IN ('n', 'a')
+        AND d.classid <> 'pg_trigger'::regclass), '[]'::jsonb) AS func_dependents,
     -- Forward function -> function hard dependencies (deptype 'n'), as {schema_name, name,
     -- args} objects; used to order drops so a routine is dropped before the ones it depends on.
     COALESCE((

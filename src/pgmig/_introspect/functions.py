@@ -1,7 +1,13 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._keys import FunctionKey, RelationKey
-from pgmig._models import Function, FunctionDependent
+from pgmig._models import Function, FunctionDependent, Grant
+
+
+class _GrantRow(_QueryRow):
+    grantee: str
+    privilege: str
+    grantable: bool
 
 
 class _FunctionDep(_QueryRow):
@@ -37,6 +43,7 @@ class _FunctionRow(_QueryRow):
     func_kind: str
     func_comment: str | None
     func_owner: str
+    func_grants: list[_GrantRow]
     func_has_dependents: bool
     func_dependents: list[_FunctionDependent]
     func_depends_on_functions: list[_FunctionDep]
@@ -58,6 +65,10 @@ async def load() -> None:
                 kind=func_row.func_kind,
                 comment=func_row.func_comment,
                 owner=func_row.func_owner,
+                grants=frozenset(
+                    Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
+                    for grant in func_row.func_grants
+                ),
                 has_dependents=func_row.func_has_dependents,
                 dependents=tuple(
                     FunctionDependent(kind=dep.kind, schema=dep.schema_name, table=dep.table, name=dep.name)

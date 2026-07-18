@@ -283,6 +283,7 @@ class Sequence:
     cycle: bool
     comment: str | None
     owner: str  # role that owns the sequence (pg_get_userbyid(relowner))
+    grants: frozenset[Grant]  # effective ACL (relacl expanded via acldefault('s', owner))
     owned_by: ColumnKey | None
     unlogged: bool  # UNLOGGED sequence (relpersistence 'u'); PG15+ only
 
@@ -313,6 +314,7 @@ class Function:
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
     owner: str  # role that owns the routine (pg_get_userbyid(proowner))
+    grants: frozenset[Grant]  # effective ACL (proacl expanded via acldefault('f', owner))
     # Whether a non-trigger object (column default, check constraint, expression index,
     # another routine, ...) depends on this routine. Drives drop phasing: a routine with
     # dependents is dropped late (after those dependents), one without stays early.
@@ -448,6 +450,7 @@ class Schema:
     name: str
     comment: str | None
     owner: str  # role that owns the schema (pg_get_userbyid(nspowner))
+    grants: frozenset[Grant]  # effective ACL (nspacl expanded via acldefault('n', owner))
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]

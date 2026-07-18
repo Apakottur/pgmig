@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, owner_statements
+from pgmig._diff.grants import grant_statements
 from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
 from pgmig._sql import qualified
@@ -120,6 +121,17 @@ def generate() -> Iterator[Statement]:
                     yield Statement(Phase.SEQUENCE_CREATE, sql)
                 for sql in owner_statements("SEQUENCE", qualified_name, src_seq.owner, dst_seq.owner):
                     yield Statement(Phase.SEQUENCE_CREATE, sql)
+                # ACL reconciliation, after the sequence exists (GRANT phase runs after every create).
+                for sql in grant_statements(
+                    "SEQUENCE",
+                    qualified_name,
+                    src_seq.grants,
+                    dst_seq.grants,
+                    src_seq.owner,
+                    dst_seq.owner,
+                    include_named_roles=context.include_grants,
+                ):
+                    yield Statement(Phase.GRANT, sql)
                 # OWNED BY reassignment (added, removed, or retargeted) runs in the later
                 # phase so a newly created target table/column is already in place.
                 if src_seq.owned_by != dst_seq.owned_by:
