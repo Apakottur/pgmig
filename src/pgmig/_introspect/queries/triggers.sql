@@ -2,6 +2,7 @@
 SELECT
     n.nspname AS schema_name,
     c.relname AS table_name,
+    c.relkind::text AS relkind,
     t.tgname AS trigger_name,
     pg_get_triggerdef(t.oid) AS trigger_def,
     replace(pg_get_triggerdef(t.oid), 'TRIGGER ' || quote_ident(t.tgname) || ' ', 'TRIGGER ') AS trigger_canonical,
@@ -15,9 +16,9 @@ FROM
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
     NOT t.tgisinternal
-    -- Ordinary tables ('r') and partitioned parents ('p'). Views ('v', INSTEAD OF triggers)
-    -- are not modelled yet, so they stay excluded.
-    AND c.relkind IN ('r', 'p')
+    -- Ordinary tables ('r'), partitioned parents ('p'), and views ('v', which carry only
+    -- INSTEAD OF triggers). The loader routes each row to its table or view by relkind.
+    AND c.relkind IN ('r', 'p', 'v')
     -- Exclude triggers cloned onto partitions from a partitioned parent (tgparentid <> 0):
     -- they are (re)created by the parent's cascading CREATE TRIGGER, and Postgres refuses a
     -- direct DROP on them. A parent-level trigger and a table's own local trigger both have

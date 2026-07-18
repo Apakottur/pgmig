@@ -283,6 +283,9 @@ class View:
     # strings. Emitted verbatim in a CREATE VIEW ... WITH (...) clause; empty when the view
     # has none.
     options: tuple[str, ...]
+    # INSTEAD OF triggers owned by this view (the only trigger kind a view can carry). Mirrors
+    # Table.trigger_by_name so the trigger diff walks views the same way it walks tables.
+    trigger_by_name: dict[str, Trigger]
 
 
 @dataclass(frozen=True)

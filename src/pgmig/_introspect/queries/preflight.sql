@@ -89,7 +89,8 @@ SELECT
             JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE
             NOT t.tgisinternal
-            AND c.relkind IN ('r', 'p')
+            -- Tables ('r'/'p') and views ('v', INSTEAD OF triggers); matches triggers.sql.
+            AND c.relkind IN ('r', 'p', 'v')
             AND n.nspname NOT LIKE 'pg_%'
             AND n.nspname <> 'information_schema') AS has_triggers,
     EXISTS (

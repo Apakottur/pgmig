@@ -12,22 +12,6 @@ async def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None
     )
 
 
-async def test_instead_of_trigger_on_view_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    An INSTEAD OF trigger on a view (pg_trigger on relkind 'v') is not modelled and must raise
-    rather than be silently ignored.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=[
-            "CREATE VIEW v AS SELECT 1 AS n",
-            "CREATE FUNCTION v_trig() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END;$$",
-            "CREATE TRIGGER v_ins INSTEAD OF INSERT ON v FOR EACH ROW EXECUTE FUNCTION v_trig()",
-        ],
-        match=r"INSTEAD OF trigger .* is not supported",
-    )
-
-
 async def test_rule_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     A user rule (pg_rewrite, not a view's auto _RETURN rule) is not modelled and must raise.
