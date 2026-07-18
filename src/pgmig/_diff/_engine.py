@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from pgmig._diff import (
     composite_types,
     constraints,
+    default_privileges,
     domains,
     enums,
     extensions,
@@ -48,6 +49,7 @@ _GENERATORS: list[Generator] = [
     views.generate,
     materialized_views.generate,
     matview_indexes.generate,
+    default_privileges.generate,
 ]
 
 

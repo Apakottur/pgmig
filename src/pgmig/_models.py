@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
-from pgmig._keys import ColumnKey, CompositeTypeKey, EnumKey, FunctionKey, RelationKey
+from pgmig._keys import ColumnKey, CompositeTypeKey, DefaultAclKey, EnumKey, FunctionKey, RelationKey
 from pgmig._sql import ident
 
 
@@ -475,6 +475,29 @@ class Extension:
 
 
 @dataclass(frozen=True)
+class DefaultAcl:
+    """
+    One ALTER DEFAULT PRIVILEGES rule: a pg_default_acl row.
+
+    A row exists only where defaults were altered; its absence means the built-in defaults
+    apply. So `grants` (the effective ACL, aclexplode of defaclacl) is meaningful only against
+    `baseline` (the built-in default, aclexplode of acldefault(object-type code, role)): the delta
+    between them is what the user actually configured. Diffing raw rows would misfire when only
+    one side has a row -- the diff compares effective-vs-effective, treating an absent row as
+    the baseline.
+
+    `object_type` is the plural GRANT keyword (TABLES / SEQUENCES / FUNCTIONS / TYPES /
+    SCHEMAS). `schema` is None for a global (no IN SCHEMA) rule.
+    """
+
+    role: str  # defaclrole (the FOR ROLE target), pg_get_userbyid(defaclrole)
+    schema: str | None  # defaclnamespace name; None when 0 (a global rule)
+    object_type: str  # plural keyword: TABLES / SEQUENCES / FUNCTIONS / TYPES / SCHEMAS
+    grants: frozenset[Grant]  # effective ACL (aclexplode of defaclacl)
+    baseline: frozenset[Grant]  # built-in default (aclexplode of acldefault(object-type code, role))
+
+
+@dataclass(frozen=True)
 class EnumColumnDependency:
     """
     A table column whose type is an enum (directly, or as an array of the enum).
@@ -516,3 +539,7 @@ class DbIntrospectionResult:
 
     # Mapping from an enum type to the table columns typed by it (directly or as an array).
     enum_column_dependencies: dict[EnumKey, list[EnumColumnDependency]]
+
+    # ALTER DEFAULT PRIVILEGES rules (pg_default_acl), keyed by (role, schema-or-None,
+    # object_type) so the diff can pair a source rule with its target counterpart.
+    default_acl_by_key: dict["DefaultAclKey", DefaultAcl]
