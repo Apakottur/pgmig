@@ -10,8 +10,6 @@ _KIND_NAMES = {
     ("pg_proc", "a"): "aggregate",
     ("pg_proc", "w"): "window function",
     ("pg_rewrite", "r"): "rule",
-    ("pg_policy", "p"): "row-level security policy",
-    ("pg_class", "rls"): "table with row-level security",
     ("pg_class", "inherits"): "legacy inheritance child table",
     ("pg_statistic_ext", "e"): "extended statistics",
     ("pg_event_trigger", "e"): "event trigger",
@@ -30,7 +28,7 @@ async def check() -> list[str]:
     """
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
     list: foreign tables, base types, aggregate/window
-    functions, rules, RLS policies and RLS-enabled tables, legacy
+    functions, rules, legacy
     inheritance children, extended statistics, event triggers). Without this, generate()
     diffs only the supported kinds and returns "" for a database whose not-yet-modelled
     objects differ on one side, falsely claiming convergence.

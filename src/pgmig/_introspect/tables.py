@@ -10,6 +10,8 @@ class _TableRow(_QueryRow):
     table_comment: str | None
     table_owner: str
     table_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
+    table_row_security: bool  # pg_class.relrowsecurity: ENABLE ROW LEVEL SECURITY
+    table_force_row_security: bool  # pg_class.relforcerowsecurity: FORCE ROW LEVEL SECURITY
     table_replica_identity: str  # pg_class.relreplident: 'd' / 'n' / 'f' / 'i'
     table_replica_identity_index: str | None  # index name when relreplident is 'i', else NULL
     # Column fields are all NULL together for the single phantom row a zero-column table
@@ -59,6 +61,8 @@ async def load() -> None:
                 comment=table_row.table_comment,
                 owner=table_row.table_owner,
                 unlogged=table_row.table_persistence == "u",
+                row_security=table_row.table_row_security,
+                force_row_security=table_row.table_force_row_security,
                 replica_identity=table_row.table_replica_identity,
                 replica_identity_index=table_row.table_replica_identity_index,
                 partition_strategy=table_row.partition_strategy,
@@ -69,6 +73,7 @@ async def load() -> None:
                 constraint_by_name={},
                 foreign_key_by_name={},
                 trigger_by_name={},
+                policy_by_name={},
             )
             schema.table_by_name[table_row.table_name] = table
         # A zero-column table's phantom row (all column fields NULL) creates the table

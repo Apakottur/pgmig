@@ -28,6 +28,11 @@ SELECT
     -- the schema filter below excludes, and partitioned parents cannot be unlogged, so
     -- only 'p'/'u' reach the loader.
     c.relpersistence AS table_persistence,
+    -- Row-level security: relrowsecurity is ENABLE ROW LEVEL SECURITY, relforcerowsecurity is
+    -- FORCE ROW LEVEL SECURITY (applies the policies to the table owner too). Both are diffed
+    -- as ALTER TABLE toggles; the policies themselves are a separate table-child object.
+    c.relrowsecurity AS table_row_security,
+    c.relforcerowsecurity AS table_force_row_security,
     -- Replica identity: 'd' default, 'n' nothing, 'f' full, 'i' using index. Logical
     -- replication depends on it, so a difference must be diffed. For 'i', resolve the
     -- identity index's (schema-local, unqualified) name via pg_index.indisreplident.

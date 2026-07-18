@@ -24,29 +24,6 @@ async def test_view_return_rule_not_reported(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_rls_policy_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A row-level security policy (pg_policy) is not modelled and must raise.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TABLE t (n integer)", "CREATE POLICY t_pol ON t USING (true)"],
-        match=r"row-level security policy .* is not supported",
-    )
-
-
-async def test_rls_enabled_table_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A table with row-level security enabled but no policy (pg_class.relrowsecurity) changes
-    access semantics that are not modelled, so it must raise rather than converge silently.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TABLE t (n integer)", "ALTER TABLE t ENABLE ROW LEVEL SECURITY"],
-        match=r"row-level security .* is not supported",
-    )
-
-
 async def test_base_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     A user base type (pg_type typtype 'b') is not modelled and must raise. Built via the

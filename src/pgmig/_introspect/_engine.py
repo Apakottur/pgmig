@@ -14,6 +14,7 @@ from pgmig._introspect import (
     materialized_views,
     matview_dependencies,
     matview_indexes,
+    policies,
     range_types,
     schemas,
     sequences,
@@ -42,6 +43,7 @@ class _IntrospectionPreflight(_QueryRow):
     has_sequences: bool
     has_functions: bool
     has_triggers: bool
+    has_policies: bool
     has_enums: bool
     has_domains: bool
     has_composite_types: bool
@@ -84,6 +86,9 @@ class _IntrospectionPreflight(_QueryRow):
         # and the loader routes each trigger onto its table or view, so both must exist first.
         if self.has_triggers:
             loaders.append(triggers.load)
+        # Policies attach to tables, so their loader runs after tables.load.
+        if self.has_policies:
+            loaders.append(policies.load)
         if self.has_views or self.has_matviews:
             loaders.append(view_column_dependencies.load)
         if self.has_matviews:
