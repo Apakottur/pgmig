@@ -19,9 +19,10 @@ async def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
     return name
 
 
-async def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_changed_with_include_owner(gen_setup: GenerateSetup) -> None:
     """
-    Same table both sides owned by different roles -> ALTER TABLE ... OWNER TO target's.
+    Same table both sides owned by different roles, with --include-owner -> ALTER TABLE ...
+    OWNER TO target's.
     """
     role_a = await _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = await _ensure_role(gen_setup, "pgmig_owner_b")
@@ -36,12 +37,14 @@ async def test_table_owner_changed(gen_setup: GenerateSetup) -> None:
             f"ALTER TABLE person OWNER TO {role_b}",
         ],
         diff=[f'ALTER TABLE "public"."person" OWNER TO "{role_b}"'],
+        include_owner=True,
     )
 
 
-async def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_ignored_by_default(gen_setup: GenerateSetup) -> None:
     """
-    Owners differ, but --ignore-owner suppresses the ALTER TABLE ... OWNER TO entirely.
+    Owners differ, but ownership is not reconciled by default (no --include-owner), so no
+    ALTER TABLE ... OWNER TO is emitted.
     """
     role_a = await _ensure_role(gen_setup, "pgmig_owner_a")
     role_b = await _ensure_role(gen_setup, "pgmig_owner_b")
@@ -56,13 +59,12 @@ async def test_table_owner_ignored(gen_setup: GenerateSetup) -> None:
             f"ALTER TABLE person OWNER TO {role_b}",
         ],
         diff=[],
-        ignore_owner=True,
     )
 
 
-async def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
+async def test_table_owner_unchanged_with_include_owner(gen_setup: GenerateSetup) -> None:
     """
-    Same table and same owner on both sides -> no migration SQL.
+    Same table and same owner on both sides, with --include-owner -> no migration SQL.
     """
     role_a = await _ensure_role(gen_setup, "pgmig_owner_a")
     await gen_setup.assert_diff(
@@ -75,4 +77,5 @@ async def test_table_owner_unchanged(gen_setup: GenerateSetup) -> None:
             f"ALTER TABLE person OWNER TO {role_a}",
         ],
         diff=[],
+        include_owner=True,
     )

@@ -42,7 +42,7 @@ class GenerateSetup:
         both: list[str] | None = None,
         apply: bool = True,
         index_concurrently: bool = False,
-        ignore_owner: bool = False,
+        include_owner: bool = False,
     ) -> None:
         """
         Set up both databases, assert the generated migration, then apply and confirm it converges.
@@ -54,7 +54,7 @@ class GenerateSetup:
             both: statements to run on both databases.
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
-            ignore_owner: Pass through to `generate` to suppress ALTER ... OWNER TO statements.
+            include_owner: Pass through to `generate` to emit ALTER ... OWNER TO statements.
         """
         # Shared setup runs on both DBs, before the side-specific statements.
         src = (both or []) + src
@@ -79,7 +79,7 @@ class GenerateSetup:
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
-            ignore_owner=ignore_owner,
+            include_owner=include_owner,
         )
 
         # Verify the result.
@@ -93,7 +93,7 @@ class GenerateSetup:
                 source=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
-                ignore_owner=ignore_owner,
+                include_owner=include_owner,
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 

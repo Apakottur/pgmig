@@ -93,9 +93,9 @@ def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table
     reconciles to the target owner on a later run, once it exists on both sides and this
     same-owner comparison applies.
 
-    With --ignore-owner, ownership reconciliation is skipped entirely.
+    Ownership reconciliation is off by default; it runs only with --include-owner.
     """
-    if context.ignore_owner or src_table is None or src_table.owner == dst_table.owner:
+    if not context.include_owner or src_table is None or src_table.owner == dst_table.owner:
         return []
     return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
 
