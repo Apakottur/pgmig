@@ -200,3 +200,17 @@ condeferrable
 condeferred
 tablespaces
 commitish
+opclass
+rngcollation
+rngcanonical
+regproc
+rngsubdiff
+rngtypid
+rngsubtype
+rngsubopc
+opcnamespace
+collnamespace
+collatable
+multirange
+opcdefault
+opcname

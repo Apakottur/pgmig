@@ -124,4 +124,14 @@ SELECT
             t.typtype = 'c'
             AND c.relkind = 'c'
             AND n.nspname NOT LIKE 'pg_%'
-            AND n.nspname <> 'information_schema') AS has_composite_types;
+            AND n.nspname <> 'information_schema') AS has_composite_types,
+    EXISTS (
+        SELECT
+            1
+        FROM
+            pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE
+            t.typtype = 'r'
+            AND n.nspname NOT LIKE 'pg_%'
+            AND n.nspname <> 'information_schema') AS has_range_types;

@@ -2,11 +2,10 @@ from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._sql import qualified
 
 # Human-readable name per unsupported kind, keyed by (catalog, code). The same single-char
-# code is reused across catalogs (e.g. 'r' is a plain table in pg_class but a range type in
-# pg_type), so the catalog is part of the key -- a flat single-char map would collide.
+# code is reused across catalogs (e.g. 'r' is a plain table in pg_class but a rule in
+# pg_rewrite), so the catalog is part of the key -- a flat single-char map would collide.
 _KIND_NAMES = {
     ("pg_class", "f"): "foreign table",
-    ("pg_type", "r"): "range type",
     ("pg_type", "b"): "base type",
     ("pg_proc", "a"): "aggregate",
     ("pg_proc", "w"): "window function",
@@ -30,7 +29,7 @@ class _UnsupportedRow(_QueryRow):
 async def check() -> list[str]:
     """
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
-    list: foreign tables, range/base types, aggregate/window
+    list: foreign tables, base types, aggregate/window
     functions, rules, RLS policies and RLS-enabled tables, legacy
     inheritance children, extended statistics, event triggers). Without this, generate()
     diffs only the supported kinds and returns "" for a database whose not-yet-modelled

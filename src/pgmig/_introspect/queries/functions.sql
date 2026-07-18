@@ -75,6 +75,20 @@ WHERE
         WHERE
             d.objid = p.oid
             AND d.deptype = 'e')
+    -- Exclude the constructor functions Postgres auto-creates for a range/multirange type
+    -- (e.g. r_int(integer, integer), r_int_multirange(...)): they carry an internal ('i')
+    -- dependency on the type and are created and dropped with it, so diffing them as
+    -- standalone routines would double-emit against the range-type diff.
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            pg_depend d
+        WHERE
+            d.classid = 'pg_proc'::regclass
+            AND d.objid = p.oid
+            AND d.refclassid = 'pg_type'::regclass
+            AND d.deptype = 'i')
 ORDER BY
     n.nspname,
     p.proname,

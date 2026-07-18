@@ -24,4 +24,5 @@ async def load() -> None:
             materialized_view_by_name={},
             domain_by_name={},
             composite_type_by_name={},
+            range_type_by_name={},
         )
