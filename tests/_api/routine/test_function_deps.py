@@ -117,12 +117,12 @@ async def test_function_drop_circular_with_dropped_table_raises(gen_setup: Gener
     )
 
 
-async def test_function_return_type_change_with_dependent_raises(gen_setup: GenerateSetup) -> None:
+async def test_function_return_type_change_recreates_column_default(gen_setup: GenerateSetup) -> None:
     """
-    Recreating a depended-upon function (return-type change forces DROP + CREATE) is still
-    refused: its dependents remain in the target, so it cannot be dropped to recreate.
+    Return-type change on a function used by an (unchanged) column default: the default is
+    dropped, the function recreated, then the default re-added around the recreate.
     """
-    await gen_setup.assert_unsupported(
+    await gen_setup.assert_diff(
         src=[
             "CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
             "CREATE TABLE t (x bigint DEFAULT f())",
@@ -130,6 +130,140 @@ async def test_function_return_type_change_with_dependent_raises(gen_setup: Gene
         dst=[
             "CREATE FUNCTION f() RETURNS bigint LANGUAGE sql AS $$SELECT 1$$",
             "CREATE TABLE t (x bigint DEFAULT f())",
+        ],
+        diff=[
+            'ALTER TABLE "public"."t" ALTER COLUMN "x" DROP DEFAULT',
+            'DROP FUNCTION "public"."f"()',
+            "CREATE OR REPLACE FUNCTION public.f()\n RETURNS bigint\n LANGUAGE sql\nAS $function$SELECT 1$function$",
+            'ALTER TABLE "public"."t" ALTER COLUMN "x" SET DEFAULT public.f()',
+        ],
+    )
+
+
+async def test_function_return_type_change_recreates_check_constraint(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change on a function used inside an (unchanged) check constraint: the
+    constraint is dropped, the function recreated, then the constraint re-added.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE FUNCTION amount(v integer) RETURNS integer LANGUAGE sql IMMUTABLE AS $$SELECT v$$",
+            "CREATE TABLE t (x integer, CONSTRAINT t_chk CHECK (amount(x) > 0))",
+        ],
+        dst=[
+            "CREATE FUNCTION amount(v integer) RETURNS bigint LANGUAGE sql IMMUTABLE AS $$SELECT v::bigint$$",
+            "CREATE TABLE t (x integer, CONSTRAINT t_chk CHECK (amount(x) > 0))",
+        ],
+        diff=[
+            'ALTER TABLE "public"."t" DROP CONSTRAINT "t_chk"',
+            'DROP FUNCTION "public"."amount"(v integer)',
+            "CREATE OR REPLACE FUNCTION public.amount(v integer)\n RETURNS bigint\n"
+            " LANGUAGE sql\n IMMUTABLE\nAS $function$SELECT v::bigint$function$",
+            'ALTER TABLE "public"."t" ADD CONSTRAINT "t_chk" CHECK ((public.amount(x) > 0))',
+        ],
+    )
+
+
+async def test_function_return_type_change_recreates_expression_index(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change on a function used by an (unchanged) expression index: the index is
+    dropped, the function recreated, then the index re-created.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE FUNCTION dbl(v integer) RETURNS integer LANGUAGE sql IMMUTABLE AS $$SELECT v * 2$$",
+            "CREATE TABLE t (x integer)",
+            "CREATE INDEX t_dbl ON t (dbl(x))",
+        ],
+        dst=[
+            "CREATE FUNCTION dbl(v integer) RETURNS bigint LANGUAGE sql IMMUTABLE AS $$SELECT (v * 2)::bigint$$",
+            "CREATE TABLE t (x integer)",
+            "CREATE INDEX t_dbl ON t (dbl(x))",
+        ],
+        diff=[
+            'DROP INDEX "public"."t_dbl"',
+            'DROP FUNCTION "public"."dbl"(v integer)',
+            "CREATE OR REPLACE FUNCTION public.dbl(v integer)\n RETURNS bigint\n"
+            " LANGUAGE sql\n IMMUTABLE\nAS $function$SELECT (v * 2)::bigint$function$",
+            "CREATE INDEX t_dbl ON public.t USING btree (public.dbl(x))",
+        ],
+    )
+
+
+async def test_function_return_type_change_recreates_multiple_dependents(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change on a function used by both a column default and a check constraint:
+    all dependents are dropped (in their phases) before the recreate and re-added after it.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE FUNCTION f() RETURNS integer LANGUAGE sql IMMUTABLE AS $$SELECT 1$$",
+            "CREATE TABLE t (x bigint DEFAULT f(), CONSTRAINT t_chk CHECK (f() > 0))",
+        ],
+        dst=[
+            "CREATE FUNCTION f() RETURNS bigint LANGUAGE sql IMMUTABLE AS $$SELECT 1$$",
+            "CREATE TABLE t (x bigint DEFAULT f(), CONSTRAINT t_chk CHECK (f() > 0))",
+        ],
+        diff=[
+            'ALTER TABLE "public"."t" ALTER COLUMN "x" DROP DEFAULT',
+            'ALTER TABLE "public"."t" DROP CONSTRAINT "t_chk"',
+            'DROP FUNCTION "public"."f"()',
+            "CREATE OR REPLACE FUNCTION public.f()\n RETURNS bigint\n LANGUAGE sql\n IMMUTABLE\n"
+            "AS $function$SELECT 1$function$",
+            'ALTER TABLE "public"."t" ADD CONSTRAINT "t_chk" CHECK ((public.f() > 0))',
+            'ALTER TABLE "public"."t" ALTER COLUMN "x" SET DEFAULT public.f()',
+        ],
+    )
+
+
+async def test_function_return_type_change_with_dropped_dependent_raises(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change where the dependent (its owning table) is also dropped this run: the
+    dependent is not present in the target to re-create, so refuse rather than emit a
+    non-converging recreate.
+    """
+    await gen_setup.assert_unsupported(
+        src=[
+            "CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
+            "CREATE TABLE t (x bigint DEFAULT f())",
+        ],
+        dst=["CREATE FUNCTION f() RETURNS bigint LANGUAGE sql AS $$SELECT 1$$"],
+        match=r"Recreating",
+    )
+
+
+async def test_function_return_type_change_with_changed_dependent_raises(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change where a dependent also changed (the check expression differs between
+    source and target): re-creating the source version would not converge, so refuse.
+    """
+    await gen_setup.assert_unsupported(
+        src=[
+            "CREATE FUNCTION amount(v integer) RETURNS integer LANGUAGE sql IMMUTABLE AS $$SELECT v$$",
+            "CREATE TABLE t (x integer, CONSTRAINT t_chk CHECK (amount(x) > 0))",
+        ],
+        dst=[
+            "CREATE FUNCTION amount(v integer) RETURNS bigint LANGUAGE sql IMMUTABLE AS $$SELECT v::bigint$$",
+            "CREATE TABLE t (x integer, CONSTRAINT t_chk CHECK (amount(x) > 1))",
+        ],
+        match=r"Recreating",
+    )
+
+
+async def test_function_return_type_change_with_routine_dependent_raises(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change on a function another routine depends on is still refused: the
+    recreate-around-dependents path is bounded to one level (defaults / constraints /
+    indexes) and does not follow routine-on-routine chains.
+    """
+    await gen_setup.assert_unsupported(
+        src=[
+            "CREATE FUNCTION leaf() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
+            "CREATE FUNCTION caller() RETURNS bigint LANGUAGE sql BEGIN ATOMIC SELECT leaf(); END",
+        ],
+        dst=[
+            "CREATE FUNCTION leaf() RETURNS bigint LANGUAGE sql AS $$SELECT 1$$",
+            "CREATE FUNCTION caller() RETURNS bigint LANGUAGE sql BEGIN ATOMIC SELECT leaf(); END",
         ],
         match=r"Recreating",
     )

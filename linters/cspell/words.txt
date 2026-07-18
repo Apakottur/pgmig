@@ -109,6 +109,14 @@ proname
 pronamespace
 prorettype
 rettype
+# functions.sql dependent-resolution join aliases
+adns
+adrel
+conrel
+dpns
+idxi
+idxns
+idxtbl
 overloadable
 inplace
 renamable

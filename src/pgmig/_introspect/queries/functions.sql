@@ -17,6 +17,60 @@ SELECT
             AND d.refobjid = p.oid
             AND d.deptype IN ('n', 'a')
             AND d.classid <> 'pg_trigger'::regclass) AS func_has_dependents,
+    -- The non-trigger objects that depend on this routine (same pg_depend rows as
+    -- func_has_dependents), each resolved to a structured identity by dependent catalog
+    -- (classid). Drives the recreate-around-dependents path on a return-type change:
+    --   pg_attrdef   -> a column default ('default'): its table and column.
+    --   pg_constraint-> a check/other constraint ('constraint'): its table and name.
+    --   pg_class (i) -> an expression index ('index'): its table and index name.
+    --   pg_proc      -> another routine ('routine'): only its name (chains are unsupported).
+    --   anything else-> 'other', carrying the catalog name for the error message.
+    COALESCE((
+        SELECT
+            jsonb_agg(DISTINCT dep_obj.dep)
+        FROM pg_depend d
+    LEFT JOIN pg_attrdef ad ON d.classid = 'pg_attrdef'::regclass
+        AND ad.oid = d.objid
+    LEFT JOIN pg_class adrel ON adrel.oid = ad.adrelid
+    LEFT JOIN pg_namespace adns ON adns.oid = adrel.relnamespace
+    LEFT JOIN pg_attribute ada ON ada.attrelid = ad.adrelid
+        AND ada.attnum = ad.adnum
+    LEFT JOIN pg_constraint con ON d.classid = 'pg_constraint'::regclass
+        AND con.oid = d.objid
+    LEFT JOIN pg_class conrel ON conrel.oid = con.conrelid
+    LEFT JOIN pg_namespace conns ON conns.oid = conrel.relnamespace
+    LEFT JOIN pg_class idx ON d.classid = 'pg_class'::regclass
+        AND idx.oid = d.objid
+        AND idx.relkind = 'i'
+    LEFT JOIN pg_namespace idxns ON idxns.oid = idx.relnamespace
+    LEFT JOIN pg_index idxi ON idxi.indexrelid = idx.oid
+    LEFT JOIN pg_class idxtbl ON idxtbl.oid = idxi.indrelid
+    LEFT JOIN pg_proc dp ON d.classid = 'pg_proc'::regclass
+        AND dp.oid = d.objid
+    LEFT JOIN pg_namespace dpns ON dpns.oid = dp.pronamespace
+    CROSS JOIN LATERAL (
+        SELECT
+            CASE WHEN ad.oid IS NOT NULL THEN
+		jsonb_build_object('kind', 'default', 'schema_name', adns.nspname, 'table',
+		    adrel.relname, 'name', ada.attname)
+            WHEN con.oid IS NOT NULL THEN
+		jsonb_build_object('kind', 'constraint', 'schema_name', conns.nspname, 'table',
+		    conrel.relname, 'name', con.conname)
+            WHEN idx.oid IS NOT NULL THEN
+		jsonb_build_object('kind', 'index', 'schema_name', idxns.nspname, 'table',
+		    idxtbl.relname, 'name', idx.relname)
+            WHEN dp.oid IS NOT NULL THEN
+		jsonb_build_object('kind', 'routine', 'schema_name', dpns.nspname, 'table',
+		    '', 'name', dp.proname)
+            ELSE
+		jsonb_build_object('kind', 'other', 'schema_name', n.nspname, 'table',
+		    '', 'name', d.classid::regclass::text)
+            END AS dep) dep_obj
+        WHERE
+            d.refclassid = 'pg_proc'::regclass
+            AND d.refobjid = p.oid
+            AND d.deptype IN ('n', 'a')
+            AND d.classid <> 'pg_trigger'::regclass), '[]'::jsonb) AS func_dependents,
     -- Forward function -> function hard dependencies (deptype 'n'), as {schema_name, name,
     -- args} objects; used to order drops so a routine is dropped before the ones it depends on.
     COALESCE((

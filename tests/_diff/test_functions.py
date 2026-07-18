@@ -12,6 +12,7 @@ def _func(name: str, depends_on: set[FunctionKey]) -> Function:
         kind="f",
         comment=None,
         has_dependents=True,
+        dependents=(),
         depends_on_functions=frozenset(depends_on),
         depends_on_relations=frozenset(),
     )
