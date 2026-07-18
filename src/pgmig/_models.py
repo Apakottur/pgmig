@@ -406,5 +406,4 @@ class DbIntrospectionResult:
     composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]
 
     # Mapping from an enum type to the table columns typed by it (directly or as an array).
-    # Used by the enum diff to rewrite dependent columns when values are removed/reordered.
-    enum_column_dependencies: dict[EnumKey, list["EnumColumnDependency"]]
+    enum_column_dependencies: dict[EnumKey, list[EnumColumnDependency]]
