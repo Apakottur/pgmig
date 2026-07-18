@@ -40,3 +40,13 @@ class ColumnKey:
     schema: str
     table: str
     column: str
+
+
+@dataclass(frozen=True, order=True)
+class EnumKey:
+    """
+    Full identifier of an enum type within a database.
+    """
+
+    schema: str
+    name: str

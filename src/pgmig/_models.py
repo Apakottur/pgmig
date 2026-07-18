@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
-from pgmig._keys import ColumnKey, CompositeTypeKey, FunctionKey, RelationKey
+from pgmig._keys import ColumnKey, CompositeTypeKey, EnumKey, FunctionKey, RelationKey
 
 
 @dataclass(frozen=True)
@@ -365,6 +365,25 @@ class Extension:
     comment: str | None
 
 
+@dataclass(frozen=True)
+class EnumColumnDependency:
+    """
+    A table column whose type is an enum (directly, or as an array of the enum).
+
+    Recorded so the enum diff can rewrite the column when the enum's values are removed or
+    reordered (a type rewrite Postgres has no ALTER form for). The hazard flags let the diff
+    raise on shapes the rewrite does not handle rather than emit failing SQL.
+    """
+
+    schema: str
+    table: str
+    column: str
+    is_array: bool  # column type is enum[] rather than the enum directly
+    is_generated: bool  # generated column: ALTER COLUMN TYPE rejects USING
+    in_index: bool  # column participates in an index
+    in_constraint: bool  # column participates in a constraint
+
+
 @dataclass
 class DbIntrospectionResult:
     """
@@ -385,3 +404,7 @@ class DbIntrospectionResult:
 
     # Mapping from a composite type to the set of composite types it depends on.
     composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]
+
+    # Mapping from an enum type to the table columns typed by it (directly or as an array).
+    # Used by the enum diff to rewrite dependent columns when values are removed/reordered.
+    enum_column_dependencies: dict[EnumKey, list["EnumColumnDependency"]]

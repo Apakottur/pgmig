@@ -76,6 +76,7 @@ indexdef
 indisprimary
 indrelid
 indexrelid
+indkey
 refclassid
 refobjid
 refobjsubid
@@ -124,6 +125,7 @@ typnamespace
 typtype
 typcategory
 typelem
+typarray
 relrowsecurity
 relforcerowsecurity
 polname
