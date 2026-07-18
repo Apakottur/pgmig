@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._keys import RelationKey
-from pgmig._models import DbIntrospectionResult, Schema, Table
+from pgmig._models import DbIntrospectionResult, Schema, Table, View
 from pgmig._sql import comment_on, ident, qualified
 
 if TYPE_CHECKING:
@@ -272,6 +272,19 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
         dst_tables = dst_schema.table_by_name if dst_schema else {}
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
+
+
+def ctx_iter_view_pairs() -> Iterator[tuple[str, str, View | None, View | None]]:
+    """
+    Yield (schema_name, view_name, source_view, target_view) for every view across both
+    databases, sorted by schema then view. Either view is None when absent on that side.
+    The view counterpart of ctx_iter_table_pairs, used to diff view-owned INSTEAD OF triggers.
+    """
+    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
+        src_views = src_schema.view_by_name if src_schema else {}
+        dst_views = dst_schema.view_by_name if dst_schema else {}
+        for view_name in sorted(src_views.keys() | dst_views.keys()):
+            yield schema_name, view_name, src_views.get(view_name), dst_views.get(view_name)
 
 
 def ctx_iter_object_pairs(

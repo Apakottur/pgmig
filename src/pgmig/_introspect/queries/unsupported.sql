@@ -9,7 +9,6 @@
 --                         inheritance child 'inherits'.
 --   pg_type:              range 'r'; base type 'b'.
 --   pg_proc:              aggregate 'a', window 'w'   (dropped by functions.sql's prokind filter).
---   pg_trigger:           INSTEAD OF trigger on a view 'v'   (dropped by triggers.sql).
 --   pg_rewrite:           rule 'r'   (the view _RETURN rule is excluded).
 --   pg_policy:            row-level-security policy 'p'.
 --   pg_statistic_ext:     extended statistics 'e'.
@@ -102,40 +101,6 @@ WHERE
             pg_depend d
         WHERE
             d.objid = p.oid
-            AND d.deptype = 'e')
-UNION ALL
--- INSTEAD OF triggers on views (relkind 'v'), excluded by triggers.sql's relkind filter.
--- Same NOT tgisinternal / tgparentid = 0 guards as triggers.sql.
-SELECT
-    n.nspname AS schema_name,
-    t.tgname AS obj_name,
-    'pg_trigger' AS catalog,
-    'v' AS kind
-FROM
-    pg_trigger t
-    JOIN pg_class c ON c.oid = t.tgrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE
-    NOT t.tgisinternal
-    AND c.relkind = 'v'
-    AND t.tgparentid = 0
-    AND n.nspname NOT LIKE 'pg_%'
-    AND n.nspname <> 'information_schema'
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = c.oid
             AND d.deptype = 'e')
 UNION ALL
 -- Rules (pg_rewrite). The auto _RETURN rule backing every view is excluded; every other

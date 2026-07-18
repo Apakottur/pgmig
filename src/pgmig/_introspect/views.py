@@ -46,7 +46,9 @@ async def load() -> None:
     await _load_views(
         "views.sql",
         lambda schema: schema.view_by_name,
+        # trigger_by_name starts empty; the trigger loader (which runs after views) routes each
+        # INSTEAD OF trigger row onto its view.
         lambda name, definition, comment, options: View(
-            name=name, definition=definition, comment=comment, options=options
+            name=name, definition=definition, comment=comment, options=options, trigger_by_name={}
         ),
     )

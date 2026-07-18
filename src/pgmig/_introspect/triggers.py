@@ -1,11 +1,12 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._models import Trigger
+from pgmig._models import Table, Trigger, View
 
 
 class _TriggerRow(_QueryRow):
     schema_name: str
     table_name: str
+    relkind: str  # pg_class.relkind of the owning relation: 'r'/'p' table, 'v' view
     trigger_name: str
     trigger_def: str
     trigger_canonical: str
@@ -16,12 +17,19 @@ class _TriggerRow(_QueryRow):
 async def load() -> None:
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
+
+    A trigger's owner is a table ('r'/'p') or, for INSTEAD OF triggers, a view ('v'); route the
+    row to the matching mapping so both carry their triggers uniformly. This runs after both
+    tables and views are loaded so both lookups resolve.
     """
     for trigger_row in await run_introspection_query("triggers.sql", _TriggerRow):
-        table = context.db_introspection_result.schema_by_name[trigger_row.schema_name].table_by_name[
-            trigger_row.table_name
-        ]
-        table.trigger_by_name[trigger_row.trigger_name] = Trigger(
+        schema = context.db_introspection_result.schema_by_name[trigger_row.schema_name]
+        owner: Table | View
+        if trigger_row.relkind == "v":
+            owner = schema.view_by_name[trigger_row.table_name]
+        else:
+            owner = schema.table_by_name[trigger_row.table_name]
+        owner.trigger_by_name[trigger_row.trigger_name] = Trigger(
             name=trigger_row.trigger_name,
             definition=trigger_row.trigger_def,
             canonical=trigger_row.trigger_canonical,

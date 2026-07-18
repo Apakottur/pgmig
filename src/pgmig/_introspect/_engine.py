@@ -70,12 +70,14 @@ class _IntrospectionPreflight(_QueryRow):
             loaders.append(sequences.load)
         if self.has_functions:
             loaders.append(functions.load)
-        if self.has_triggers:
-            loaders.append(triggers.load)
         if self.has_enums:
             loaders.append(enums.load)
         if self.has_views:
             loaders += [views.load, view_dependencies.load]
+        # Triggers load after both tables and views: an INSTEAD OF trigger's owner is a view,
+        # and the loader routes each trigger onto its table or view, so both must exist first.
+        if self.has_triggers:
+            loaders.append(triggers.load)
         if self.has_views or self.has_matviews:
             loaders.append(view_column_dependencies.load)
         if self.has_matviews:
