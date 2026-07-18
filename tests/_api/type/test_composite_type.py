@@ -48,19 +48,110 @@ async def test_composite_type_unchanged(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_composite_type_field_change_raises(gen_setup: GenerateSetup) -> None:
+async def test_composite_type_add_attribute(gen_setup: GenerateSetup) -> None:
     """
-    A field-level change on a type present in both sides is not supported yet (ALTER TYPE
-    deferred) -> UnsupportedChangeError.
+    An attribute present in target only is added in place with ALTER TYPE ... ADD ATTRIBUTE.
     """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TYPE pair AS (a integer, b integer)"],
-        dst=["CREATE TYPE pair AS (a integer, b bigint)"],
-        match="Composite type field change is not supported",
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE pair AS (a integer)"],
+        dst=["CREATE TYPE pair AS (a integer, b integer)"],
+        diff=['ALTER TYPE "public"."pair" ADD ATTRIBUTE "b" integer CASCADE'],
     )
 
 
-async def test_composite_type_create_ordered_by_dependency(gen_setup: GenerateSetup) -> None:
+async def test_composite_type_drop_attribute(gen_setup: GenerateSetup) -> None:
+    """
+    An attribute present in source only is removed in place with ALTER TYPE ... DROP ATTRIBUTE.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE pair AS (a integer, b integer)"],
+        dst=["CREATE TYPE pair AS (a integer)"],
+        diff=['ALTER TYPE "public"."pair" DROP ATTRIBUTE "b" CASCADE'],
+    )
+
+
+async def test_composite_type_alter_attribute_type(gen_setup: GenerateSetup) -> None:
+    """
+    An attribute whose type differs is changed in place with ALTER TYPE ... ALTER ATTRIBUTE ... TYPE.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE pair AS (a integer, b integer)"],
+        dst=["CREATE TYPE pair AS (a integer, b bigint)"],
+        diff=['ALTER TYPE "public"."pair" ALTER ATTRIBUTE "b" TYPE bigint CASCADE'],
+    )
+
+
+async def test_composite_type_combined_attribute_changes(
+    gen_setup: GenerateSetup,
+) -> None:
+    """
+    A type with a dropped, a retyped, and an added attribute emits one statement each:
+    drops first, then type changes, then additions.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE rec AS (a integer, b integer, c integer)"],
+        dst=["CREATE TYPE rec AS (a bigint, c integer, d integer)"],
+        diff=[
+            'ALTER TYPE "public"."rec" DROP ATTRIBUTE "b" CASCADE',
+            'ALTER TYPE "public"."rec" ALTER ATTRIBUTE "a" TYPE bigint CASCADE',
+            'ALTER TYPE "public"."rec" ADD ATTRIBUTE "d" integer CASCADE',
+        ],
+    )
+
+
+async def test_composite_type_add_attribute_of_new_type(
+    gen_setup: GenerateSetup,
+) -> None:
+    """
+    An added attribute whose type is another composite type created in the same migration must
+    be emitted after that type's CREATE, even though the alter and the create share the
+    TYPE_CREATE phase.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE pair AS (a integer)"],
+        dst=[
+            "CREATE TYPE z_new AS (v integer)",
+            "CREATE TYPE pair AS (a integer, b z_new)",
+        ],
+        diff=[
+            'CREATE TYPE "public"."z_new" AS ("v" integer)',
+            'ALTER TYPE "public"."pair" ADD ATTRIBUTE "b" public.z_new CASCADE',
+        ],
+    )
+
+
+async def test_composite_type_attribute_change_on_type_used_by_table(
+    gen_setup: GenerateSetup,
+) -> None:
+    """
+    Altering a composite type whose value is used by a table column requires CASCADE so the
+    change propagates to the table's row type; the migration must converge.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TYPE pair AS (a integer)"],
+        src=["CREATE TABLE t (p pair)"],
+        dst=["ALTER TYPE pair ADD ATTRIBUTE b integer", "CREATE TABLE t (p pair)"],
+        diff=['ALTER TYPE "public"."pair" ADD ATTRIBUTE "b" integer CASCADE'],
+    )
+
+
+async def test_composite_type_attribute_reorder_raises(
+    gen_setup: GenerateSetup,
+) -> None:
+    """
+    Reordering existing attributes has no in-place ALTER form (ADD only appends), so it stays
+    unsupported.
+    """
+    await gen_setup.assert_unsupported(
+        src=["CREATE TYPE pair AS (a integer, b integer)"],
+        dst=["CREATE TYPE pair AS (b integer, a integer)"],
+        match="Composite type attribute reorder is not supported",
+    )
+
+
+async def test_composite_type_create_ordered_by_dependency(
+    gen_setup: GenerateSetup,
+) -> None:
     """
     A composite type whose field is another composite type must be created after the type it
     references, regardless of name order. Here the outer type (`a_point`) sorts before the
@@ -80,7 +171,9 @@ async def test_composite_type_create_ordered_by_dependency(gen_setup: GenerateSe
     )
 
 
-async def test_composite_type_array_field_ordered_by_dependency(gen_setup: GenerateSetup) -> None:
+async def test_composite_type_array_field_ordered_by_dependency(
+    gen_setup: GenerateSetup,
+) -> None:
     """
     A field that is an *array* of another composite type creates the same dependency: the
     element type must exist first. The outer type (`a_poly`) sorts before the inner one
@@ -100,7 +193,9 @@ async def test_composite_type_array_field_ordered_by_dependency(gen_setup: Gener
     )
 
 
-async def test_composite_type_drop_ordered_by_dependency(gen_setup: GenerateSetup) -> None:
+async def test_composite_type_drop_ordered_by_dependency(
+    gen_setup: GenerateSetup,
+) -> None:
     """
     Dropping composite types must go dependent-first. Here the outer type (`z_outer`) sorts
     after the inner one (`a_inner`) alphabetically, so a name-ordered drop emits `a_inner`
