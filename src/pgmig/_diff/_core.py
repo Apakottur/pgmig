@@ -217,6 +217,9 @@ class Phase(Enum):
     # After the column defaults / expression indexes / check constraints that depend on a routine.
     FUNCTION_DROP_LATE = auto()
     FUNCTION_CREATE = auto()  # After tables so routine bodies can reference them.
+    # After FUNCTION_CREATE: re-add the column defaults / check constraints / expression indexes
+    # dropped to recreate a return-type-changed routine, now that the routine exists again.
+    FUNCTION_DEPENDENT_RECREATE = auto()
     VIEW_CREATE = auto()  # After the tables/functions a view reads from exist.
     MATVIEW_CREATE = auto()  # After VIEW_CREATE: a matview may read a plain view (and tables/functions).
     MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in MATVIEW_CREATE.

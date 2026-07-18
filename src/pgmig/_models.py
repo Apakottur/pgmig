@@ -227,6 +227,19 @@ class Sequence:
 
 
 @dataclass(frozen=True)
+class FunctionDependent:
+    """
+    A non-trigger object that depends on a routine (from pg_depend), resolved to a structured
+    identity. Drives the recreate-around-dependents path on a return-type change.
+    """
+
+    kind: str  # 'default' | 'constraint' | 'index' | 'routine' | 'other'
+    schema: str
+    table: str  # owning table for default/constraint/index; "" for routine/other (unused)
+    name: str  # column / constraint / index / routine name (catalog name for 'other')
+
+
+@dataclass(frozen=True)
 class Function:
     """
     A Postgres function or procedure. Identified by name and argument types (overloadable).
@@ -242,6 +255,9 @@ class Function:
     # another routine, ...) depends on this routine. Drives drop phasing: a routine with
     # dependents is dropped late (after those dependents), one without stays early.
     has_dependents: bool
+    # The resolved non-trigger dependents (same objects has_dependents counts). Used by the
+    # return-type-change recreate to drop and re-create each dependent around the recreate.
+    dependents: tuple[FunctionDependent, ...]
     # Forward hard dependencies of this routine (pg_depend deptype 'n'):
     #   depends_on_functions -- routines this one depends on; when both are dropped, this
     #     one drops first (topologically ordered in the late phase).

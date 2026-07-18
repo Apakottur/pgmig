@@ -1,7 +1,7 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._keys import FunctionKey, RelationKey
-from pgmig._models import Function
+from pgmig._models import Function, FunctionDependent
 
 
 class _FunctionDep(_QueryRow):
@@ -10,6 +10,15 @@ class _FunctionDep(_QueryRow):
     schema_name: str
     name: str
     args: str  # pg_get_function_identity_arguments
+
+
+class _FunctionDependent(_QueryRow):
+    """A non-trigger object depending on a routine (jsonb object from functions.sql)."""
+
+    kind: str  # 'default' | 'constraint' | 'index' | 'routine' | 'other'
+    schema_name: str
+    table: str
+    name: str
 
 
 class _RelationDep(_QueryRow):
@@ -28,6 +37,7 @@ class _FunctionRow(_QueryRow):
     func_kind: str
     func_comment: str | None
     func_has_dependents: bool
+    func_dependents: list[_FunctionDependent]
     func_depends_on_functions: list[_FunctionDep]
     func_depends_on_relations: list[_RelationDep]
 
@@ -47,6 +57,10 @@ async def load() -> None:
                 kind=func_row.func_kind,
                 comment=func_row.func_comment,
                 has_dependents=func_row.func_has_dependents,
+                dependents=tuple(
+                    FunctionDependent(kind=dep.kind, schema=dep.schema_name, table=dep.table, name=dep.name)
+                    for dep in func_row.func_dependents
+                ),
                 depends_on_functions=frozenset(
                     FunctionKey(schema=dep.schema_name, signature=f"{dep.name}({dep.args})")
                     for dep in func_row.func_depends_on_functions
