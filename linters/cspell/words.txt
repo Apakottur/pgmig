@@ -118,6 +118,7 @@ tgname
 tgrelid
 tgisinternal
 tgparentid
+tgenabled
 typname
 typnamespace
 typtype

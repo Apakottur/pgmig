@@ -5,6 +5,9 @@ SELECT
     t.tgname AS trigger_name,
     pg_get_triggerdef(t.oid) AS trigger_def,
     replace(pg_get_triggerdef(t.oid), 'TRIGGER ' || quote_ident(t.tgname) || ' ', 'TRIGGER ') AS trigger_canonical,
+    -- Enable state (pg_get_triggerdef omits it): O=origin/default, D=disabled,
+    -- R=enable replica, A=enable always.
+    t.tgenabled AS trigger_enabled,
     obj_description(t.oid, 'pg_trigger') AS trigger_comment
 FROM
     pg_trigger t

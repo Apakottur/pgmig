@@ -11,9 +11,55 @@ from pgmig._diff._core import (
 from pgmig._models import Trigger
 from pgmig._sql import ident, qualified
 
+# pg_trigger.tgenabled: the state a freshly CREATE'd trigger always has (origin/default).
+_DEFAULT_ENABLED = "O"
+# tgenabled code -> the ALTER TABLE ... TRIGGER verb that sets that state.
+_ENABLED_VERB = {
+    "O": "ENABLE",
+    "D": "DISABLE",
+    "R": "ENABLE REPLICA",
+    "A": "ENABLE ALWAYS",
+}
+
+
+def _diff_trigger_states(
+    *,
+    table: str,
+    src: dict[str, Trigger],
+    dst: dict[str, Trigger],
+    recreated: set[str],
+    renamed_from: dict[str, str],
+) -> list[str]:
+    """
+    Emit ALTER TABLE ... {ENABLE | DISABLE | ...} TRIGGER for triggers whose enable state
+    (pg_trigger.tgenabled) must change, given what the structural diff already does.
+
+    The state a target trigger carries *after* the structural statements run is:
+      - default (a fresh CREATE) if it was recreated (dropped and recreated for a definition
+        change, or a create reusing a rename-vacated name) or is a brand-new create;
+      - its source state otherwise, since a RENAME and an untouched trigger both preserve it.
+    A statement is emitted only where that carried-over state differs from the target's.
+    """
+    statements = []
+    for name in sorted(dst):
+        target = dst[name].enabled
+        if name in recreated or (name not in src and name not in renamed_from):
+            current = _DEFAULT_ENABLED
+        elif name in renamed_from:
+            current = src[renamed_from[name]].enabled
+        else:
+            current = src[name].enabled
+        if current != target:
+            statements.append(f"ALTER TABLE {table} {_ENABLED_VERB[target]} TRIGGER {ident(name)};")
+    return statements
+
 
 def _diff_triggers(
-    *, schema_name: str, table_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
+    *,
+    schema_name: str,
+    table_name: str,
+    src: dict[str, Trigger],
+    dst: dict[str, Trigger],
 ) -> RenameDiff:
     """
     Diff one table's triggers into a RenameDiff, using each trigger's name-independent
@@ -43,7 +89,10 @@ def generate() -> Iterator[Statement]:
         src_triggers = src_table.trigger_by_name if src_table else {}
         dst_triggers = dst_table.trigger_by_name
         drops, renames, creates, recreated, renamed_from = _diff_triggers(
-            schema_name=schema_name, table_name=table_name, src=src_triggers, dst=dst_triggers
+            schema_name=schema_name,
+            table_name=table_name,
+            src=src_triggers,
+            dst=dst_triggers,
         )
         for sql in drops:
             yield Statement(Phase.TRIGGER_DROP, sql)
@@ -58,5 +107,14 @@ def generate() -> Iterator[Statement]:
             recreated=recreated,
             renamed_from=renamed_from,
         )
-        for sql in (*renames, *creates, *comments):
+        # State fixups ride after the creates: a recreate lands the default state, so a
+        # non-default target needs a following ALTER TABLE ... TRIGGER to converge.
+        states = _diff_trigger_states(
+            table=qualified(schema_name, table_name),
+            src=src_triggers,
+            dst=dst_triggers,
+            recreated=recreated,
+            renamed_from=renamed_from,
+        )
+        for sql in (*renames, *creates, *comments, *states):
             yield Statement(Phase.TRIGGER_CREATE, sql)
