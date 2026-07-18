@@ -1,6 +1,13 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, diff_renamable
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    ctx_iter_object_pairs,
+    diff_comment_statements,
+    diff_renamable,
+    owner_statements,
+)
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._models import Domain
 from pgmig._sql import ident, qualified
@@ -80,9 +87,11 @@ def generate() -> Iterator[Statement]:
             # Present in source only: drop it.
             elif dst_domain is None:
                 yield Statement(Phase.TYPE_DROP, f"DROP DOMAIN {qualified_name};")
-            # Present in both: alter what differs.
+            # Present in both: alter what differs, then reconcile ownership.
             else:
                 for sql in _alter_domain(qualified_name, src_domain, dst_domain):
+                    yield Statement(Phase.TYPE_CREATE, sql)
+                for sql in owner_statements("DOMAIN", qualified_name, src_domain.owner, dst_domain.owner):
                     yield Statement(Phase.TYPE_CREATE, sql)
 
         # Sync comments for target domains, after the domains they annotate exist.

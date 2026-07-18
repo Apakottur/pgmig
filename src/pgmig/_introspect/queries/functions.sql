@@ -7,6 +7,7 @@ SELECT
     format_type(p.prorettype, NULL) AS func_rettype,
     p.prokind AS func_kind,
     obj_description(p.oid, 'pg_proc') AS func_comment,
+    pg_get_userbyid(p.proowner) AS func_owner,
     EXISTS (
         SELECT
             1

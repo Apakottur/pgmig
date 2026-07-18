@@ -8,6 +8,7 @@ class _EnumRow(_QueryRow):
     enum_name: str
     enum_values: list[str]
     enum_comment: str | None
+    enum_owner: str
 
 
 async def load() -> None:
@@ -16,5 +17,10 @@ async def load() -> None:
     """
     for enum_row in await run_introspection_query("enums.sql", _EnumRow):
         context.db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
-            EnumType(name=enum_row.enum_name, values=enum_row.enum_values, comment=enum_row.enum_comment)
+            EnumType(
+                name=enum_row.enum_name,
+                values=enum_row.enum_values,
+                comment=enum_row.enum_comment,
+                owner=enum_row.enum_owner,
+            )
         )

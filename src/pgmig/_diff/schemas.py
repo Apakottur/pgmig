@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_single_comment
+from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, diff_single_comment, owner_statements
 from pgmig._sql import comment_on, ident
 
 
@@ -16,6 +16,11 @@ def generate() -> Iterator[Statement]:
         # Present in target only: create it.
         if src_schema is None:
             yield Statement(Phase.SCHEMA_CREATE, f"CREATE SCHEMA {ident(name)};")
+        # Sync ownership when the schema exists on both sides (a created schema reconciles later).
+        for sql in owner_statements(
+            "SCHEMA", ident(name), None if src_schema is None else src_schema.owner, dst_schema.owner
+        ):
+            yield Statement(Phase.SCHEMA_CREATE, sql)
         # Sync comment.
         for sql in diff_single_comment(
             src_schema,

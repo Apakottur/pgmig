@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, owner_statements
 from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
 from pgmig._sql import qualified
@@ -117,6 +117,8 @@ def generate() -> Iterator[Statement]:
             # Present in both: alter the options and persistence that differ.
             else:
                 for sql in _alter_statements(schema_name, name, src_seq, dst_seq):
+                    yield Statement(Phase.SEQUENCE_CREATE, sql)
+                for sql in owner_statements("SEQUENCE", qualified_name, src_seq.owner, dst_seq.owner):
                     yield Statement(Phase.SEQUENCE_CREATE, sql)
                 # OWNED BY reassignment (added, removed, or retargeted) runs in the later
                 # phase so a newly created target table/column is already in place.

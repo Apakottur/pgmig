@@ -191,6 +191,25 @@ def diff_child_comment_statements(
     )
 
 
+def owner_statements(kind: str, qualified_name: str, src_owner: str | None, dst_owner: str) -> list[str]:
+    """
+    Emit `ALTER <kind> <qualified_name> OWNER TO <dst_owner>;` when an object present on both
+    sides has a different owner than the target, else nothing. `kind` is the ALTER object
+    keyword (TABLE, SEQUENCE, VIEW, MATERIALIZED VIEW, FUNCTION, PROCEDURE, SCHEMA, TYPE,
+    DOMAIN).
+
+    `src_owner` is None for an object created (or dropped-and-recreated) this run: its new
+    instance is owned by the role running the migration, so nothing is emitted and it only
+    reconciles to the target owner on a later run, once it exists unchanged on both sides.
+    This mirrors the table-ownership rule exactly.
+
+    Ownership reconciliation is off by default; it runs only with --include-owner.
+    """
+    if not context.include_owner or src_owner is None or src_owner == dst_owner:
+        return []
+    return [f"ALTER {kind} {qualified_name} OWNER TO {ident(dst_owner)};"]
+
+
 class Phase(Enum):
     """
     Global ordering bucket for a migration statement. Members are declared in

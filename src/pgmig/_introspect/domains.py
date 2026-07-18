@@ -10,6 +10,7 @@ class _DomainRow(_QueryRow):
     not_null: bool
     default_expr: str | None
     comment: str | None
+    domain_owner: str
     checks: dict[str, str]
 
 
@@ -27,4 +28,5 @@ async def load() -> None:
             not_null=domain_row.not_null,
             check_by_name=domain_row.checks,
             comment=domain_row.comment,
+            owner=domain_row.domain_owner,
         )

@@ -7,6 +7,7 @@ from pgmig._diff._core import (
     _diff_comments,
     ctx_iter_object_pairs,
     ctx_iter_schema_pairs,
+    owner_statements,
     topological_drop_order,
 )
 from pgmig._errors import PgmigUnsupportedError
@@ -228,6 +229,18 @@ def generate() -> Iterator[Statement]:
                         yield Statement(Phase.FUNCTION_DROP, _drop_statement(schema_name, src_func))
                     recreated.add(signature)
                 yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
+
+            # Reconcile ownership for a routine present on both sides that was not
+            # dropped-and-recreated: CREATE OR REPLACE preserves the owner, while a return-type
+            # recreate leaves the new routine runner-owned and reconciles on a later run.
+            if src_func is not None and dst_func is not None and signature not in recreated:
+                for sql in owner_statements(
+                    dst_func.drop_keyword,
+                    f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})",
+                    src_func.owner,
+                    dst_func.owner,
+                ):
+                    yield Statement(Phase.FUNCTION_CREATE, sql)
 
         # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
         # the routines they annotate have been created above.

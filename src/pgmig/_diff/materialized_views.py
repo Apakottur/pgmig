@@ -7,6 +7,7 @@ from pgmig._diff._core import (
     collect_relations,
     ctx_iter_schema_pairs,
     diff_comment_statements,
+    owner_statements,
     recreated_matview_keys,
     topological_sort,
 )
@@ -50,6 +51,16 @@ def generate() -> Iterator[Statement]:
             Phase.MATVIEW_CREATE,
             f"CREATE MATERIALIZED VIEW {qualified(key.schema, key.name)} AS {matview.definition} WITH NO DATA;",
         )
+
+    # Ownership, for a matview present unchanged on both sides. A recreated matview is skipped:
+    # its rebuilt instance is owned by the migration runner and reconciles on a later run.
+    for key in sorted(src_matviews.keys() & dst_matviews.keys(), key=lambda k: (k.schema, k.name)):
+        if key in recreate:
+            continue
+        for sql in owner_statements(
+            "MATERIALIZED VIEW", qualified(key.schema, key.name), src_matviews[key].owner, dst_matviews[key].owner
+        ):
+            yield Statement(Phase.MATVIEW_CREATE, sql)
 
     # Comments, after the matviews they annotate exist. A recreated matview re-emits its comment
     # (the drop reset it), so pass the recreated names per schema.

@@ -27,7 +27,8 @@ SELECT
     CASE WHEN r.rngsubdiff <> 0 THEN
         r.rngsubdiff::regproc::text
     END AS subtype_diff,
-    obj_description(t.oid, 'pg_type') AS type_comment
+    obj_description(t.oid, 'pg_type') AS type_comment,
+    pg_get_userbyid(t.typowner) AS type_owner
 FROM
     pg_type t
     JOIN pg_namespace n ON n.oid = t.typnamespace

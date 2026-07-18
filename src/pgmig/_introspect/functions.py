@@ -36,6 +36,7 @@ class _FunctionRow(_QueryRow):
     func_rettype: str
     func_kind: str
     func_comment: str | None
+    func_owner: str
     func_has_dependents: bool
     func_dependents: list[_FunctionDependent]
     func_depends_on_functions: list[_FunctionDep]
@@ -56,6 +57,7 @@ async def load() -> None:
                 return_type=func_row.func_rettype,
                 kind=func_row.func_kind,
                 comment=func_row.func_comment,
+                owner=func_row.func_owner,
                 has_dependents=func_row.func_has_dependents,
                 dependents=tuple(
                     FunctionDependent(kind=dep.kind, schema=dep.schema_name, table=dep.table, name=dep.name)

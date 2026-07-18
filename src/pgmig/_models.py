@@ -265,6 +265,7 @@ class Sequence:
     cache: int
     cycle: bool
     comment: str | None
+    owner: str  # role that owns the sequence (pg_get_userbyid(relowner))
     owned_by: ColumnKey | None
     unlogged: bool  # UNLOGGED sequence (relpersistence 'u'); PG15+ only
 
@@ -294,6 +295,7 @@ class Function:
     return_type: str  # format_type(prorettype); "void" for a procedure
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
+    owner: str  # role that owns the routine (pg_get_userbyid(proowner))
     # Whether a non-trigger object (column default, check constraint, expression index,
     # another routine, ...) depends on this routine. Drives drop phasing: a routine with
     # dependents is dropped late (after those dependents), one without stays early.
@@ -326,6 +328,7 @@ class EnumType:
     name: str
     values: list[str]  # labels in enum sort order
     comment: str | None
+    owner: str  # role that owns the enum type (pg_get_userbyid(typowner))
 
 
 @dataclass(frozen=True)
@@ -342,6 +345,7 @@ class View:
     # strings. Emitted verbatim in a CREATE VIEW ... WITH (...) clause; empty when the view
     # has none.
     options: tuple[str, ...]
+    owner: str  # role that owns the view (pg_get_userbyid(relowner))
     # INSTEAD OF triggers owned by this view (the only trigger kind a view can carry). Mirrors
     # Table.trigger_by_name so the trigger diff walks views the same way it walks tables.
     trigger_by_name: dict[str, Trigger]
@@ -356,6 +360,7 @@ class MaterializedView:
     name: str
     definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
     comment: str | None
+    owner: str  # role that owns the matview (pg_get_userbyid(relowner))
     index_by_name: dict[str, Index]
 
 
@@ -378,6 +383,7 @@ class CompositeType:
     name: str
     fields: list[CompositeField]  # attributes in attribute (attnum) order
     comment: str | None
+    owner: str  # role that owns the composite type (pg_get_userbyid(typowner))
 
 
 @dataclass(frozen=True)
@@ -398,6 +404,7 @@ class RangeType:
     collation: str | None  # COLLATION, only when explicit and not the subtype's default collation
     subtype_diff: str | None  # SUBTYPE_DIFF function name, None when rngsubdiff is absent
     comment: str | None
+    owner: str  # role that owns the range type (pg_get_userbyid(typowner))
 
 
 @dataclass(frozen=True)
@@ -412,6 +419,7 @@ class Domain:
     not_null: bool
     check_by_name: dict[str, str]  # CHECK constraint name -> pg_get_constraintdef ("CHECK (...)")
     comment: str | None
+    owner: str  # role that owns the domain (pg_get_userbyid(typowner))
 
 
 @dataclass(frozen=True)
@@ -422,6 +430,7 @@ class Schema:
 
     name: str
     comment: str | None
+    owner: str  # role that owns the schema (pg_get_userbyid(nspowner))
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]

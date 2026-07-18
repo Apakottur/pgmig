@@ -11,6 +11,7 @@ def _func(name: str, depends_on: set[FunctionKey]) -> Function:
         return_type="integer",
         kind="f",
         comment=None,
+        owner="postgres",
         has_dependents=True,
         dependents=(),
         depends_on_functions=frozenset(depends_on),

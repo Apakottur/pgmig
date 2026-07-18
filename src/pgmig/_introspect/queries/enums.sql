@@ -8,7 +8,10 @@ SELECT
     -- hazard tables.sql solves for zero-column tables). FILTER drops the LEFT JOIN's
     -- NULL placeholder, and COALESCE turns the empty group into an empty array.
     COALESCE(array_agg(e.enumlabel ORDER BY e.enumsortorder) FILTER (WHERE e.enumlabel IS NOT NULL), ARRAY[]::text[]) AS enum_values,
-    obj_description(t.oid, 'pg_type') AS enum_comment
+    obj_description(t.oid, 'pg_type') AS enum_comment,
+    -- typowner is functionally dependent on t.oid (the GROUP BY key, a primary key), so it
+    -- needs no aggregate.
+    pg_get_userbyid(t.typowner) AS enum_owner
 FROM
     pg_type t
     JOIN pg_namespace n ON n.oid = t.typnamespace
