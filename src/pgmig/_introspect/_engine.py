@@ -14,6 +14,7 @@ from pgmig._introspect import (
     materialized_views,
     matview_dependencies,
     matview_indexes,
+    range_types,
     schemas,
     sequences,
     tables,
@@ -44,6 +45,7 @@ class _IntrospectionPreflight(_QueryRow):
     has_enums: bool
     has_domains: bool
     has_composite_types: bool
+    has_range_types: bool
 
     def get_guards(self) -> list[Guard]:
         """
@@ -90,6 +92,8 @@ class _IntrospectionPreflight(_QueryRow):
             loaders.append(domains.load)
         if self.has_composite_types:
             loaders += [composite_types.load, composite_type_dependencies.load]
+        if self.has_range_types:
+            loaders.append(range_types.load)
         loaders.append(extensions.load)
         return loaders
 

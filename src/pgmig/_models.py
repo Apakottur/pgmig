@@ -322,6 +322,26 @@ class CompositeType:
 
 
 @dataclass(frozen=True)
+class RangeType:
+    """
+    A Postgres range type (CREATE TYPE ... AS RANGE), owned by a schema.
+
+    The multirange type Postgres auto-creates alongside every range is not modelled
+    separately: it is created and dropped with its range. Each property below is stored
+    as the ready-to-emit clause value (already quoted/qualified where needed) or None
+    when the range does not carry that clause, so the diff renders CREATE TYPE without
+    re-deriving defaults.
+    """
+
+    name: str
+    subtype: str  # format_type of rngsubtype, e.g. "integer"
+    subtype_opclass: str | None  # SUBTYPE_OPCLASS, only when not the subtype's default opclass
+    collation: str | None  # COLLATION, only when explicit and not the subtype's default collation
+    subtype_diff: str | None  # SUBTYPE_DIFF function name, None when rngsubdiff is absent
+    comment: str | None
+
+
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -351,6 +371,7 @@ class Schema:
     materialized_view_by_name: dict[str, MaterializedView]
     domain_by_name: dict[str, Domain]
     composite_type_by_name: dict[str, CompositeType]
+    range_type_by_name: dict[str, RangeType]
 
 
 @dataclass(frozen=True)

@@ -1,17 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-async def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A range type (pg_type typtype 'r') is not modelled yet and must raise.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TYPE float_range AS RANGE (subtype = float8)"],
-        match=r"range type .* is not supported",
-    )
-
-
 async def test_rule_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     A user rule (pg_rewrite, not a view's auto _RETURN rule) is not modelled and must raise.

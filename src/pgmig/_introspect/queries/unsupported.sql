@@ -7,7 +7,7 @@
 -- multi-char labels ('rls', 'inherits') in the UNION.
 --   pg_class:             foreign table 'f'; row-level-security table 'rls'; legacy
 --                         inheritance child 'inherits'.
---   pg_type:              range 'r'; base type 'b'.
+--   pg_type:              base type 'b'.
 --   pg_proc:              aggregate 'a', window 'w'   (dropped by functions.sql's prokind filter).
 --   pg_rewrite:           rule 'r'   (the view _RETURN rule is excluded).
 --   pg_policy:            row-level-security policy 'p'.
@@ -42,35 +42,6 @@ WHERE
             pg_depend d
         WHERE
             d.objid = c.oid
-            AND d.deptype = 'e')
-UNION ALL
-SELECT
-    n.nspname AS schema_name,
-    t.typname AS obj_name,
-    'pg_type' AS catalog,
-    t.typtype::text AS kind
-FROM
-    pg_type t
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-WHERE
-    t.typtype = 'r'
-    AND n.nspname NOT LIKE 'pg_%'
-    AND n.nspname <> 'information_schema'
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = n.oid
-            AND d.deptype = 'e')
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = t.oid
             AND d.deptype = 'e')
 UNION ALL
 -- Aggregate ('a') and window ('w') functions, dropped by functions.sql's prokind filter.

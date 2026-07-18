@@ -49,6 +49,28 @@ async def test_constraint_redefinition_reemits_identical_comment(gen_setup: Gene
     )
 
 
+async def test_range_type_recreate_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
+    """
+    A range type whose properties change is dropped and recreated (there is no ALTER form),
+    which resets its comment; an identical comment on both sides must still be re-emitted.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TYPE r AS RANGE (subtype = integer)",
+            "COMMENT ON TYPE r IS 'hi'",
+        ],
+        dst=[
+            "CREATE TYPE r AS RANGE (subtype = bigint)",
+            "COMMENT ON TYPE r IS 'hi'",
+        ],
+        diff=[
+            'DROP TYPE "public"."r"',
+            'CREATE TYPE "public"."r" AS RANGE (SUBTYPE = bigint)',
+            'COMMENT ON TYPE "public"."r" IS \'hi\'',
+        ],
+    )
+
+
 async def test_function_return_type_change_reemits_identical_comment(gen_setup: GenerateSetup) -> None:
     """
     A routine whose return type changes is dropped and recreated (CREATE OR REPLACE
