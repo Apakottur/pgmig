@@ -5,6 +5,7 @@ from pgmig._introspect import (
     composite_types,
     constraints,
     domains,
+    enum_dependencies,
     enums,
     extensions,
     functions,
@@ -72,6 +73,9 @@ class _IntrospectionPreflight(_QueryRow):
             loaders.append(functions.load)
         if self.has_enums:
             loaders.append(enums.load)
+            # Enum-on-column edges: only meaningful when there are also tables to depend on it.
+            if self.has_tables:
+                loaders.append(enum_dependencies.load)
         if self.has_views:
             loaders += [views.load, view_dependencies.load]
         # Triggers load after both tables and views: an INSTEAD OF trigger's owner is a view,
@@ -101,6 +105,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         matview_dependencies={},
         view_column_dependencies={},
         composite_type_dependencies={},
+        enum_column_dependencies={},
     )
 
     async with DbReadOnlyConnection.connect(dsn=dsn) as conn:

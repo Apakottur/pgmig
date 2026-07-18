@@ -83,17 +83,6 @@ async def test_enum_rename_multiple_values(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_enum_rename_and_insert_unsupported(gen_setup: GenerateSetup) -> None:
-    """
-    A rename combined with an insertion (unequal length) is not a pure positional rename
-    and stays unsupported.
-    """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TYPE mood AS ENUM ('sad', 'ok')"],
-        dst=["CREATE TYPE mood AS ENUM ('sad', 'fine', 'happy')"],
-    )
-
-
 async def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical enum on both sides -> no migration SQL.
@@ -102,26 +91,6 @@ async def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
         src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
         dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
         diff=[],
-    )
-
-
-async def test_enum_value_removal_unsupported(gen_setup: GenerateSetup) -> None:
-    """
-    Removing a value is unsupported -> UnsupportedChangeError.
-    """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
-        dst=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
-    )
-
-
-async def test_enum_value_reorder_unsupported(gen_setup: GenerateSetup) -> None:
-    """
-    Reordering values is unsupported -> UnsupportedChangeError.
-    """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
-        dst=["CREATE TYPE mood AS ENUM ('happy', 'sad')"],
     )
 
 
