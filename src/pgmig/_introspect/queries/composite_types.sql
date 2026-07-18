@@ -6,6 +6,9 @@ SELECT
     n.nspname AS schema_name,
     t.typname AS type_name,
     obj_description(t.oid, 'pg_type') AS type_comment,
+    -- typowner is functionally dependent on t.oid (the GROUP BY key, a primary key), so it
+    -- needs no aggregate.
+    pg_get_userbyid(t.typowner) AS type_owner,
     -- LEFT JOIN (with the column filters in the ON, not the WHERE) so a field-less
     -- composite type (CREATE TYPE ... AS ()) still yields one row -- otherwise it
     -- produces no rows and is invisible to the diff, silently claiming convergence

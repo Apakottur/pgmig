@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, owner_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import ColumnKey, EnumKey
 from pgmig._models import EnumType
@@ -170,14 +170,22 @@ def generate() -> Iterator[Statement]:
                 yield Statement(Phase.TYPE_DROP, f"DROP TYPE {qualified_name};")
             # Present in both: rename values in place, else add new ones, else (removal or
             # reorder, which have no in-place ALTER form) rewrite the type.
-            elif src_enum.values != dst_enum.values:
-                statements = _enum_rename_value_statements(qualified_name, src_enum.values, dst_enum.values)
-                if statements is None:
-                    statements = _enum_add_value_statements(qualified_name, src_enum.values, dst_enum.values)
-                if statements is None:
-                    yield from _enum_rewrite_statements(schema_name, name, dst_enum)
-                else:
-                    for sql in statements:
+            else:
+                rewritten = False
+                if src_enum.values != dst_enum.values:
+                    statements = _enum_rename_value_statements(qualified_name, src_enum.values, dst_enum.values)
+                    if statements is None:
+                        statements = _enum_add_value_statements(qualified_name, src_enum.values, dst_enum.values)
+                    if statements is None:
+                        yield from _enum_rewrite_statements(schema_name, name, dst_enum)
+                        rewritten = True
+                    else:
+                        for sql in statements:
+                            yield Statement(Phase.TYPE_CREATE, sql)
+                # Reconcile ownership, unless a rewrite recreated the type (its new instance is
+                # runner-owned and reconciles on a later run, like a create).
+                if not rewritten:
+                    for sql in owner_statements("TYPE", qualified_name, src_enum.owner, dst_enum.owner):
                         yield Statement(Phase.TYPE_CREATE, sql)
 
         # Sync comments for target enums, after the types they annotate exist.

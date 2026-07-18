@@ -7,6 +7,7 @@ from pgmig._diff._core import (
     collect_relations,
     ctx_iter_schema_pairs,
     diff_comment_statements,
+    owner_statements,
     recreated_view_keys,
     topological_drop_order,
     topological_sort,
@@ -49,6 +50,17 @@ def generate() -> Iterator[Statement]:
             Phase.VIEW_CREATE,
             f"CREATE VIEW {qualified(key.schema, key.name)}{with_clause} AS {view.definition};",
         )
+
+    # Ownership, for a view present unchanged on both sides. A recreated view is skipped: its
+    # rebuilt instance is owned by the migration runner and reconciles on a later run, like a
+    # create.
+    for key in sorted(src_views.keys() & dst_views.keys(), key=lambda k: (k.schema, k.name)):
+        if key in recreate:
+            continue
+        for sql in owner_statements(
+            "VIEW", qualified(key.schema, key.name), src_views[key].owner, dst_views[key].owner
+        ):
+            yield Statement(Phase.VIEW_CREATE, sql)
 
     # Comments, after the views they annotate exist. A recreated view re-emits its comment
     # (the drop reset it), so pass the recreated names per schema.

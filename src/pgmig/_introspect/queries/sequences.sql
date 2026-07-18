@@ -12,6 +12,7 @@ SELECT
     s.seqcycle AS seq_cycle,
     c.relpersistence AS seq_persistence,
     obj_description(c.oid, 'pg_class') AS seq_comment,
+    pg_get_userbyid(c.relowner) AS seq_owner,
     -- Manual OWNED BY target (deptype 'a' to a column). NULL for a truly standalone
     -- sequence. A serial/identity backing sequence carries the same 'a'/'i' dependency but
     -- is excluded entirely by the WHERE clause below, so any row that reaches here with an

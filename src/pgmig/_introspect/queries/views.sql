@@ -5,7 +5,8 @@ SELECT
     c.relname AS view_name,
     pg_get_viewdef(c.oid) AS view_definition,
     obj_description(c.oid, 'pg_class') AS view_comment,
-    c.reloptions AS view_options
+    c.reloptions AS view_options,
+    pg_get_userbyid(c.relowner) AS view_owner
 FROM
     pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace

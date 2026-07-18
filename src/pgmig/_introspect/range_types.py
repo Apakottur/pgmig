@@ -11,6 +11,7 @@ class _RangeTypeRow(_QueryRow):
     collation: str | None
     subtype_diff: str | None
     type_comment: str | None
+    type_owner: str
 
 
 async def load() -> None:
@@ -25,4 +26,5 @@ async def load() -> None:
             collation=row.collation,
             subtype_diff=row.subtype_diff,
             comment=row.type_comment,
+            owner=row.type_owner,
         )

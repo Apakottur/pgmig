@@ -7,6 +7,7 @@ from pgmig._diff._core import (
     collect_relations,
     ctx_iter_object_pairs,
     diff_comment_statements,
+    owner_statements,
     topological_drop_order,
     topological_sort,
 )
@@ -88,10 +89,13 @@ def generate() -> Iterator[Statement]:
     # added attribute may reference a composite type created in this same migration (both are in
     # Phase.TYPE_CREATE, whose statements keep emission order).
     for key in sorted(src_types.keys() & dst_types.keys(), key=lambda k: (k.schema, k.name)):
+        qualified_name = qualified(key.schema, key.name)
         if src_types[key].fields != dst_types[key].fields:
-            qualified_name = qualified(key.schema, key.name)
             for sql in _alter_attribute_statements(qualified_name, src_types[key], dst_types[key]):
                 yield Statement(Phase.TYPE_CREATE, sql)
+        # A composite type is altered in place (never recreated), so reconcile its ownership.
+        for sql in owner_statements("TYPE", qualified_name, src_types[key].owner, dst_types[key].owner):
+            yield Statement(Phase.TYPE_CREATE, sql)
 
     # Drops: dependents-first over the source graph.
     drop_keys = src_types.keys() - dst_types.keys()

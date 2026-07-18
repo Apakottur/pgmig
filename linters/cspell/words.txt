@@ -39,6 +39,7 @@ uuid
 fetchone
 tenacity
 nspname
+nspowner
 autouse
 datname
 pyupgrade
@@ -107,6 +108,7 @@ functiondef
 prokind
 proname
 pronamespace
+proowner
 prorettype
 rettype
 # functions.sql dependent-resolution join aliases
@@ -130,6 +132,7 @@ tgparentid
 tgenabled
 typname
 typnamespace
+typowner
 typtype
 typcategory
 typelem

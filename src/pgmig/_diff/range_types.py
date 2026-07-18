@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, owner_statements
 from pgmig._models import RangeType
 from pgmig._sql import qualified
 
@@ -60,6 +60,12 @@ def generate() -> Iterator[Statement]:
                 yield Statement(Phase.TYPE_CREATE, f"DROP TYPE {qualified_name};")
                 yield Statement(Phase.TYPE_CREATE, _create(qualified_name, dst_ranges[name]))
                 recreated.add(name)
+
+            # Reconcile ownership for a range present on both sides that was not recreated: a
+            # recreated range is runner-owned and reconciles on a later run, like a create.
+            if src_range is not None and dst_range is not None and name not in recreated:
+                for sql in owner_statements("TYPE", qualified_name, src_range.owner, dst_range.owner):
+                    yield Statement(Phase.TYPE_CREATE, sql)
 
         # Sync comments for target ranges, after the types they annotate exist. A recreated
         # range lost its comment in the drop, so its target comment is re-emitted even when

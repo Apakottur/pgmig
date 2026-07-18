@@ -13,6 +13,7 @@ def _sequence(*, unlogged: bool) -> Sequence:
         cache=1,
         cycle=False,
         comment=None,
+        owner="postgres",
         owned_by=None,
         unlogged=unlogged,
     )

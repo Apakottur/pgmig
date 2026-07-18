@@ -6,6 +6,7 @@ from pgmig._models import Schema
 class _SchemaRow(_QueryRow):
     schema_name: str
     schema_comment: str | None
+    schema_owner: str
 
 
 async def load() -> None:
@@ -16,6 +17,7 @@ async def load() -> None:
         context.db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,
+            owner=schema_row.schema_owner,
             table_by_name={},
             sequence_by_name={},
             function_by_signature={},

@@ -2,7 +2,14 @@ from collections.abc import Iterator
 from typing import NamedTuple, cast
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_single_comment
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    _diff_comments,
+    ctx_iter_table_pairs,
+    diff_single_comment,
+    owner_statements,
+)
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
@@ -85,19 +92,16 @@ class ColumnDiff(NamedTuple):
 
 def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
     """
-    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different
-    owner than the target.
-
-    Ownership of a newly created table (absent source) is not managed: it is left owned
-    by the role running the migration, so nothing is emitted here. Such a table only
-    reconciles to the target owner on a later run, once it exists on both sides and this
-    same-owner comparison applies.
-
-    Ownership reconciliation is off by default; it runs only with --include-owner.
+    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different owner
+    than the target. Delegates to the shared owner_statements (see it for the created-object
+    and --include-owner semantics).
     """
-    if not context.include_owner or src_table is None or src_table.owner == dst_table.owner:
-        return []
-    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
+    return owner_statements(
+        "TABLE",
+        qualified(schema_name, dst_table.name),
+        None if src_table is None else src_table.owner,
+        dst_table.owner,
+    )
 
 
 def _parenthesize_generation(expression: str) -> str:

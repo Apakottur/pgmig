@@ -16,6 +16,7 @@ class _SequenceRow(_QueryRow):
     seq_cycle: bool
     seq_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
     seq_comment: str | None
+    seq_owner: str
     owned_schema: str | None
     owned_table: str | None
     owned_column: str | None
@@ -43,6 +44,7 @@ async def load() -> None:
                 cache=seq_row.seq_cache,
                 cycle=seq_row.seq_cycle,
                 comment=seq_row.seq_comment,
+                owner=seq_row.seq_owner,
                 owned_by=owned_by,
                 unlogged=seq_row.seq_persistence == "u",
             )
