@@ -203,3 +203,121 @@ async def test_trigger_comment_unchanged(gen_setup: GenerateSetup) -> None:
         dst=[],
         diff=[],
     )
+
+
+# Constraint triggers (CREATE CONSTRAINT TRIGGER) are ordinary user triggers (tgisinternal =
+# false), so they flow through the same trigger diff path. pg_get_triggerdef spells them out
+# in full, always emitting the deferral clause (NOT DEFERRABLE INITIALLY IMMEDIATE by default),
+# and the canonical rename key strips the name from "CONSTRAINT TRIGGER <name> " just as it does
+# from a plain "TRIGGER <name> ".
+_CONSTRAINT_TRIGGER = (
+    "CREATE CONSTRAINT TRIGGER person_check AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()"
+)
+_CONSTRAINT_TRIGGER_DEF = (
+    "CREATE CONSTRAINT TRIGGER person_check AFTER INSERT ON public.person "
+    "NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION public.log_change()"
+)
+_CONSTRAINT_TRIGGER_DEFERRED = (
+    "CREATE CONSTRAINT TRIGGER person_check AFTER INSERT ON person "
+    "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION log_change()"
+)
+_CONSTRAINT_TRIGGER_DEFERRED_DEF = (
+    "CREATE CONSTRAINT TRIGGER person_check AFTER INSERT ON public.person "
+    "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.log_change()"
+)
+
+
+async def test_constraint_trigger_create(gen_setup: GenerateSetup) -> None:
+    """
+    Constraint trigger present in target but missing in source -> CREATE CONSTRAINT TRIGGER.
+    """
+    await gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=[],
+        dst=[_CONSTRAINT_TRIGGER],
+        diff=[_CONSTRAINT_TRIGGER_DEF],
+    )
+
+
+async def test_constraint_trigger_drop(gen_setup: GenerateSetup) -> None:
+    """
+    Constraint trigger present in source but missing in target -> DROP TRIGGER (constraint
+    triggers are dropped with plain DROP TRIGGER, same as ordinary triggers).
+    """
+    await gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=[_CONSTRAINT_TRIGGER],
+        dst=[],
+        diff=['DROP TRIGGER "person_check" ON "public"."person"'],
+    )
+
+
+async def test_constraint_trigger_rename(gen_setup: GenerateSetup) -> None:
+    """
+    Same constraint trigger definition on both sides, only the name differs -> ALTER TRIGGER
+    RENAME. Proves the canonical key strips the name from "CONSTRAINT TRIGGER <name> ".
+    """
+    await gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=["CREATE CONSTRAINT TRIGGER check_old AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()"],
+        dst=["CREATE CONSTRAINT TRIGGER check_new AFTER INSERT ON person FOR EACH ROW EXECUTE FUNCTION log_change()"],
+        diff=['ALTER TRIGGER "check_old" ON "public"."person" RENAME TO "check_new"'],
+    )
+
+
+async def test_constraint_trigger_definition_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Same name, different constraint trigger definition -> DROP then CREATE (recreate).
+    """
+    await gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=[_CONSTRAINT_TRIGGER],
+        dst=[
+            "CREATE CONSTRAINT TRIGGER person_check AFTER UPDATE ON person FOR EACH ROW EXECUTE FUNCTION log_change()"
+        ],
+        diff=[
+            'DROP TRIGGER "person_check" ON "public"."person"',
+            "CREATE CONSTRAINT TRIGGER person_check AFTER UPDATE ON public.person "
+            "NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION public.log_change()",
+        ],
+    )
+
+
+async def test_constraint_trigger_deferrable_create(gen_setup: GenerateSetup) -> None:
+    """
+    A DEFERRABLE INITIALLY DEFERRED constraint trigger round-trips its deferral clause verbatim.
+    """
+    await gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=[],
+        dst=[_CONSTRAINT_TRIGGER_DEFERRED],
+        diff=[_CONSTRAINT_TRIGGER_DEFERRED_DEF],
+    )
+
+
+async def test_constraint_trigger_deferrability_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Only the deferral clause differs -> the canonical forms differ, so it is a recreate
+    (DROP + CREATE), carrying the target's deferral clause.
+    """
+    await gen_setup.assert_diff(
+        both=_setup_cmds(),
+        src=[_CONSTRAINT_TRIGGER],
+        dst=[_CONSTRAINT_TRIGGER_DEFERRED],
+        diff=[
+            'DROP TRIGGER "person_check" ON "public"."person"',
+            _CONSTRAINT_TRIGGER_DEFERRED_DEF,
+        ],
+    )
+
+
+async def test_constraint_trigger_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical constraint trigger on both sides -> no migration SQL.
+    """
+    await gen_setup.assert_diff(
+        both=[*_setup_cmds(), _CONSTRAINT_TRIGGER],
+        src=[],
+        dst=[],
+        diff=[],
+    )
