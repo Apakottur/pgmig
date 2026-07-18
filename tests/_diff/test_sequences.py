@@ -14,6 +14,7 @@ def _sequence(*, unlogged: bool) -> Sequence:
         cycle=False,
         comment=None,
         owner="postgres",
+        grants=frozenset(),
         owned_by=None,
         unlogged=unlogged,
     )

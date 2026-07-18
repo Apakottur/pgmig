@@ -13,6 +13,16 @@ SELECT
     c.relpersistence AS seq_persistence,
     obj_description(c.oid, 'pg_class') AS seq_comment,
     pg_get_userbyid(c.relowner) AS seq_owner,
+    -- Effective ACL as a set of (grantee, privilege, grantable). A NULL relacl means the owner
+    -- default, expanded via acldefault('s', owner) -- the 's' (sequence) code, distinct from a
+    -- table's 'r'. See tables.sql for the full rationale.
+    (
+        SELECT
+	    COALESCE(jsonb_agg(jsonb_build_object('grantee', COALESCE(gr.rolname, 'PUBLIC'), 'privilege',
+		acl.privilege_type, 'grantable', acl.is_grantable)), '[]'::jsonb)
+        FROM
+            aclexplode(COALESCE(c.relacl, acldefault('s', c.relowner))) AS acl
+        LEFT JOIN pg_roles gr ON gr.oid = acl.grantee) AS seq_grants,
     -- Manual OWNED BY target (deptype 'a' to a column). NULL for a truly standalone
     -- sequence. A serial/identity backing sequence carries the same 'a'/'i' dependency but
     -- is excluded entirely by the WHERE clause below, so any row that reaches here with an

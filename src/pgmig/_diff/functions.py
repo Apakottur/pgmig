@@ -10,6 +10,7 @@ from pgmig._diff._core import (
     owner_statements,
     topological_drop_order,
 )
+from pgmig._diff.grants import grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import FunctionKey, RelationKey
 from pgmig._models import Function, FunctionDependent, Table
@@ -234,13 +235,27 @@ def generate() -> Iterator[Statement]:
             # dropped-and-recreated: CREATE OR REPLACE preserves the owner, while a return-type
             # recreate leaves the new routine runner-owned and reconciles on a later run.
             if src_func is not None and dst_func is not None and signature not in recreated:
+                signature_target = f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})"
                 for sql in owner_statements(
                     dst_func.drop_keyword,
-                    f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})",
+                    signature_target,
                     src_func.owner,
                     dst_func.owner,
                 ):
                     yield Statement(Phase.FUNCTION_CREATE, sql)
+                # Reconcile the ACL, after the routine exists. GRANT/REVOKE EXECUTE ON
+                # FUNCTION|PROCEDURE follows prokind, and the routine is addressed by its
+                # signature. Runs in the GRANT phase, after every create.
+                for sql in grant_statements(
+                    dst_func.drop_keyword,
+                    signature_target,
+                    src_func.grants,
+                    dst_func.grants,
+                    src_func.owner,
+                    dst_func.owner,
+                    include_named_roles=context.include_grants,
+                ):
+                    yield Statement(Phase.GRANT, sql)
 
         # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
         # the routines they annotate have been created above.

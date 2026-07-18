@@ -38,6 +38,7 @@ dsns
 uuid
 fetchone
 tenacity
+nspacl
 nspname
 nspowner
 autouse
@@ -110,6 +111,7 @@ worktrees
 unwritable
 functiondef
 prokind
+proacl
 proname
 pronamespace
 proowner
