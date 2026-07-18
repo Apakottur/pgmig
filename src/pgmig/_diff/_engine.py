@@ -55,7 +55,7 @@ def get_diff(
     target: DbIntrospectionResult,
     index_concurrently: bool,
     ignore_extension_version: Sequence[str],
-    ignore_owner: bool,
+    include_owner: bool,
 ) -> str:
     """
     Get the migration SQL for the current diff context.
@@ -69,7 +69,7 @@ def get_diff(
         target=target,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
-        ignore_owner=ignore_owner,
+        include_owner=include_owner,
     ):
         # Collect all statements by phase.
         for generate in _GENERATORS:

@@ -57,8 +57,9 @@ class _ContextData:
     # is emitted for them. Empty (default) ignores none.
     ignore_extension_version: Sequence[str]
 
-    # Suppress all ALTER ... OWNER TO statements.
-    ignore_owner: bool
+    # Emit ALTER ... OWNER TO statements to reconcile ownership. Off by default: ownership
+    # references cluster-level roles that routinely differ across environments.
+    include_owner: bool
 
     @cached_property
     def retyped_column_readers(self) -> set[RelationKey]:
@@ -82,7 +83,7 @@ class _Context:
         target: DbIntrospectionResult,
         index_concurrently: bool,
         ignore_extension_version: Sequence[str],
-        ignore_owner: bool,
+        include_owner: bool,
     ) -> Iterator[None]:
         token = _context.set(
             _ContextData(
@@ -90,7 +91,7 @@ class _Context:
                 target=target,
                 index_concurrently=index_concurrently,
                 ignore_extension_version=ignore_extension_version,
-                ignore_owner=ignore_owner,
+                include_owner=include_owner,
             )
         )
         try:
@@ -115,8 +116,8 @@ class _Context:
         return _context.get().ignore_extension_version
 
     @property
-    def ignore_owner(self) -> bool:
-        return _context.get().ignore_owner
+    def include_owner(self) -> bool:
+        return _context.get().include_owner
 
     @property
     def retyped_column_readers(self) -> set[RelationKey]:

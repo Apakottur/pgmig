@@ -83,11 +83,11 @@ def generate(
             help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
         ),
     ] = None,
-    ignore_owner: Annotated[
+    include_owner: Annotated[
         bool,
         typer.Option(
-            "--ignore-owner",
-            help="Suppress all ALTER ... OWNER TO statements.",
+            "--include-owner",
+            help="Emit ALTER ... OWNER TO statements to reconcile ownership (off by default).",
         ),
     ] = False,
 ) -> None:
@@ -105,7 +105,7 @@ def generate(
             target=target,
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version or [],
-            ignore_owner=ignore_owner,
+            include_owner=include_owner,
         )
     except _PgmigError as error:
         # Expected error - print message without traceback.
