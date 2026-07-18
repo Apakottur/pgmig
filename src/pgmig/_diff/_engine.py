@@ -58,6 +58,7 @@ def get_diff(
     index_concurrently: bool,
     ignore_extension_version: Sequence[str],
     include_owner: bool,
+    include_grants: bool,
 ) -> str:
     """
     Get the migration SQL for the current diff context.
@@ -72,6 +73,7 @@ def get_diff(
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
         include_owner=include_owner,
+        include_grants=include_grants,
     ):
         # Collect all statements by phase.
         for generate in _GENERATORS:

@@ -69,6 +69,10 @@ relkind
 relname
 relnamespace
 relowner
+relacl
+aclexplode
+acldefault
+rolname
 userbyid
 deptype
 objid

@@ -246,6 +246,7 @@ class Phase(Enum):
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
     POLICY_CREATE = auto()  # After the table and any referenced functions exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
+    GRANT = auto()  # After every created object exists: GRANT/REVOKE targets must be present.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
     TYPE_DROP = auto()  # After tables whose columns used the type are gone.
     EXTENSION_DROP = auto()  # After tables/types/functions the extension provided are gone.

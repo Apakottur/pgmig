@@ -1,7 +1,13 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import _QueryRow, run_introspection_query
 from pgmig._keys import RelationKey
-from pgmig._models import Column, Table
+from pgmig._models import Column, Grant, Table
+
+
+class _GrantRow(_QueryRow):
+    grantee: str
+    privilege: str
+    grantable: bool
 
 
 class _TableRow(_QueryRow):
@@ -9,6 +15,7 @@ class _TableRow(_QueryRow):
     table_name: str
     table_comment: str | None
     table_owner: str
+    table_grants: list[_GrantRow]
     table_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
     table_row_security: bool  # pg_class.relrowsecurity: ENABLE ROW LEVEL SECURITY
     table_force_row_security: bool  # pg_class.relforcerowsecurity: FORCE ROW LEVEL SECURITY
@@ -60,6 +67,10 @@ async def load() -> None:
                 columns=[],
                 comment=table_row.table_comment,
                 owner=table_row.table_owner,
+                grants=frozenset(
+                    Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
+                    for grant in table_row.table_grants
+                ),
                 unlogged=table_row.table_persistence == "u",
                 row_security=table_row.table_row_security,
                 force_row_security=table_row.table_force_row_security,

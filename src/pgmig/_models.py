@@ -181,6 +181,22 @@ class Constraint:
 
 
 @dataclass(frozen=True)
+class Grant:
+    """
+    A single privilege on an object: one row of the object's exploded ACL.
+
+    The grantee is a role name, or the literal "PUBLIC" for the public pseudo-role. The set of
+    Grants on an object is the effective ACL with a NULL (owner-default) ACL expanded via
+    acldefault, so a default-ACL object compares equal to another default-ACL object with the
+    same owner rather than diffing against an empty set.
+    """
+
+    grantee: str
+    privilege: str  # e.g. "SELECT", "INSERT", "USAGE", "EXECUTE"
+    grantable: bool  # WITH GRANT OPTION
+
+
+@dataclass(frozen=True)
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
@@ -191,6 +207,7 @@ class Table:
     columns: list[Column]
     comment: str | None
     owner: str
+    grants: frozenset[Grant]
     unlogged: bool  # UNLOGGED table (relpersistence 'u'); a partitioned parent is always logged
     row_security: bool  # relrowsecurity: ENABLE ROW LEVEL SECURITY
     force_row_security: bool  # relforcerowsecurity: FORCE ROW LEVEL SECURITY

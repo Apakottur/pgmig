@@ -24,6 +24,19 @@ SELECT
     col_description(a.attrelid, a.attnum) AS column_comment,
     obj_description(c.oid, 'pg_class') AS table_comment,
     pg_get_userbyid(c.relowner) AS table_owner,
+    -- Effective ACL as a set of (grantee, privilege, grantable). A NULL relacl means the
+    -- owner default, not "no grants", so it is expanded via acldefault('r', owner) -- otherwise
+    -- every default-ACL table would diff. aclexplode yields one row per privilege; grantee oid
+    -- 0 is the PUBLIC pseudo-role (LEFT JOIN gives NULL rolname -> 'PUBLIC'). The grantor is
+    -- dropped (single-admin-grantor assumption). Repeated per column row; the loader reads it
+    -- once when it first creates the table.
+    (
+        SELECT
+	    COALESCE(jsonb_agg(jsonb_build_object('grantee', COALESCE(gr.rolname, 'PUBLIC'),
+		'privilege', acl.privilege_type, 'grantable', acl.is_grantable)), '[]'::jsonb)
+        FROM
+            aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) AS acl
+        LEFT JOIN pg_roles gr ON gr.oid = acl.grantee) AS table_grants,
     -- 'u' = UNLOGGED, 'p' = permanent. Temp tables ('t') live in pg_temp schemas, which
     -- the schema filter below excludes, and partitioned parents cannot be unlogged, so
     -- only 'p'/'u' reach the loader.

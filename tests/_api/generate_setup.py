@@ -43,6 +43,7 @@ class GenerateSetup:
         apply: bool = True,
         index_concurrently: bool = False,
         include_owner: bool = False,
+        include_grants: bool = False,
     ) -> None:
         """
         Set up both databases, assert the generated migration, then apply and confirm it converges.
@@ -55,6 +56,7 @@ class GenerateSetup:
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
             include_owner: Pass through to `generate` to emit ALTER ... OWNER TO statements.
+            include_grants: Pass through to `generate` to emit named-role GRANT / REVOKE.
         """
         # Shared setup runs on both DBs, before the side-specific statements.
         src = (both or []) + src
@@ -80,6 +82,7 @@ class GenerateSetup:
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
             include_owner=include_owner,
+            include_grants=include_grants,
         )
 
         # Verify the result.
@@ -94,6 +97,7 @@ class GenerateSetup:
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
                 include_owner=include_owner,
+                include_grants=include_grants,
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
