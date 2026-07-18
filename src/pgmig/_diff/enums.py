@@ -5,6 +5,33 @@ from pgmig._errors import PgmigUnsupportedError
 from pgmig._sql import literal, qualified
 
 
+def _enum_rename_value_statements(
+    qualified_name: str, src_values: list[str], dst_values: list[str]
+) -> list[str] | None:
+    """
+    Render ALTER TYPE ... RENAME VALUE statements for a pure positional rename.
+
+    A pure rename keeps the enum's length and order: the lists match position-for-position
+    except where a label was renamed one-for-one. To rule out reorders (which share length
+    but reuse labels), every renamed-from label must vanish from the target and every
+    renamed-to label must be new to the source. Returns None for anything else (differing
+    length, reorder, mixed rename+insert), leaving it to the ADD VALUE path.
+    """
+    if len(src_values) != len(dst_values):
+        return None
+
+    # Caller only invokes this when the value lists differ, so an equal length guarantees
+    # at least one differing position.
+    diffs = [(old, new) for old, new in zip(src_values, dst_values, strict=True) if old != new]
+
+    old_labels = {old for old, _ in diffs}
+    new_labels = {new for _, new in diffs}
+    if old_labels & set(dst_values) or new_labels & set(src_values):
+        return None
+
+    return [f"ALTER TYPE {qualified_name} RENAME VALUE {literal(old)} TO {literal(new)};" for old, new in diffs]
+
+
 def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_values: list[str]) -> list[str]:
     """
     Render ALTER TYPE ... ADD VALUE statements for values added to an enum.
@@ -12,7 +39,8 @@ def _enum_add_value_statements(qualified_name: str, src_values: list[str], dst_v
     Only additions are supported: the source values must remain a subsequence of the
     target values (same relative order, values only inserted). A removal, reorder, or
     renamed-looking label raises UnsupportedChangeError rather than emitting a wrong or
-    non-converging migration.
+    non-converging migration. Pure positional renames are handled earlier by
+    _enum_rename_value_statements and never reach here.
     """
     target_iter = iter(dst_values)
     if not all(value in target_iter for value in src_values):
@@ -47,13 +75,20 @@ def generate() -> Iterator[Statement]:
             # Present in target only: create it.
             if src_enum is None:
                 values = ", ".join(literal(value) for value in dst_enums[name].values)
-                yield Statement(Phase.TYPE_CREATE, f"CREATE TYPE {qualified_name} AS ENUM ({values});")
+                yield Statement(
+                    Phase.TYPE_CREATE,
+                    f"CREATE TYPE {qualified_name} AS ENUM ({values});",
+                )
             # Present in source only: drop it.
             elif dst_enum is None:
                 yield Statement(Phase.TYPE_DROP, f"DROP TYPE {qualified_name};")
-            # Present in both: add any new values (removal/reorder/rename unsupported).
+            # Present in both: rename values in place, else add new ones (removal/reorder/
+            # mixed rename+insert unsupported).
             elif src_enum.values != dst_enum.values:
-                for sql in _enum_add_value_statements(qualified_name, src_enum.values, dst_enum.values):
+                statements = _enum_rename_value_statements(qualified_name, src_enum.values, dst_enum.values)
+                if statements is None:
+                    statements = _enum_add_value_statements(qualified_name, src_enum.values, dst_enum.values)
+                for sql in statements:
                     yield Statement(Phase.TYPE_CREATE, sql)
 
         # Sync comments for target enums, after the types they annotate exist.
