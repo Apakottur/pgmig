@@ -108,6 +108,9 @@ class Trigger:
     definition: str  # pg_get_triggerdef output: a full CREATE TRIGGER ...
     # `definition` with the trigger's own name stripped out, for rename detection.
     canonical: str
+    # pg_trigger.tgenabled: the enable state, which pg_get_triggerdef does not carry.
+    # O=origin/default, D=disabled, R=enable replica, A=enable always.
+    enabled: str
     comment: str | None
 
 

@@ -9,6 +9,7 @@ class _TriggerRow(_QueryRow):
     trigger_name: str
     trigger_def: str
     trigger_canonical: str
+    trigger_enabled: str
     trigger_comment: str | None
 
 
@@ -24,5 +25,6 @@ async def load() -> None:
             name=trigger_row.trigger_name,
             definition=trigger_row.trigger_def,
             canonical=trigger_row.trigger_canonical,
+            enabled=trigger_row.trigger_enabled,
             comment=trigger_row.trigger_comment,
         )
