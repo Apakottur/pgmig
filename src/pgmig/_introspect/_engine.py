@@ -4,6 +4,7 @@ from pgmig._introspect import (
     composite_type_dependencies,
     composite_types,
     constraints,
+    default_privileges,
     domains,
     enum_dependencies,
     enums,
@@ -100,6 +101,7 @@ class _IntrospectionPreflight(_QueryRow):
         if self.has_range_types:
             loaders.append(range_types.load)
         loaders.append(extensions.load)
+        loaders.append(default_privileges.load)
         return loaders
 
 
@@ -115,6 +117,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         view_column_dependencies={},
         composite_type_dependencies={},
         enum_column_dependencies={},
+        default_acl_by_key={},
     )
 
     async with DbReadOnlyConnection.connect(dsn=dsn) as conn:

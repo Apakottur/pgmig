@@ -5,6 +5,19 @@ DECLARE
 BEGIN
     -- Clear per-database settings a test may have pinned (e.g. ALTER DATABASE ... SET search_path).
     EXECUTE format('ALTER DATABASE %I RESET ALL', current_database());
+    -- Clear ALTER DEFAULT PRIVILEGES rules (pg_default_acl): a fresh database has none, and a
+    -- lingering rule holds a shared dependency on its FOR ROLE role that blocks dropping that
+    -- role in a later test. DROP OWNED BY removes a role's default-acl entries (and anything it
+    -- owns) in the current database. The connection role is skipped -- dropping what it owns
+    -- would take the public schema recreated below with it.
+    FOR entry IN SELECT DISTINCT
+        defaclrole
+    FROM
+        pg_default_acl
+    WHERE
+        defaclrole <> CURRENT_USER::regrole LOOP
+            EXECUTE format('DROP OWNED BY %s', entry.defaclrole::regrole);
+        END LOOP;
     -- Drop extensions before schemas: an extension living in a custom schema blocks
     -- DROP SCHEMA on that schema until the extension itself is gone.
     FOR entry IN

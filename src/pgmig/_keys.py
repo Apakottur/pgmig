@@ -50,3 +50,15 @@ class EnumKey:
 
     schema: str
     name: str
+
+
+@dataclass(frozen=True, order=True)
+class DefaultAclKey:
+    """
+    Identifier of an ALTER DEFAULT PRIVILEGES rule within a database: the FOR ROLE target, the
+    schema it is scoped to (None for a global rule), and the object-type keyword it applies to.
+    """
+
+    role: str
+    schema: str | None
+    object_type: str

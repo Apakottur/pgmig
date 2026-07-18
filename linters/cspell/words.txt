@@ -73,6 +73,11 @@ relowner
 relacl
 aclexplode
 acldefault
+defaclrole
+defaclnamespace
+defaclobjtype
+defaclacl
+regrole
 rolname
 userbyid
 deptype
