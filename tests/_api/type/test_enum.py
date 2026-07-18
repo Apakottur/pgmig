@@ -58,6 +58,42 @@ async def test_enum_add_value_inserted(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_enum_rename_value(gen_setup: GenerateSetup) -> None:
+    """
+    A value renamed in place (same length, same order) -> ALTER TYPE RENAME VALUE.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'fine', 'happy')"],
+        diff=["ALTER TYPE \"public\".\"mood\" RENAME VALUE 'ok' TO 'fine'"],
+    )
+
+
+async def test_enum_rename_multiple_values(gen_setup: GenerateSetup) -> None:
+    """
+    Two independent renames at once -> one RENAME VALUE per differing position.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('down', 'ok', 'glad')"],
+        diff=[
+            "ALTER TYPE \"public\".\"mood\" RENAME VALUE 'sad' TO 'down'",
+            "ALTER TYPE \"public\".\"mood\" RENAME VALUE 'happy' TO 'glad'",
+        ],
+    )
+
+
+async def test_enum_rename_and_insert_unsupported(gen_setup: GenerateSetup) -> None:
+    """
+    A rename combined with an insertion (unequal length) is not a pure positional rename
+    and stays unsupported.
+    """
+    await gen_setup.assert_unsupported(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'fine', 'happy')"],
+    )
+
+
 async def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical enum on both sides -> no migration SQL.
