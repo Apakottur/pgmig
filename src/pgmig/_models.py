@@ -337,7 +337,6 @@ class RangeType:
     subtype: str  # format_type of rngsubtype, e.g. "integer"
     subtype_opclass: str | None  # SUBTYPE_OPCLASS, only when not the subtype's default opclass
     collation: str | None  # COLLATION, only when explicit and not the subtype's default collation
-    canonical: str | None  # CANONICAL function name, None when rngcanonical is absent
     subtype_diff: str | None  # SUBTYPE_DIFF function name, None when rngsubdiff is absent
     comment: str | None
 

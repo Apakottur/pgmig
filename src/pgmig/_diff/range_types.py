@@ -15,8 +15,6 @@ def _create(qualified_name: str, range_type: RangeType) -> str:
         clauses.append(f"SUBTYPE_OPCLASS = {range_type.subtype_opclass}")
     if range_type.collation is not None:
         clauses.append(f"COLLATION = {range_type.collation}")
-    if range_type.canonical is not None:
-        clauses.append(f"CANONICAL = {range_type.canonical}")
     if range_type.subtype_diff is not None:
         clauses.append(f"SUBTYPE_DIFF = {range_type.subtype_diff}")
     return f"CREATE TYPE {qualified_name} AS RANGE ({', '.join(clauses)});"
@@ -31,7 +29,6 @@ def _properties(range_type: RangeType) -> tuple[str | None, ...]:
         range_type.subtype,
         range_type.subtype_opclass,
         range_type.collation,
-        range_type.canonical,
         range_type.subtype_diff,
     )
 

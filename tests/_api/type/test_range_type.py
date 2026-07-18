@@ -23,6 +23,18 @@ async def test_range_type_create_with_subtype_diff(gen_setup: GenerateSetup) -> 
     )
 
 
+async def test_range_type_create_with_subtype_opclass(gen_setup: GenerateSetup) -> None:
+    """
+    A non-default SUBTYPE_OPCLASS is carried into the CREATE clause (text's default is
+    text_ops, so text_pattern_ops is explicit and must round-trip).
+    """
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE TYPE r_text AS RANGE (subtype = text, subtype_opclass = text_pattern_ops)"],
+        diff=['CREATE TYPE "public"."r_text" AS RANGE (SUBTYPE = text, SUBTYPE_OPCLASS = pg_catalog.text_pattern_ops)'],
+    )
+
+
 async def test_range_type_create_with_collation(gen_setup: GenerateSetup) -> None:
     """
     An explicit, non-default COLLATION on a collatable subtype is carried into the CREATE clause.

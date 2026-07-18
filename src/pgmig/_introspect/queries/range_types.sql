@@ -8,8 +8,11 @@
 --                      then makes Postgres pick that same default, keeping the round-trip stable).
 --   collation       -- only when the range carries an explicit collation that differs from the
 --                      subtype's own default collation.
---   canonical /     -- the function name when rngcanonical / rngsubdiff is set (0 means none).
---   subtype_diff
+--   subtype_diff    -- the function name when rngsubdiff is set (0 means none).
+-- rngcanonical is deliberately not modelled: a user range's canonical function has to be written
+-- in C (it takes and returns the range type, which cannot exist when the function is declared), so
+-- it is vanishingly rare and cannot round-trip here. A range that carries one is created without a
+-- CANONICAL clause -- an accepted first-cut limitation.
 SELECT
     n.nspname AS schema_name,
     t.typname AS type_name,
@@ -21,9 +24,6 @@ SELECT
         AND r.rngcollation <> st.typcollation THEN
         format('%I.%I', cn.nspname, col.collname)
     END AS collation,
-    CASE WHEN r.rngcanonical <> 0 THEN
-        r.rngcanonical::regproc::text
-    END AS canonical,
     CASE WHEN r.rngsubdiff <> 0 THEN
         r.rngsubdiff::regproc::text
     END AS subtype_diff,

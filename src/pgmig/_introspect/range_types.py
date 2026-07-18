@@ -9,7 +9,6 @@ class _RangeTypeRow(_QueryRow):
     subtype: str
     subtype_opclass: str | None
     collation: str | None
-    canonical: str | None
     subtype_diff: str | None
     type_comment: str | None
 
@@ -24,7 +23,6 @@ async def load() -> None:
             subtype=row.subtype,
             subtype_opclass=row.subtype_opclass,
             collation=row.collation,
-            canonical=row.canonical,
             subtype_diff=row.subtype_diff,
             comment=row.type_comment,
         )

@@ -202,7 +202,6 @@ tablespaces
 commitish
 opclass
 rngcollation
-rngcanonical
 regproc
 rngsubdiff
 rngtypid
@@ -214,3 +213,4 @@ collatable
 multirange
 opcdefault
 opcname
+rngcanonical
