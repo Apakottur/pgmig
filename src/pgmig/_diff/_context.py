@@ -61,6 +61,9 @@ class _ContextData:
     # references cluster-level roles that routinely differ across environments.
     include_owner: bool
 
+    # Diff named-role GRANT / REVOKE (PUBLIC grants are always diffed regardless).
+    include_grants: bool
+
     @cached_property
     def retyped_column_readers(self) -> set[RelationKey]:
         return _get_retyped_column_readers(self.source, self.target)
@@ -84,6 +87,7 @@ class _Context:
         index_concurrently: bool,
         ignore_extension_version: Sequence[str],
         include_owner: bool,
+        include_grants: bool,
     ) -> Iterator[None]:
         token = _context.set(
             _ContextData(
@@ -92,6 +96,7 @@ class _Context:
                 index_concurrently=index_concurrently,
                 ignore_extension_version=ignore_extension_version,
                 include_owner=include_owner,
+                include_grants=include_grants,
             )
         )
         try:
@@ -118,6 +123,10 @@ class _Context:
     @property
     def include_owner(self) -> bool:
         return _context.get().include_owner
+
+    @property
+    def include_grants(self) -> bool:
+        return _context.get().include_grants
 
     @property
     def retyped_column_readers(self) -> set[RelationKey]:

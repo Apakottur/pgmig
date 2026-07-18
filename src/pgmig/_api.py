@@ -13,6 +13,7 @@ async def agenerate(
     index_concurrently: bool = False,
     ignore_extension_version: Sequence[str] = (),
     include_owner: bool = False,
+    include_grants: bool = False,
 ) -> str:
     """
     Asynchronous equivalent of [`generate`][pgmig.generate].
@@ -28,6 +29,8 @@ async def agenerate(
         include_owner: Emit ALTER ... OWNER TO statements to reconcile ownership. Off by default: ownership
                        references cluster-level roles that routinely differ across environments, so it is not
                        part of the default convergence.
+        include_grants: Also emit named-role GRANT / REVOKE. PUBLIC grants are always diffed;
+                        named-role grants (role-dependent, may fail at apply) are opt-in.
     """
     # Introspect both databases concurrently.
     source_result, target_result = await asyncio.gather(introspect_db(source), introspect_db(target))
@@ -39,6 +42,7 @@ async def agenerate(
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
         include_owner=include_owner,
+        include_grants=include_grants,
     )
 
 
@@ -49,6 +53,7 @@ def generate(
     index_concurrently: bool = False,
     ignore_extension_version: Sequence[str] = (),
     include_owner: bool = False,
+    include_grants: bool = False,
 ) -> str:
     """
     Generate the migration SQL between the given source and target databases.
@@ -64,6 +69,8 @@ def generate(
         include_owner: Emit ALTER ... OWNER TO statements to reconcile ownership. Off by default: ownership
                        references cluster-level roles that routinely differ across environments, so it is not
                        part of the default convergence.
+        include_grants: Also emit named-role GRANT / REVOKE. PUBLIC grants are always diffed;
+                        named-role grants (role-dependent, may fail at apply) are opt-in.
 
     Raises:
         PgmigApiError: If called from within a running event loop. This synchronous wrapper
@@ -85,5 +92,6 @@ def generate(
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version,
             include_owner=include_owner,
+            include_grants=include_grants,
         )
     )

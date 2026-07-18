@@ -99,6 +99,7 @@ adds a few more (`—` in the library column):
 | `--index-concurrently`, `-C` | `index_concurrently` | Whether to emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`. Using `CONCURRENTLY` avoids blocking index read/write operations, but takes longer to execute and cannot be run inside a transaction block. |
 | `--ignore-extension-version` | `ignore_extension_version` | Names of extensions whose version mismatch is ignored: no `ALTER EXTENSION ... UPDATE TO` is emitted for them. Repeatable on the CLI; a list of names in the library. |
 | `--include-owner`        | `include_owner`      | Emit `ALTER ... OWNER TO` statements to reconcile ownership. Off by default: ownership references cluster-level roles that routinely differ across environments, so it is not part of the default convergence. |
+| `--include-grants`       | `include_grants`     | Also emit named-role `GRANT`/`REVOKE`. `PUBLIC` grants are always diffed (portable and apply-safe); named-role grants reference cluster-level roles that diverge across environments and fail on apply when the role is absent on the target, so they are opt-in. |
 | `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
 | `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 

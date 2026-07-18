@@ -10,6 +10,7 @@ from pgmig._diff._core import (
     diff_single_comment,
     owner_statements,
 )
+from pgmig._diff.grants import grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
@@ -101,6 +102,26 @@ def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table
         qualified(schema_name, dst_table.name),
         None if src_table is None else src_table.owner,
         dst_table.owner,
+    )
+
+
+def _table_grant_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
+    """
+    Emit GRANT/REVOKE to reconcile a table's ACL to the target's. Only called for a table
+    present on both sides (the alter path); a newly created table has no grants reconciled here
+    and, like owner, converges on a later run once it exists on both sides.
+
+    PUBLIC grants are always reconciled; named-role grants only under --include-grants (see
+    grant_statements).
+    """
+    return grant_statements(
+        "TABLE",
+        qualified(schema_name, dst_table.name),
+        src_table.grants,
+        dst_table.grants,
+        src_table.owner,
+        dst_table.owner,
+        include_named_roles=context.include_grants,
     )
 
 
@@ -675,6 +696,9 @@ def generate() -> Iterator[Statement]:
         rendered += _column_comment_statements(schema_name, src_table, dst_table)
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
+        # ACL reconciliation is phased after every object exists (GRANT/REVOKE targets).
+        for sql in _table_grant_statements(schema_name, src_table, dst_table):
+            yield Statement(Phase.GRANT, sql)
         # DROP NOT NULL for a column whose covering primary key drops this run must run
         # after the CONSTRAINT-phase DROP CONSTRAINT.
         for sql in deferred_drop_not_null:

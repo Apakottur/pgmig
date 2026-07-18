@@ -90,6 +90,13 @@ def generate(
             help="Emit ALTER ... OWNER TO statements to reconcile ownership (off by default).",
         ),
     ] = False,
+    include_grants: Annotated[
+        bool,
+        typer.Option(
+            "--include-grants",
+            help="Also emit named-role GRANT / REVOKE (PUBLIC grants are always diffed).",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -106,6 +113,7 @@ def generate(
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version or [],
             include_owner=include_owner,
+            include_grants=include_grants,
         )
     except _PgmigError as error:
         # Expected error - print message without traceback.
