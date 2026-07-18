@@ -203,6 +203,7 @@ class Phase(Enum):
     MATVIEW_DROP = auto()  # Before the views/tables/functions a matview reads are dropped (incl. VIEW_DROP).
     VIEW_DROP = auto()  # Before the tables/functions a view reads from are dropped.
     TRIGGER_DROP = auto()  # Before the function a trigger calls is dropped.
+    POLICY_DROP = auto()  # Before the table/columns/functions a policy references are dropped.
     FUNCTION_DROP = auto()  # Before tables a routine body may depend on.
     SCHEMA_CREATE = auto()
     EXTENSION_CREATE = auto()  # Before tables/types that may use what the extension provides.
@@ -224,6 +225,7 @@ class Phase(Enum):
     MATVIEW_CREATE = auto()  # After VIEW_CREATE: a matview may read a plain view (and tables/functions).
     MATVIEW_INDEX_CREATE = auto()  # After the matview it indexes is created in MATVIEW_CREATE.
     TRIGGER_CREATE = auto()  # After the function it calls and its table exist.
+    POLICY_CREATE = auto()  # After the table and any referenced functions exist.
     FOREIGN_KEY_ADD = auto()  # After referenced tables and their keys exist.
     SEQUENCE_DROP = auto()  # After tables that referenced the sequence are gone.
     TYPE_DROP = auto()  # After tables whose columns used the type are gone.

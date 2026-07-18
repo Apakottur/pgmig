@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import ColumnKey, CompositeTypeKey, EnumKey, FunctionKey, RelationKey
+from pgmig._sql import ident
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,45 @@ class Trigger:
     comment: str | None
 
 
+# pg_policy.polcmd code -> the FOR keyword; ALL ('*') is the default and is omitted.
+_POLICY_COMMANDS = {"r": "SELECT", "a": "INSERT", "w": "UPDATE", "d": "DELETE"}
+
+
+@dataclass(frozen=True)
+class Policy:
+    """
+    A row-level security policy (pg_policy), owned by a table.
+    """
+
+    name: str
+    command: str  # pg_policy.polcmd: 'r' SELECT, 'a' INSERT, 'w' UPDATE, 'd' DELETE, '*' ALL
+    permissive: bool  # polpermissive: PERMISSIVE (default) vs RESTRICTIVE
+    roles: list[str]  # role names the policy applies to; empty means PUBLIC (the default)
+    using: str | None  # USING expression (pg_get_expr of polqual), or None
+    check: str | None  # WITH CHECK expression (pg_get_expr of polwithcheck), or None
+    comment: str | None
+
+    @property
+    def definition(self) -> str:
+        """
+        The clause body following `CREATE POLICY <name> ON <table>`: the string the diff
+        compares to decide a recreate, and renders into CREATE POLICY. Defaults are omitted
+        (PERMISSIVE, FOR ALL, TO PUBLIC) so a policy relying on them matches Postgres's own.
+        """
+        parts: list[str] = []
+        if not self.permissive:
+            parts.append("AS RESTRICTIVE")
+        if self.command in _POLICY_COMMANDS:
+            parts.append(f"FOR {_POLICY_COMMANDS[self.command]}")
+        if self.roles:
+            parts.append("TO " + ", ".join(ident(role) for role in self.roles))
+        if self.using is not None:
+            parts.append(f"USING ({self.using})")
+        if self.check is not None:
+            parts.append(f"WITH CHECK ({self.check})")
+        return " ".join(parts)
+
+
 @dataclass(frozen=True)
 class Constraint:
     """
@@ -152,6 +192,8 @@ class Table:
     comment: str | None
     owner: str
     unlogged: bool  # UNLOGGED table (relpersistence 'u'); a partitioned parent is always logged
+    row_security: bool  # relrowsecurity: ENABLE ROW LEVEL SECURITY
+    force_row_security: bool  # relforcerowsecurity: FORCE ROW LEVEL SECURITY
     # Replica identity: pg_class.relreplident ('d' default, 'n' nothing, 'f' full, 'i' using
     # index). replica_identity_index holds the index name when 'i', else None.
     replica_identity: str
@@ -168,6 +210,7 @@ class Table:
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
     trigger_by_name: dict[str, Trigger]
+    policy_by_name: dict[str, Policy]
 
     @property
     def is_partitioned(self) -> bool:

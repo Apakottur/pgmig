@@ -97,6 +97,17 @@ SELECT
         SELECT
             1
         FROM
+            pg_policy pol
+            JOIN pg_class c ON c.oid = pol.polrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE
+            c.relkind IN ('r', 'p')
+            AND n.nspname NOT LIKE 'pg_%'
+            AND n.nspname <> 'information_schema') AS has_policies,
+    EXISTS (
+        SELECT
+            1
+        FROM
             pg_type t
             JOIN pg_namespace n ON n.oid = t.typnamespace
         WHERE

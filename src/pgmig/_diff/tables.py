@@ -410,6 +410,24 @@ def _persistence_statements(schema_name: str, src_table: Table, dst_table: Table
     return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} {action};"]
 
 
+def _rls_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... {ENABLE|DISABLE} ROW LEVEL SECURITY and ... {FORCE|NO FORCE} ROW LEVEL
+    SECURITY when a table's RLS flags flip. CREATE TABLE has no inline RLS syntax, so a fresh
+    table (src None, both flags default off) gets the ALTERs here too. ENABLE precedes FORCE.
+    """
+    src_enabled, src_forced = (
+        (False, False) if src_table is None else (src_table.row_security, src_table.force_row_security)
+    )
+    prefix = f"ALTER TABLE {qualified(schema_name, dst_table.name)}"
+    statements = []
+    if src_enabled != dst_table.row_security:
+        statements.append(f"{prefix} {'ENABLE' if dst_table.row_security else 'DISABLE'} ROW LEVEL SECURITY;")
+    if src_forced != dst_table.force_row_security:
+        statements.append(f"{prefix} {'FORCE' if dst_table.force_row_security else 'NO FORCE'} ROW LEVEL SECURITY;")
+    return statements
+
+
 def _replica_identity_clause(table: Table) -> str:
     """
     Render the REPLICA IDENTITY clause matching a table's stored relreplident.
@@ -620,6 +638,7 @@ def generate() -> Iterator[Statement]:
     creates.sort(key=lambda item: (_partition_depth(RelationKey(item[0], item[1]), dst_map), item[0], item[1]))
     for schema_name, _table_name, dst_table in creates:
         rendered = _create_table(schema_name, dst_table)
+        rendered += _rls_statements(schema_name, None, dst_table)
         rendered += _table_comment_statements(schema_name, None, dst_table)
         rendered += _column_comment_statements(schema_name, None, dst_table)
         for sql in rendered:
@@ -632,9 +651,10 @@ def generate() -> Iterator[Statement]:
     # columns are inherited), then owner and comments.
     for schema_name, table_name, src_table, dst_table in alters:
         rendered = _membership_statements(schema_name, table_name, src_table, dst_table)
-        # Persistence flip applies to partition children too, so it is outside the
+        # Persistence and RLS flips apply to partition children too, so they are outside the
         # is_partition column-diff gate below.
         rendered += _persistence_statements(schema_name, src_table, dst_table)
+        rendered += _rls_statements(schema_name, src_table, dst_table)
         deferred_drop_not_null: list[str] = []
         if not dst_table.is_partition:
             column_statements, deferred_drop_not_null = _alter_columns(

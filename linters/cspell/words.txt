@@ -204,6 +204,13 @@ idseq
 relreplident
 indisreplident
 uidx
+# pg_policy catalog columns (policies.sql)
+polcmd
+polpermissive
+polqual
+polroles
+polwithcheck
+roleid
 daterange
 deferrability
 condeferrable
