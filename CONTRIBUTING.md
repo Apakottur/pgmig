@@ -19,10 +19,10 @@ The tests spin up a Postgres instance with Docker, so a running Docker daemon is
 
 ## Running checks locally
 
-Run the linters with `pre-commit`:
+Run the linters with `prek`:
 
 ```shell
-pre-commit run -a
+prek run -a
 ```
 
 Run the unit tests with `pytest`:
