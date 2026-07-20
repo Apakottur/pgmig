@@ -1,10 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._keys import EnumKey
 from pgmig._models import EnumColumnDependency
 
 
-class _EnumDependencyRow(_IntrospectionRow):
+class _EnumDependencyRow(IntrospectionRow):
     enum_schema: str
     enum_name: str
     table_schema: str

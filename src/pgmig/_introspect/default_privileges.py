@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._keys import DefaultAclKey
 from pgmig._models import DefaultAcl, Grant
 
@@ -14,13 +14,13 @@ _OBJECT_TYPE_KEYWORD = {
 }
 
 
-class _GrantRow(_IntrospectionRow):
+class _GrantRow(IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _DefaultAclRow(_IntrospectionRow):
+class _DefaultAclRow(IntrospectionRow):
     role: str
     schema_name: str | None
     object_type: str  # defaclobjtype: 'r' / 'S' / 'f' / 'T' / 'n'

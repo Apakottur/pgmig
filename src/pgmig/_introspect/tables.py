@@ -1,21 +1,21 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import (
     IntrospectionQuery,
-    _IntrospectionRow,
-    _IntrospectionRowWithSchema,
+    IntrospectionRow,
+    IntrospectionRowWithSchema,
     run_introspection_query,
 )
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Grant, Table
 
 
-class _GrantRow(_IntrospectionRow):
+class _GrantRow(IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _TableRow(_IntrospectionRowWithSchema):
+class _TableRow(IntrospectionRowWithSchema):
     table_name: str
     table_comment: str | None
     table_owner: str

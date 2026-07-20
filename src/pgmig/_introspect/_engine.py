@@ -27,11 +27,11 @@ from pgmig._introspect import (
     views,
 )
 from pgmig._introspect._context import context
-from pgmig._introspect._core import Guard, IntrospectionQuery, Loader, _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import Guard, IntrospectionQuery, IntrospectionRow, Loader, run_introspection_query
 from pgmig._models import DbIntrospectionResult
 
 
-class _IntrospectionPreflight(_IntrospectionRow):
+class _IntrospectionPreflight(IntrospectionRow):
     """
     Results of the introspection preflight query.
     """

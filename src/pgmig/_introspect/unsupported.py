@@ -1,4 +1,4 @@
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._sql import qualified
 
 # Human-readable name per unsupported kind, keyed by (catalog, code). The same single-char
@@ -16,7 +16,7 @@ _KIND_NAMES = {
 }
 
 
-class _UnsupportedRow(_IntrospectionRow):
+class _UnsupportedRow(IntrospectionRow):
     # schema_name is None for database-global objects (e.g. event triggers).
     schema_name: str | None
     obj_name: str

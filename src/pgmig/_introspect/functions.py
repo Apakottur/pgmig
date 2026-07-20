@@ -1,21 +1,21 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import (
     IntrospectionQuery,
-    _IntrospectionRow,
-    _IntrospectionRowWithSchema,
+    IntrospectionRow,
+    IntrospectionRowWithSchema,
     run_introspection_query,
 )
 from pgmig._keys import FunctionKey, RelationKey
 from pgmig._models import Function, FunctionDependent, Grant
 
 
-class _GrantRow(_IntrospectionRow):
+class _GrantRow(IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _FunctionDep(_IntrospectionRow):
+class _FunctionDep(IntrospectionRow):
     """A routine another routine hard-depends on (jsonb object from functions.sql)."""
 
     schema_name: str
@@ -23,7 +23,7 @@ class _FunctionDep(_IntrospectionRow):
     args: str  # pg_get_function_identity_arguments
 
 
-class _FunctionDependent(_IntrospectionRow):
+class _FunctionDependent(IntrospectionRow):
     """A non-trigger object depending on a routine (jsonb object from functions.sql)."""
 
     kind: str  # 'default' | 'constraint' | 'index' | 'routine' | 'other'
@@ -32,14 +32,14 @@ class _FunctionDependent(_IntrospectionRow):
     name: str
 
 
-class _RelationDep(_IntrospectionRow):
+class _RelationDep(IntrospectionRow):
     """A table/view/matview a routine hard-depends on (jsonb object from functions.sql)."""
 
     schema_name: str
     name: str
 
 
-class _FunctionRow(_IntrospectionRowWithSchema):
+class _FunctionRow(IntrospectionRowWithSchema):
     func_name: str
     func_args: str
     func_def: str

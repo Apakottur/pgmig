@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Policy
 
 
-class _PolicyRow(_IntrospectionRowWithSchema):
+class _PolicyRow(IntrospectionRowWithSchema):
     table_name: str
     policy_name: str
     policy_command: str  # polcmd: 'r'/'a'/'w'/'d'/'*'

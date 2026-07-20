@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Table, Trigger, View
 
 
-class _TriggerRow(_IntrospectionRowWithSchema):
+class _TriggerRow(IntrospectionRowWithSchema):
     table_name: str
     relkind: str  # pg_class.relkind of the owning relation: 'r'/'p' table, 'v' view
     trigger_name: str

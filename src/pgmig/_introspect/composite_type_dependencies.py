@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._keys import CompositeTypeKey
 
 
-class _CompositeTypeDependencyRow(_IntrospectionRow):
+class _CompositeTypeDependencyRow(IntrospectionRow):
     dependent_schema: str
     dependent_type: str
     referenced_schema: str

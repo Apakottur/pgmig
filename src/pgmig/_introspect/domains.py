@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Domain
 
 
-class _DomainRow(_IntrospectionRowWithSchema):
+class _DomainRow(IntrospectionRowWithSchema):
     domain_name: str
     data_type: str
     not_null: bool

@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Extension
 
 
-class _ExtensionRow(_IntrospectionRowWithSchema):
+class _ExtensionRow(IntrospectionRowWithSchema):
     name: str
     version: str
     extension_comment: str | None

@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Constraint
 
 
-class _ConstraintRow(_IntrospectionRowWithSchema):
+class _ConstraintRow(IntrospectionRowWithSchema):
     table_name: str
     con_name: str
     con_def: str
