@@ -185,6 +185,15 @@ async def test_ignore_extension_version_flags_pass_list(mocker: MockerFixture) -
     assert spy.call_args.kwargs["ignore_extension_version"] == ["postgis", "hstore"]
 
 
+async def test_ignore_schema_flags_pass_list(mocker: MockerFixture) -> None:
+    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
+
+    result = await _run_cli("generate -s src -t tgt --ignore-schema audit --ignore-schema staging")
+
+    assert result.exit_code == 0
+    assert spy.call_args.kwargs["ignore_schemas"] == ["audit", "staging"]
+
+
 async def test_no_ignore_flags_passes_empty_list(mocker: MockerFixture) -> None:
     spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
 
@@ -192,3 +201,4 @@ async def test_no_ignore_flags_passes_empty_list(mocker: MockerFixture) -> None:
 
     assert result.exit_code == 0
     assert spy.call_args.kwargs["ignore_extension_version"] == []
+    assert spy.call_args.kwargs["ignore_schemas"] == []

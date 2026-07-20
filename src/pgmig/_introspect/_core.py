@@ -48,6 +48,7 @@ class IntrospectionQuery(Enum):
     UNSUPPORTED = auto()
     INVALID_INDEXES = auto()
     MATVIEW_DEPENDENCIES_CHECK = auto()
+    SCHEMA_CONNECTIONS = auto()
 
     # Loaders, in dependency-significant order.
     SCHEMAS = auto()
@@ -84,6 +85,8 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             return IntrospectionQueryConfig(file_name="invalid_indexes.sql", kind=IntrospectionQueryType.GUARD)
         case IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK:
             return IntrospectionQueryConfig(file_name="matview_dependencies.sql", kind=IntrospectionQueryType.GUARD)
+        case IntrospectionQuery.SCHEMA_CONNECTIONS:
+            return IntrospectionQueryConfig(file_name="schema_connections.sql", kind=IntrospectionQueryType.GUARD)
         case IntrospectionQuery.SCHEMAS:
             return IntrospectionQueryConfig(file_name="schemas.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.TABLES:
@@ -183,5 +186,18 @@ _RowT = TypeVar("_RowT", bound=IntrospectionRow)
 async def run_introspection_query(query: IntrospectionQuery, model: type[_RowT]) -> list[_RowT]:
     """
     Run the given introspection query, parsing each row into the given model.
+
+    For a LOAD query, rows in an ignored schema (`--ignore-schema`) are dropped here -- keyed on
+    the `schema_name` field of every `IntrospectionRowWithSchema` -- so an ignored schema's objects
+    never enter the model. A GUARD query is never filtered: an unsupported object or invalid index
+    in an ignored schema still trips its guard, so pgmig refuses a database it cannot fully process
+    rather than silently skipping the problem. Rows that carry their schema differently (an
+    optional `schema_name`, or a pair of schemas) do not subclass IntrospectionRowWithSchema and
+    are filtered by their own loader.
     """
-    return await context.conn.introspect(_read_query(get_introspection_query_config(query).file_name), model)
+    config = get_introspection_query_config(query)
+    rows = await context.conn.introspect(_read_query(config.file_name), model)
+    ignore = context.ignore_schemas
+    if config.kind is IntrospectionQueryType.LOAD and ignore:
+        rows = [row for row in rows if not isinstance(row, IntrospectionRowWithSchema) or row.schema_name not in ignore]
+    return rows
