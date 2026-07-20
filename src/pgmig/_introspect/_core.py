@@ -73,62 +73,53 @@ class IntrospectionQuery(Enum):
     DEFAULT_PRIVILEGES = auto()
 
 
+_GUARD = IntrospectionQueryType.GUARD
+_LOAD = IntrospectionQueryType.LOAD
+
+# The file and kind backing each query. matview_dependencies.sql appears twice: its loader records
+# matview-as-reader edges, its guard refuses a plain view that reads a matview.
+_QUERY_CONFIGS: dict[IntrospectionQuery, IntrospectionQueryConfig] = {
+    # Guards, run before any loader.
+    IntrospectionQuery.PREFLIGHT: IntrospectionQueryConfig(file_name="preflight.sql", kind=_GUARD),
+    IntrospectionQuery.UNSUPPORTED: IntrospectionQueryConfig(file_name="unsupported.sql", kind=_GUARD),
+    IntrospectionQuery.INVALID_INDEXES: IntrospectionQueryConfig(file_name="invalid_indexes.sql", kind=_GUARD),
+    IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK: IntrospectionQueryConfig(
+        file_name="matview_dependencies.sql", kind=_GUARD
+    ),
+    # Loaders, in dependency-significant order.
+    IntrospectionQuery.SCHEMAS: IntrospectionQueryConfig(file_name="schemas.sql", kind=_LOAD),
+    IntrospectionQuery.TABLES: IntrospectionQueryConfig(file_name="tables.sql", kind=_LOAD),
+    IntrospectionQuery.INDEXES: IntrospectionQueryConfig(file_name="indexes.sql", kind=_LOAD),
+    IntrospectionQuery.MATVIEW_INDEXES: IntrospectionQueryConfig(file_name="matview_indexes.sql", kind=_LOAD),
+    IntrospectionQuery.CONSTRAINTS: IntrospectionQueryConfig(file_name="constraints.sql", kind=_LOAD),
+    IntrospectionQuery.SEQUENCES: IntrospectionQueryConfig(file_name="sequences.sql", kind=_LOAD),
+    IntrospectionQuery.FUNCTIONS: IntrospectionQueryConfig(file_name="functions.sql", kind=_LOAD),
+    IntrospectionQuery.ENUMS: IntrospectionQueryConfig(file_name="enums.sql", kind=_LOAD),
+    IntrospectionQuery.ENUM_DEPENDENCIES: IntrospectionQueryConfig(file_name="enum_dependencies.sql", kind=_LOAD),
+    IntrospectionQuery.VIEWS: IntrospectionQueryConfig(file_name="views.sql", kind=_LOAD),
+    IntrospectionQuery.MATERIALIZED_VIEWS: IntrospectionQueryConfig(file_name="materialized_views.sql", kind=_LOAD),
+    IntrospectionQuery.VIEW_DEPENDENCIES: IntrospectionQueryConfig(file_name="view_dependencies.sql", kind=_LOAD),
+    IntrospectionQuery.VIEW_COLUMN_DEPENDENCIES: IntrospectionQueryConfig(
+        file_name="view_column_dependencies.sql", kind=_LOAD
+    ),
+    IntrospectionQuery.MATVIEW_DEPENDENCIES_LOAD: IntrospectionQueryConfig(
+        file_name="matview_dependencies.sql", kind=_LOAD
+    ),
+    IntrospectionQuery.TRIGGERS: IntrospectionQueryConfig(file_name="triggers.sql", kind=_LOAD),
+    IntrospectionQuery.POLICIES: IntrospectionQueryConfig(file_name="policies.sql", kind=_LOAD),
+    IntrospectionQuery.DOMAINS: IntrospectionQueryConfig(file_name="domains.sql", kind=_LOAD),
+    IntrospectionQuery.COMPOSITE_TYPES: IntrospectionQueryConfig(file_name="composite_types.sql", kind=_LOAD),
+    IntrospectionQuery.COMPOSITE_TYPE_DEPENDENCIES: IntrospectionQueryConfig(
+        file_name="composite_type_dependencies.sql", kind=_LOAD
+    ),
+    IntrospectionQuery.RANGE_TYPES: IntrospectionQueryConfig(file_name="range_types.sql", kind=_LOAD),
+    IntrospectionQuery.EXTENSIONS: IntrospectionQueryConfig(file_name="extensions.sql", kind=_LOAD),
+    IntrospectionQuery.DEFAULT_PRIVILEGES: IntrospectionQueryConfig(file_name="default_privileges.sql", kind=_LOAD),
+}
+
+
 def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQueryConfig:
-    match query:
-        case IntrospectionQuery.PREFLIGHT:
-            return IntrospectionQueryConfig(file_name="preflight.sql", kind=IntrospectionQueryType.GUARD)
-        case IntrospectionQuery.UNSUPPORTED:
-            return IntrospectionQueryConfig(file_name="unsupported.sql", kind=IntrospectionQueryType.GUARD)
-        case IntrospectionQuery.INVALID_INDEXES:
-            return IntrospectionQueryConfig(file_name="invalid_indexes.sql", kind=IntrospectionQueryType.GUARD)
-        case IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK:
-            return IntrospectionQueryConfig(file_name="matview_dependencies.sql", kind=IntrospectionQueryType.GUARD)
-        case IntrospectionQuery.SCHEMAS:
-            return IntrospectionQueryConfig(file_name="schemas.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.TABLES:
-            return IntrospectionQueryConfig(file_name="tables.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.INDEXES:
-            return IntrospectionQueryConfig(file_name="indexes.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.MATVIEW_INDEXES:
-            return IntrospectionQueryConfig(file_name="matview_indexes.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.CONSTRAINTS:
-            return IntrospectionQueryConfig(file_name="constraints.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.SEQUENCES:
-            return IntrospectionQueryConfig(file_name="sequences.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.FUNCTIONS:
-            return IntrospectionQueryConfig(file_name="functions.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.ENUMS:
-            return IntrospectionQueryConfig(file_name="enums.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.ENUM_DEPENDENCIES:
-            return IntrospectionQueryConfig(file_name="enum_dependencies.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.VIEWS:
-            return IntrospectionQueryConfig(file_name="views.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.MATERIALIZED_VIEWS:
-            return IntrospectionQueryConfig(file_name="materialized_views.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.VIEW_DEPENDENCIES:
-            return IntrospectionQueryConfig(file_name="view_dependencies.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.VIEW_COLUMN_DEPENDENCIES:
-            return IntrospectionQueryConfig(file_name="view_column_dependencies.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.MATVIEW_DEPENDENCIES_LOAD:
-            return IntrospectionQueryConfig(file_name="matview_dependencies.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.TRIGGERS:
-            return IntrospectionQueryConfig(file_name="triggers.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.POLICIES:
-            return IntrospectionQueryConfig(file_name="policies.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.DOMAINS:
-            return IntrospectionQueryConfig(file_name="domains.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.COMPOSITE_TYPES:
-            return IntrospectionQueryConfig(file_name="composite_types.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.COMPOSITE_TYPE_DEPENDENCIES:
-            return IntrospectionQueryConfig(
-                file_name="composite_type_dependencies.sql", kind=IntrospectionQueryType.LOAD
-            )
-        case IntrospectionQuery.RANGE_TYPES:
-            return IntrospectionQueryConfig(file_name="range_types.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.EXTENSIONS:
-            return IntrospectionQueryConfig(file_name="extensions.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.DEFAULT_PRIVILEGES:
-            return IntrospectionQueryConfig(file_name="default_privileges.sql", kind=IntrospectionQueryType.LOAD)
+    return _QUERY_CONFIGS[query]
 
 
 class IntrospectionRow(BaseModel):
