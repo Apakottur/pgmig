@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from functools import lru_cache
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, assert_never
 
 from pydantic import BaseModel, ConfigDict
 
@@ -129,6 +129,8 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             return IntrospectionQueryConfig(file_name="extensions.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.DEFAULT_PRIVILEGES:
             return IntrospectionQueryConfig(file_name="default_privileges.sql", kind=IntrospectionQueryType.LOAD)
+        case _:
+            assert_never(query)
 
 
 class IntrospectionRow(BaseModel):
