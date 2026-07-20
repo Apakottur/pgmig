@@ -20,7 +20,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/prek
-          key: ci-prek-cache-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: ci-prek-cache-${{ hashFiles('prek.toml') }}
 
       - name: Run prek
         run: prek run -v --show-diff-on-failure --color=always --all-files
