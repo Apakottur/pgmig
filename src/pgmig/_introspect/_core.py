@@ -48,6 +48,7 @@ class IntrospectionQuery(Enum):
     UNSUPPORTED = auto()
     INVALID_INDEXES = auto()
     MATVIEW_DEPENDENCIES_CHECK = auto()
+    SCHEMA_CONNECTIONS = auto()
 
     # Loaders, in dependency-significant order.
     SCHEMAS = auto()
@@ -84,6 +85,8 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             return IntrospectionQueryConfig(file_name="invalid_indexes.sql", kind=IntrospectionQueryType.GUARD)
         case IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK:
             return IntrospectionQueryConfig(file_name="matview_dependencies.sql", kind=IntrospectionQueryType.GUARD)
+        case IntrospectionQuery.SCHEMA_CONNECTIONS:
+            return IntrospectionQueryConfig(file_name="schema_connections.sql", kind=IntrospectionQueryType.GUARD)
         case IntrospectionQuery.SCHEMAS:
             return IntrospectionQueryConfig(file_name="schemas.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.TABLES:
@@ -184,4 +187,23 @@ async def run_introspection_query(query: IntrospectionQuery, model: type[_RowT])
     """
     Run the given introspection query, parsing each row into the given model.
     """
-    return await context.conn.introspect(_read_query(get_introspection_query_config(query).file_name), model)
+    # Get the query config.
+    config = get_introspection_query_config(query)
+
+    # Get the query SQL.
+    sql = _read_query(config.file_name)
+
+    # Run the query.
+    rows = await context.conn.introspect(sql, model)
+
+    # Filter out rows in ignored schemas.
+    ignored_schemas = context.ignore_schemas
+    if config.kind is IntrospectionQueryType.LOAD:
+        filtered_rows = []
+        for row in rows:
+            if isinstance(row, IntrospectionRowWithSchema) and row.schema_name in ignored_schemas:
+                continue
+            filtered_rows.append(row)
+        rows = filtered_rows
+
+    return rows

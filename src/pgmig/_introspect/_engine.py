@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from pgmig._db import DbReadOnlyConnection
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
@@ -17,6 +19,7 @@ from pgmig._introspect import (
     matview_indexes,
     policies,
     range_types,
+    schema_connections,
     schemas,
     sequences,
     tables,
@@ -105,10 +108,11 @@ class _IntrospectionPreflight(IntrospectionRow):
         return loaders
 
 
-async def introspect_db(dsn: str) -> DbIntrospectionResult:
+async def introspect_db(*, dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
     """
+    # Initialize the introspection result.
     db_introspection_result = DbIntrospectionResult(
         schema_by_name={},
         extension_by_name={},
@@ -125,12 +129,24 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
         with context.context_scope(
             conn=conn,
             db_introspection_result=db_introspection_result,
+            ignore_schemas=frozenset(ignore_schemas),
         ):
+            # Verify that the ignored schemas are isolated from the kept ones.
+            if ignore_schemas:
+                connections = await schema_connections.check()
+                if connections:
+                    message = (
+                        "pgmig cannot ignore a schema that is connected to a kept schema "
+                        "(the migration would fail at apply):\n"
+                        + "\n".join(f"  - {finding}" for finding in connections)
+                    )
+                    raise PgmigUnsupportedError(message)
+
             # Run the preflight query to find out which introspection steps to run.
             preflight_result = await run_introspection_query(IntrospectionQuery.PREFLIGHT, _IntrospectionPreflight)
             preflight = preflight_result[0]
 
-            # Look for any unsupported state.
+            # Look for any unsupported objects.
             all_findings = [finding for guard in preflight.get_guards() for finding in await guard()]
             if all_findings:
                 message = "pgmig cannot process this database:\n" + "\n".join(

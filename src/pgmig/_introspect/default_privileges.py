@@ -22,6 +22,7 @@ class _GrantRow(IntrospectionRow):
 
 class _DefaultAclRow(IntrospectionRow):
     role: str
+    # None is a cluster-wide rule (not scoped to any schema); such a rule is never ignored.
     schema_name: str | None
     object_type: str  # defaclobjtype: 'r' / 'S' / 'f' / 'T' / 'n'
     grants: list[_GrantRow]
@@ -37,6 +38,11 @@ async def load() -> None:
     ALTER DEFAULT PRIVILEGES rules (pg_default_acl, database-level).
     """
     for row in await run_introspection_query(IntrospectionQuery.DEFAULT_PRIVILEGES, _DefaultAclRow):
+        # schema_name is optional here (None = a cluster-wide rule), so the row is not an
+        # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule
+        # scoped to an ignored schema.
+        if row.schema_name in context.ignore_schemas:
+            continue
         key = DefaultAclKey(role=row.role, schema=row.schema_name, object_type=row.object_type)
         context.db_introspection_result.default_acl_by_key[key] = DefaultAcl(
             role=row.role,

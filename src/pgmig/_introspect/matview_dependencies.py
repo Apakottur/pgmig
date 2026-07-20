@@ -28,6 +28,12 @@ async def load() -> None:
     once that pairing is ruled out.
     """
     for row in await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES_LOAD, _MatviewDependencyRow):
+        # These rows name their schemas dependent_schema/referenced_schema (not the shared
+        # schema_name), so run_introspection_query does not drop them; skip an edge touching an
+        # ignored schema so no ignored matview enters the dependency map. A connected schema is
+        # refused up front, so a surviving ignored edge has both endpoints in the ignored schema.
+        if row.dependent_schema in context.ignore_schemas or row.referenced_schema in context.ignore_schemas:
+            continue
         dependent = RelationKey(row.dependent_schema, row.dependent_view)
         referenced = RelationKey(row.referenced_schema, row.referenced_view)
         context.db_introspection_result.matview_dependencies.setdefault(dependent, set()).add(referenced)

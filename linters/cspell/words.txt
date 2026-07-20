@@ -91,6 +91,7 @@ indkey
 refclassid
 refobjid
 refobjsubid
+objsubid
 regclass
 conkey
 conname

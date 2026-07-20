@@ -83,6 +83,14 @@ def generate(
             help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
         ),
     ] = None,
+    ignore_schema: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--ignore-schema",
+            help="Exclude this schema from the diff entirely -- its objects and the schema "
+            "create/drop are ignored (repeatable).",
+        ),
+    ] = None,
     include_owner: Annotated[
         bool,
         typer.Option(
@@ -112,6 +120,7 @@ def generate(
             target=target,
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version or [],
+            ignore_schemas=ignore_schema or [],
             include_owner=include_owner,
             include_grants=include_grants,
         )
