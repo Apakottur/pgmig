@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._keys import ColumnKey, RelationKey
 
 
-class _ViewColumnDependencyRow(_IntrospectionRow):
+class _ViewColumnDependencyRow(IntrospectionRow):
     view_schema: str
     view_name: str
     table_schema: str
@@ -18,7 +18,7 @@ async def load() -> None:
     around a change (type change, drop) to a column it depends on, since Postgres refuses to
     alter or drop a column a view or matview reads.
     """
-    for row in await run_introspection_query("view_column_dependencies.sql", _ViewColumnDependencyRow):
+    for row in await run_introspection_query(IntrospectionQuery.VIEW_COLUMN_DEPENDENCIES, _ViewColumnDependencyRow):
         view = RelationKey(row.view_schema, row.view_name)
         column = ColumnKey(row.table_schema, row.table_name, row.column_name)
         context.db_introspection_result.view_column_dependencies.setdefault(view, set()).add(column)

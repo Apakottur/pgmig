@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._keys import RelationKey
 
 
-class _ViewDependencyRow(_IntrospectionRow):
+class _ViewDependencyRow(IntrospectionRow):
     dependent_schema: str
     dependent_view: str
     referenced_schema: str
@@ -17,7 +17,7 @@ async def load() -> None:
     (dependencies first) and DROP (dependents first) within the view phases. Edges involving a
     materialized view live in matview_dependencies.py.
     """
-    for row in await run_introspection_query("view_dependencies.sql", _ViewDependencyRow):
+    for row in await run_introspection_query(IntrospectionQuery.VIEW_DEPENDENCIES, _ViewDependencyRow):
         dependent = RelationKey(row.dependent_schema, row.dependent_view)
         referenced = RelationKey(row.referenced_schema, row.referenced_view)
         context.db_introspection_result.view_dependencies.setdefault(dependent, set()).add(referenced)

@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Constraint
 
 
-class _ConstraintRow(_IntrospectionRowWithSchema):
+class _ConstraintRow(IntrospectionRowWithSchema):
     table_name: str
     con_name: str
     con_def: str
@@ -19,7 +19,7 @@ async def load() -> None:
     Constraints (primary key, unique, check, and exclusion). Foreign keys are routed to their
     own bucket on the table.
     """
-    for con_row in await run_introspection_query("constraints.sql", _ConstraintRow):
+    for con_row in await run_introspection_query(IntrospectionQuery.CONSTRAINTS, _ConstraintRow):
         constraint = Constraint(
             name=con_row.con_name,
             definition=con_row.con_def,

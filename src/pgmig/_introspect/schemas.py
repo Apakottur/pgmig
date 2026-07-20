@@ -1,15 +1,20 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import (
+    IntrospectionQuery,
+    IntrospectionRow,
+    IntrospectionRowWithSchema,
+    run_introspection_query,
+)
 from pgmig._models import Grant, Schema
 
 
-class _GrantRow(_IntrospectionRow):
+class _GrantRow(IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _SchemaRow(_IntrospectionRowWithSchema):
+class _SchemaRow(IntrospectionRowWithSchema):
     schema_comment: str | None
     schema_owner: str
     schema_grants: list[_GrantRow]
@@ -19,7 +24,7 @@ async def load() -> None:
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in await run_introspection_query("schemas.sql", _SchemaRow):
+    for schema_row in await run_introspection_query(IntrospectionQuery.SCHEMAS, _SchemaRow):
         context.db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,

@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
 from pgmig._keys import DefaultAclKey
 from pgmig._models import DefaultAcl, Grant
 
@@ -14,13 +14,13 @@ _OBJECT_TYPE_KEYWORD = {
 }
 
 
-class _GrantRow(_IntrospectionRow):
+class _GrantRow(IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _DefaultAclRow(_IntrospectionRow):
+class _DefaultAclRow(IntrospectionRow):
     role: str
     schema_name: str | None
     object_type: str  # defaclobjtype: 'r' / 'S' / 'f' / 'T' / 'n'
@@ -36,7 +36,7 @@ async def load() -> None:
     """
     ALTER DEFAULT PRIVILEGES rules (pg_default_acl, database-level).
     """
-    for row in await run_introspection_query("default_privileges.sql", _DefaultAclRow):
+    for row in await run_introspection_query(IntrospectionQuery.DEFAULT_PRIVILEGES, _DefaultAclRow):
         key = DefaultAclKey(role=row.role, schema=row.schema_name, object_type=row.object_type)
         context.db_introspection_result.default_acl_by_key[key] = DefaultAcl(
             role=row.role,
