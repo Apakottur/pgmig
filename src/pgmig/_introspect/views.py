@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Schema, View
 
 _T = TypeVar("_T")
@@ -17,7 +17,7 @@ class _ViewRow(_IntrospectionRowWithSchema):
 
 
 async def _load_views(
-    query_file: str,
+    query: IntrospectionQuery,
     select_target: Callable[[Schema], dict[str, _T]],
     build: Callable[[str, str, str | None, tuple[str, ...], str], _T],
 ) -> None:
@@ -28,7 +28,7 @@ async def _load_views(
     parsing lives in one place. `select_target` picks the schema's view/matview mapping;
     `build` turns (name, definition, comment, options, owner) into the object to store.
     """
-    for row in await run_introspection_query(query_file, _ViewRow):
+    for row in await run_introspection_query(query, _ViewRow):
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()
@@ -44,7 +44,7 @@ async def load() -> None:
     Views (user views only; extension-owned ones are excluded).
     """
     await _load_views(
-        "views.sql",
+        IntrospectionQuery.VIEWS,
         lambda schema: schema.view_by_name,
         # trigger_by_name starts empty; the trigger loader (which runs after views) routes each
         # INSTEAD OF trigger row onto its view.

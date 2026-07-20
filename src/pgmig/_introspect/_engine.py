@@ -27,7 +27,7 @@ from pgmig._introspect import (
     views,
 )
 from pgmig._introspect._context import context
-from pgmig._introspect._core import Guard, Loader, _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import Guard, IntrospectionQuery, Loader, _IntrospectionRow, run_introspection_query
 from pgmig._models import DbIntrospectionResult
 
 
@@ -127,7 +127,7 @@ async def introspect_db(dsn: str) -> DbIntrospectionResult:
             db_introspection_result=db_introspection_result,
         ):
             # Run the preflight query to find out which introspection steps to run.
-            preflight_result = await run_introspection_query("preflight.sql", _IntrospectionPreflight)
+            preflight_result = await run_introspection_query(IntrospectionQuery.PREFLIGHT, _IntrospectionPreflight)
             preflight = preflight_result[0]
 
             # Look for any unsupported state.

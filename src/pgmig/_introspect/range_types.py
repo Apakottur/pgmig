@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import RangeType
 
 
@@ -17,7 +17,7 @@ async def load() -> None:
     """
     Range types (user range types only; extension-owned ones are excluded).
     """
-    for row in await run_introspection_query("range_types.sql", _RangeTypeRow):
+    for row in await run_introspection_query(IntrospectionQuery.RANGE_TYPES, _RangeTypeRow):
         context.db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = RangeType(
             name=row.type_name,
             subtype=row.subtype,

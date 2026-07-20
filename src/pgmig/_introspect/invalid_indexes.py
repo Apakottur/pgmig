@@ -1,4 +1,4 @@
-from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._sql import qualified
 
 
@@ -16,7 +16,7 @@ async def check() -> list[str]:
     only suggests the most common one (a failed CREATE INDEX CONCURRENTLY).
     """
     findings: list[str] = []
-    for row in await run_introspection_query("invalid_indexes.sql", _InvalidIndexRow):
+    for row in await run_introspection_query(IntrospectionQuery.INVALID_INDEXES, _InvalidIndexRow):
         index = qualified(row.schema_name, row.index_name)
         table = qualified(row.schema_name, row.table_name)
         findings.append(

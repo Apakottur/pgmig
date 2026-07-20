@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRow, run_introspection_query
 from pgmig._keys import RelationKey
 from pgmig._sql import qualified
 
@@ -27,7 +27,7 @@ async def load() -> None:
     any row has a plain-view dependent (a view reading a matview), so a loader only ever runs
     once that pairing is ruled out.
     """
-    for row in await run_introspection_query("matview_dependencies.sql", _MatviewDependencyRow):
+    for row in await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES_LOAD, _MatviewDependencyRow):
         dependent = RelationKey(row.dependent_schema, row.dependent_view)
         referenced = RelationKey(row.referenced_schema, row.referenced_view)
         context.db_introspection_result.matview_dependencies.setdefault(dependent, set()).add(referenced)
@@ -41,7 +41,7 @@ async def check() -> list[str]:
     reading a view or matview) are ordered instead, by `load`.
     """
     findings: list[str] = []
-    for row in await run_introspection_query("matview_dependencies.sql", _MatviewDependencyRow):
+    for row in await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK, _MatviewDependencyRow):
         if row.dependent_kind == "m":
             continue
         dependent = qualified(row.dependent_schema, row.dependent_view)

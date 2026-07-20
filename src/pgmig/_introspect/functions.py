@@ -1,5 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import (
+    IntrospectionQuery,
+    _IntrospectionRow,
+    _IntrospectionRowWithSchema,
+    run_introspection_query,
+)
 from pgmig._keys import FunctionKey, RelationKey
 from pgmig._models import Function, FunctionDependent, Grant
 
@@ -53,7 +58,7 @@ async def load() -> None:
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
-    for func_row in await run_introspection_query("functions.sql", _FunctionRow):
+    for func_row in await run_introspection_query(IntrospectionQuery.FUNCTIONS, _FunctionRow):
         signature = f"{func_row.func_name}({func_row.func_args})"
         context.db_introspection_result.schema_by_name[func_row.schema_name].function_by_signature[signature] = (
             Function(

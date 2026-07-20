@@ -1,5 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import (
+    IntrospectionQuery,
+    _IntrospectionRow,
+    _IntrospectionRowWithSchema,
+    run_introspection_query,
+)
 from pgmig._keys import ColumnKey
 from pgmig._models import Grant, Sequence
 
@@ -33,7 +38,7 @@ async def load() -> None:
     Sequences (the backing sequence of a serial/identity column is excluded; a manually
     owned sequence is kept, with its OWNED BY target in `owned_by`).
     """
-    for seq_row in await run_introspection_query("sequences.sql", _SequenceRow):
+    for seq_row in await run_introspection_query(IntrospectionQuery.SEQUENCES, _SequenceRow):
         # A manual OWNED BY resolves all three owned_* columns together; a standalone
         # sequence leaves them NULL.
         owned_by: ColumnKey | None = None

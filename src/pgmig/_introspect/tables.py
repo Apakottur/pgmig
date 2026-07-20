@@ -1,5 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import (
+    IntrospectionQuery,
+    _IntrospectionRow,
+    _IntrospectionRowWithSchema,
+    run_introspection_query,
+)
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Grant, Table
 
@@ -51,7 +56,7 @@ async def load() -> None:
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in await run_introspection_query("tables.sql", _TableRow):
+    for table_row in await run_introspection_query(IntrospectionQuery.TABLES, _TableRow):
         schema = context.db_introspection_result.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:

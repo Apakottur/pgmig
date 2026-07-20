@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, _IntrospectionRow, run_introspection_query
 from pgmig._keys import EnumKey
 from pgmig._models import EnumColumnDependency
 
@@ -22,7 +22,7 @@ async def load() -> None:
     array). The enum diff uses these to rewrite dependent columns when an enum's values are
     removed or reordered, and to refuse the rewrite for columns it cannot handle.
     """
-    for row in await run_introspection_query("enum_dependencies.sql", _EnumDependencyRow):
+    for row in await run_introspection_query(IntrospectionQuery.ENUM_DEPENDENCIES, _EnumDependencyRow):
         key = EnumKey(row.enum_schema, row.enum_name)
         context.db_introspection_result.enum_column_dependencies.setdefault(key, []).append(
             EnumColumnDependency(
