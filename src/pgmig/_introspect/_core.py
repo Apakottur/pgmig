@@ -125,6 +125,10 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             )
         case IntrospectionQuery.RANGE_TYPES:
             return IntrospectionQueryConfig(file_name="range_types.sql", kind=IntrospectionQueryType.LOAD)
+        case IntrospectionQuery.EXTENSIONS:
+            return IntrospectionQueryConfig(file_name="extensions.sql", kind=IntrospectionQueryType.LOAD)
+        case IntrospectionQuery.DEFAULT_PRIVILEGES:
+            return IntrospectionQueryConfig(file_name="default_privileges.sql", kind=IntrospectionQueryType.LOAD)
 
 
 class IntrospectionRow(BaseModel):
@@ -177,4 +181,4 @@ async def run_introspection_query(query: IntrospectionQuery, model: type[_RowT])
     """
     Run the given introspection query, parsing each row into the given model.
     """
-    return await context.conn.introspect(_read_query(query.file_name), model)
+    return await context.conn.introspect(_read_query(get_introspection_query_config(query).file_name), model)
