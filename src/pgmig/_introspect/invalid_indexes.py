@@ -1,9 +1,8 @@
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._sql import qualified
 
 
-class _InvalidIndexRow(_QueryRow):
-    schema_name: str
+class _InvalidIndexRow(_IntrospectionRowWithSchema):
     table_name: str
     index_name: str
 

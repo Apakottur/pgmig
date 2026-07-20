@@ -2,7 +2,7 @@
 SELECT
     e.extname AS name,
     e.extversion AS version,
-    n.nspname AS extension_schema,
+    n.nspname AS schema_name,
     obj_description(e.oid, 'pg_extension') AS extension_comment
 FROM
     pg_extension e

@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import RangeType
 
 
-class _RangeTypeRow(_QueryRow):
-    schema_name: str
+class _RangeTypeRow(_IntrospectionRowWithSchema):
     type_name: str
     subtype: str
     subtype_opclass: str | None

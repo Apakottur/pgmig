@@ -1,17 +1,16 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._keys import ColumnKey
 from pgmig._models import Grant, Sequence
 
 
-class _GrantRow(_QueryRow):
+class _GrantRow(_IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _SequenceRow(_QueryRow):
-    schema_name: str
+class _SequenceRow(_IntrospectionRowWithSchema):
     seq_name: str
     seq_type: str
     seq_start: int
