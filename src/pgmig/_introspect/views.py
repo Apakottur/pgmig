@@ -2,14 +2,13 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Schema, View
 
 _T = TypeVar("_T")
 
 
-class _ViewRow(_QueryRow):
-    schema_name: str
+class _ViewRow(_IntrospectionRowWithSchema):
     view_name: str
     view_definition: str
     view_comment: str | None

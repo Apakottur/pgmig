@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Protocol, TypeVar
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Index, Schema
 
 
@@ -20,8 +20,7 @@ class _HasIndexes(Protocol):
 _T = TypeVar("_T", bound=_HasIndexes)
 
 
-class _IndexRow(_QueryRow):
-    schema_name: str
+class _IndexRow(_IntrospectionRowWithSchema):
     relation_name: str  # the table or matview the index sits on
     index_name: str
     index_def: str

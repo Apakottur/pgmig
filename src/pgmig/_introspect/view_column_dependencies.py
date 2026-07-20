@@ -1,9 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRow, run_introspection_query
 from pgmig._keys import ColumnKey, RelationKey
 
 
-class _ViewColumnDependencyRow(_QueryRow):
+class _ViewColumnDependencyRow(_IntrospectionRow):
     view_schema: str
     view_name: str
     table_schema: str

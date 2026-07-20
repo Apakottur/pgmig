@@ -15,7 +15,7 @@ def _read_query(file_name: str) -> str:
     return (_QUERIES_DIR / file_name).read_text(encoding="utf-8")
 
 
-class _QueryRow(BaseModel):
+class _IntrospectionRow(BaseModel):
     """
     Base for every model parsed from a bundled SQL query -- a top-level row, or a nested
     jsonb object a query builds.
@@ -25,6 +25,16 @@ class _QueryRow(BaseModel):
         # Ensure queries dont fetch unused columns.
         extra="forbid",
     )
+
+
+class _IntrospectionRowWithSchema(_IntrospectionRow):
+    """
+    Base for every top-level row that carries a required schema in `schema_name` -- the schema an
+    object belongs to. A shared base so that schema-bearing rows can be told apart from the rest
+    (dependency rows carry a pair of schemas, a few carry none).
+    """
+
+    schema_name: str
 
 
 class Loader(Protocol):
@@ -48,7 +58,7 @@ class Guard(Protocol):
     async def __call__(self) -> list[str]: ...
 
 
-_RowT = TypeVar("_RowT", bound=_QueryRow)
+_RowT = TypeVar("_RowT", bound=_IntrospectionRow)
 
 
 async def run_introspection_query(file_name: str, model: type[_RowT]) -> list[_RowT]:

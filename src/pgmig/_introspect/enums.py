@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import EnumType
 
 
-class _EnumRow(_QueryRow):
-    schema_name: str
+class _EnumRow(_IntrospectionRowWithSchema):
     enum_name: str
     enum_values: list[str]
     enum_comment: str | None

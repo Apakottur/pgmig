@@ -1,16 +1,15 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import Grant, Schema
 
 
-class _GrantRow(_QueryRow):
+class _GrantRow(_IntrospectionRow):
     grantee: str
     privilege: str
     grantable: bool
 
 
-class _SchemaRow(_QueryRow):
-    schema_name: str
+class _SchemaRow(_IntrospectionRowWithSchema):
     schema_comment: str | None
     schema_owner: str
     schema_grants: list[_GrantRow]

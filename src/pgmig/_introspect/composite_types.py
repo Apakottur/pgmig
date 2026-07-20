@@ -1,15 +1,14 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
+from pgmig._introspect._core import _IntrospectionRow, _IntrospectionRowWithSchema, run_introspection_query
 from pgmig._models import CompositeField, CompositeType
 
 
-class _CompositeFieldRow(_QueryRow):
+class _CompositeFieldRow(_IntrospectionRow):
     name: str
     type: str
 
 
-class _CompositeTypeRow(_QueryRow):
-    schema_name: str
+class _CompositeTypeRow(_IntrospectionRowWithSchema):
     type_name: str
     type_comment: str | None
     type_owner: str
