@@ -108,21 +108,11 @@ class _IntrospectionPreflight(IntrospectionRow):
         return loaders
 
 
-async def introspect_db(dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIntrospectionResult:
+async def introspect_db(*, dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIntrospectionResult:
     """
     Build the full structure of the given database.
-
-    Schemas in `ignore_schemas` are excluded from the diff: their rows are dropped in
-    run_introspection_query as each loader query runs, so their objects never enter the model
-    (no create/drop of the schema or its contents is ever diffed). A schema that is connected to
-    a kept schema by any dependency is refused up front (see schema_connections.check) -- ignoring
-    a non-isolated schema would silently emit a migration that fails at apply.
-
-    Guards are not exempted: an unsupported object or invalid index in an ignored schema still
-    refuses the run. --ignore-schema excludes objects from the diff, it does not silence a
-    database pgmig cannot fully process.
     """
-    ignore = frozenset(ignore_schemas)
+    # Initialize the introspection result.
     db_introspection_result = DbIntrospectionResult(
         schema_by_name={},
         extension_by_name={},
@@ -139,10 +129,10 @@ async def introspect_db(dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIntro
         with context.context_scope(
             conn=conn,
             db_introspection_result=db_introspection_result,
-            ignore_schemas=ignore,
+            ignore_schemas=frozenset(ignore_schemas),
         ):
-            # Refuse an ignored schema that is not isolated from the kept ones.
-            if ignore:
+            # Verify that the ignored schemas are isolated from the kept ones.
+            if ignore_schemas:
                 connections = await schema_connections.check()
                 if connections:
                     message = (
@@ -156,7 +146,7 @@ async def introspect_db(dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIntro
             preflight_result = await run_introspection_query(IntrospectionQuery.PREFLIGHT, _IntrospectionPreflight)
             preflight = preflight_result[0]
 
-            # Look for any unsupported state (guards see ignored schemas too -- they are not exempted).
+            # Look for any unsupported objects.
             all_findings = [finding for guard in preflight.get_guards() for finding in await guard()]
             if all_findings:
                 message = "pgmig cannot process this database:\n" + "\n".join(

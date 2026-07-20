@@ -37,8 +37,8 @@ async def agenerate(
     """
     # Introspect both databases concurrently.
     source_result, target_result = await asyncio.gather(
-        introspect_db(source, ignore_schemas),
-        introspect_db(target, ignore_schemas),
+        introspect_db(dsn=source, ignore_schemas=ignore_schemas),
+        introspect_db(dsn=target, ignore_schemas=ignore_schemas),
     )
 
     # Generate migration SQL.

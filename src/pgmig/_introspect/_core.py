@@ -186,18 +186,24 @@ _RowT = TypeVar("_RowT", bound=IntrospectionRow)
 async def run_introspection_query(query: IntrospectionQuery, model: type[_RowT]) -> list[_RowT]:
     """
     Run the given introspection query, parsing each row into the given model.
-
-    For a LOAD query, rows in an ignored schema (`--ignore-schema`) are dropped here -- keyed on
-    the `schema_name` field of every `IntrospectionRowWithSchema` -- so an ignored schema's objects
-    never enter the model. A GUARD query is never filtered: an unsupported object or invalid index
-    in an ignored schema still trips its guard, so pgmig refuses a database it cannot fully process
-    rather than silently skipping the problem. Rows that carry their schema differently (an
-    optional `schema_name`, or a pair of schemas) do not subclass IntrospectionRowWithSchema and
-    are filtered by their own loader.
     """
+    # Get the query config.
     config = get_introspection_query_config(query)
-    rows = await context.conn.introspect(_read_query(config.file_name), model)
-    ignore = context.ignore_schemas
-    if config.kind is IntrospectionQueryType.LOAD and ignore:
-        rows = [row for row in rows if not isinstance(row, IntrospectionRowWithSchema) or row.schema_name not in ignore]
+
+    # Get the query SQL.
+    sql = _read_query(config.file_name)
+
+    # Run the query.
+    rows = await context.conn.introspect(sql, model)
+
+    # Filter out rows in ignored schemas.
+    ignored_schemas = context.ignore_schemas
+    if config.kind is IntrospectionQueryType.LOAD:
+        filtered_rows = []
+        for row in rows:
+            if isinstance(row, IntrospectionRowWithSchema) and row.schema_name in ignored_schemas:
+                continue
+            filtered_rows.append(row)
+        rows = filtered_rows
+
     return rows
