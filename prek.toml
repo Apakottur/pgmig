@@ -102,10 +102,10 @@ files = '\.sql$'
 ##########
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.21"
+rev = "v0.16.0"
 
 [[repos.hooks]]
-id = "ruff"
+id = "ruff-check"
 args = ["--config", "./linters/ruff.toml"]
 
 [[repos.hooks]]
