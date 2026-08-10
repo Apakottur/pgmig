@@ -6,17 +6,17 @@ requires = ["hatchling", "hatch-vcs"]
 dev = [
   "httpx==0.28.1",
   "mypy==2.3.0",
-  "prek==0.4.11",
+  "prek==0.4.13",
   "psycopg==3.3.4",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest-sugar==1.1.1",
   "pytest==9.1.1",
-  "ruff==0.16.0",
+  "ruff==0.16.2",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.64",
+  "ty==0.0.69",
   "typing-extensions==4.16.0",
 ]
 
