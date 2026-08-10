@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 
+from pgmig._db import DbConnInfo
 from pgmig._diff._engine import get_diff
 from pgmig._errors import PgmigApiError
 from pgmig._introspect._engine import introspect_db
@@ -37,8 +38,8 @@ async def agenerate(
     """
     # Introspect both databases concurrently.
     source_result, target_result = await asyncio.gather(
-        introspect_db(dsn=source, ignore_schemas=ignore_schemas),
-        introspect_db(dsn=target, ignore_schemas=ignore_schemas),
+        introspect_db(db_conn_info=DbConnInfo(dsn=source, label="source"), ignore_schemas=ignore_schemas),
+        introspect_db(db_conn_info=DbConnInfo(dsn=target, label="target"), ignore_schemas=ignore_schemas),
     )
 
     # Generate migration SQL.

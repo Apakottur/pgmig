@@ -1,4 +1,4 @@
-from pgmig._db import DbReadOnlyConnection
+from pgmig._db import DbConnInfo, DbReadOnlyConnection
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import get_dsn
@@ -13,7 +13,7 @@ async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None
 
     # Introspect the database through pgbouncer.
     pgbouncer_dsn = get_dsn(gen_setup.src_db_name, pgbouncer=True)
-    info = await introspect_db(dsn=pgbouncer_dsn)
+    info = await introspect_db(db_conn_info=DbConnInfo(dsn=pgbouncer_dsn, label="source"))
 
     # Verify the introspection result.
     assert "widget" in info.schema_by_name["public"].table_by_name
@@ -25,7 +25,7 @@ async def test_read_only_snapshot_pins_one_view(gen_setup: GenerateSetup) -> Non
     """
     probe = "SELECT count(*) FROM pg_class WHERE relname = 'snap_probe'"
 
-    async with DbReadOnlyConnection.connect(dsn=gen_setup.src.dsn) as read_only_conn:
+    async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
         # Run the probe before the table is created.
         before = await read_only_conn.execute(probe)
 

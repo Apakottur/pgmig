@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import shpyx
 
-from pgmig._db import DbConnection
+from pgmig._db import DbConnection, DbConnInfo
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import (
     get_dsn,
@@ -88,7 +88,7 @@ async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnect
     await wait_for_db_connection(dsn=admin_db_dsn)
 
     # Open a single connection to the admin database for the whole session.
-    async with DbConnection.connect(dsn=admin_db_dsn) as admin_conn:
+    async with DbConnection.connect(db_conn_info=DbConnInfo(dsn=admin_db_dsn, label="admin")) as admin_conn:
         yield admin_conn
 
     # Stop the database server, unless asked to leave it running.
@@ -113,8 +113,8 @@ async def _persistent_dbs(
     await recreate_database(_admin_conn, dst_db_name)
 
     async with (
-        DbConnection.connect(dsn=get_dsn(src_db_name)) as src_conn,
-        DbConnection.connect(dsn=get_dsn(dst_db_name)) as dst_conn,
+        DbConnection.connect(db_conn_info=DbConnInfo(dsn=get_dsn(src_db_name), label="source")) as src_conn,
+        DbConnection.connect(db_conn_info=DbConnInfo(dsn=get_dsn(dst_db_name), label="target")) as dst_conn,
     ):
         yield src_db_name, dst_db_name, src_conn, dst_conn
 

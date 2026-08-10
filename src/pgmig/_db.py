@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import psycopg
@@ -18,29 +19,47 @@ class UniqueViolation(Exception):
     """
 
 
+@dataclass(frozen=True)
+class DbConnInfo:
+    """
+    Everything needed to reach a single database: the DSN and the role the database plays
+    ("source", "target"), which names it in error messages.
+
+    Built once per database and passed around instead of the bare DSN, so a connection and
+    the label that makes its errors actionable cannot drift apart at a call site.
+    """
+
+    dsn: str
+    label: str
+
+
 class DbConnection:
     """
     DB connection API.
     All DB interaction is done through this class to avoid the DB driver leaking into other modules.
     """
 
-    def __init__(self, *, dsn: str, conn: psycopg.AsyncConnection[Any]) -> None:
-        self.dsn = dsn
+    def __init__(self, *, db_conn_info: DbConnInfo, conn: psycopg.AsyncConnection[Any]) -> None:
+        self.db_conn_info = db_conn_info
         self.driver_conn = conn
+
+    @property
+    def dsn(self) -> str:
+        return self.db_conn_info.dsn
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
+    async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncIterator[Self]:
         """
         Connection context.
         """
         try:
-            conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
+            conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
         except psycopg.Error as error:
-            raise _PgmigError(f"Could not connect to database: {error}") from error
+            raise _PgmigError(f"Could not connect to {db_conn_info.label} database: {error}") from error
 
         async with conn:
-            yield cls(dsn=dsn, conn=conn)
+            yield cls(db_conn_info=db_conn_info, conn=conn)
 
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
@@ -65,11 +84,11 @@ class DbReadOnlyConnection(DbConnection):
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, dsn: str) -> AsyncIterator[Self]:
+    async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncIterator[Self]:
         """
         Read-only connection context.
         """
-        async with super().connect(dsn=dsn) as conn:
+        async with super().connect(db_conn_info=db_conn_info) as conn:
             # Force all subsequent transactions to be read-only.
             await conn.driver_conn.set_read_only(True)
 
