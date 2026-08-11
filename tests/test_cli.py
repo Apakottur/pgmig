@@ -1,15 +1,12 @@
 import asyncio
-import io
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner, Result
 
 from pgmig._cli._cli import app
-from pgmig._cli._error_format import _format_db_driver_error, format_error
-from pgmig._drivers import DbDriver
-from pgmig._errors import DbDriverError, _PgmigError
 from tests._api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
@@ -96,45 +93,33 @@ async def test_generate_reports_an_unreachable_source(gen_setup: GenerateSetup) 
     assert "Target - REACHABLE" in result.output
 
 
-def test_format_error_of_a_plain_message_is_the_message() -> None:
-    assert format_error(_PgmigError("nothing to add")) == "nothing to add"
+async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture) -> None:
+    # The driver's text is quoted verbatim, wrapped to fit, with continuation lines indented
+    # so a wrapped line cannot be mistaken for a new one.
+    mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((60, 24)))
+
+    result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
+
+    assert result.exit_code == 1
+    assert "  Source - UNREACHABLE" in result.output
+    assert "    ╭─ psycopg ───────────────────────────────────────────" in result.output
+    assert '    │ missing "=" after "not-a-dsn" in connection info' in result.output
+    assert "    │     string" in result.output
+    assert "    ╰─────────────────────────────────────────────────────" in result.output
 
 
-def test_format_database_boxes_wraps_and_keeps_blank_lines(mocker: MockerFixture) -> None:
-    mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
+async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
+    # Output redirected under a legacy code page: drawing the nicer box would raise. The
+    # module's own `sys` is replaced rather than sys.stderr, which the CLI runner rebinds to
+    # its capture buffer once the command is running.
+    mocker.patch("pgmig._cli._error_format.sys", SimpleNamespace(stderr=SimpleNamespace(encoding="ascii")))
 
-    error = DbDriverError(
-        label="target", driver=DbDriver.AUTO, driver_error=OSError("connection failed for user pgmig\n\nsecond")
-    )
+    result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
-    assert _format_db_driver_error("Target", error) == [
-        "  Target - UNREACHABLE",
-        "    ╭─ psycopg ───────────────",
-        "    │ connection failed for",
-        "    │     user pgmig",
-        "    │",
-        "    │ second",
-        "    ╰─────────────────────────",
-    ]
-
-
-def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
-    # Output redirected under a legacy code page: drawing the nicer box would raise.
-    mocker.patch("sys.stderr", io.TextIOWrapper(io.BytesIO(), encoding="ascii"))
-    mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
-
-    error = DbDriverError(label="source", driver=DbDriver.PSYCOPG, driver_error=OSError("boom"))
-
-    assert _format_db_driver_error("Source", error) == [
-        "  Source - UNREACHABLE",
-        "    +- psycopg ---------------",
-        "    | boom",
-        "    +-------------------------",
-    ]
-
-
-def test_format_database_of_a_reachable_database_is_one_line() -> None:
-    assert _format_db_driver_error("Source", None) == ["  Source - REACHABLE"]
+    assert result.exit_code == 1
+    assert "+- psycopg " in result.output
+    assert '| missing "=" after' in result.output
+    assert "╭" not in result.output
 
 
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
