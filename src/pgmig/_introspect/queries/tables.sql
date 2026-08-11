@@ -61,8 +61,8 @@ SELECT
             ix.indrelid = c.oid
             AND ix.indisreplident)
     END AS table_replica_identity_index,
-    a.attidentity AS column_identity,
-    a.attgenerated AS column_generated,
+    a.attidentity::text AS column_identity,
+    a.attgenerated::text AS column_generated,
     pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,
     -- Backing sequence options of an identity column (NULL for every non-identity column).
     -- The identity sequence is linked to its column by an INTERNAL ('i') pg_depend edge.

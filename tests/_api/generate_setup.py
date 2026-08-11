@@ -4,6 +4,7 @@ import pytest
 
 from pgmig import PgmigUnsupportedError, agenerate
 from pgmig._db import DbConnection
+from pgmig._drivers import DbDriver
 
 
 class GenerateSetup:
@@ -19,6 +20,7 @@ class GenerateSetup:
         src_conn: DbConnection,
         dst_conn: DbConnection,
         pg_major: int,
+        driver: DbDriver,
         unique_key: str,
     ) -> None:
         # Database names.
@@ -31,6 +33,9 @@ class GenerateSetup:
 
         # Postgres major version.
         self.pg_major = pg_major
+
+        # Database driver under test.
+        self.driver = driver
 
         # Unique key for the test session.
         self.unique_key = unique_key
@@ -88,6 +93,7 @@ class GenerateSetup:
             include_owner=include_owner,
             include_grants=include_grants,
             ignore_schemas=ignore_schemas,
+            driver=self.driver,
         )
 
         # Verify the result.
@@ -104,6 +110,7 @@ class GenerateSetup:
                 include_owner=include_owner,
                 include_grants=include_grants,
                 ignore_schemas=ignore_schemas,
+                driver=self.driver,
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 

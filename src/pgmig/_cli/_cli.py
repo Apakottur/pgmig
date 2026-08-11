@@ -111,6 +111,7 @@ def generate(
         DbDriver,
         typer.Option(
             "--driver",
+            envvar="PGMIG_DRIVER",
             help="Database driver to connect with. 'auto' lets pgmig pick among the supported drivers.",
         ),
     ] = DbDriver.AUTO,
