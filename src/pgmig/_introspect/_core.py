@@ -1,10 +1,9 @@
 from enum import Enum, auto
 from functools import lru_cache
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, assert_never
 
 from pydantic import BaseModel, ConfigDict
-from typing_extensions import assert_never
 
 from pgmig._introspect._context import context
 
