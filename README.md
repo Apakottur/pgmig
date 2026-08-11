@@ -128,25 +128,6 @@ Other commands:
 A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
 e.g. `postgresql://user:pass@host:5432/dbname`.
 
-### Drivers
-
-Connections are made through a database driver. `psycopg` is the only one implemented today,
-so `auto` always resolves to it; pin it explicitly if you want the choice fixed as more
-drivers are added:
-
-```shell
-pgmig generate --driver psycopg ...
-```
-
-```python
-import pgmig
-
-sql = pgmig.generate(source=..., target=..., driver=pgmig.DbDriver.PSYCOPG)
-```
-
-Connection errors name the driver that produced them, so it is clear which one was used
-when the choice was left to `auto`.
-
 ## FAQ
 
 ### Do I need libpq installed?
