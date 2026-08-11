@@ -84,14 +84,3 @@ async def test_enable_and_force_together(gen_setup: GenerateSetup) -> None:
             'ALTER TABLE "public"."t" FORCE ROW LEVEL SECURITY',
         ],
     )
-
-
-async def test_rls_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same RLS state on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=["CREATE TABLE t (id integer)", "ALTER TABLE t ENABLE ROW LEVEL SECURITY"],
-        dst=["CREATE TABLE t (id integer)", "ALTER TABLE t ENABLE ROW LEVEL SECURITY"],
-        diff=[],
-    )

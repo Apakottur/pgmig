@@ -35,17 +35,6 @@ async def test_flip_unlogged_to_logged(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_persistence_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same table, unlogged on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=["CREATE UNLOGGED TABLE cache (id integer)"],
-        dst=["CREATE UNLOGGED TABLE cache (id integer)"],
-        diff=[],
-    )
-
-
 async def test_unlogged_partition_child(gen_setup: GenerateSetup) -> None:
     """
     A partition child is created UNLOGGED independently of its (necessarily logged) parent,

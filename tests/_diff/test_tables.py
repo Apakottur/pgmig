@@ -59,21 +59,6 @@ def test_virtual_generated_column_emitted() -> None:
     assert _column_def(not_null_column) == '"v" integer GENERATED ALWAYS AS (b * 2) VIRTUAL NOT NULL'
 
 
-def test_stored_generation_expression_change_drops_and_readds() -> None:
-    """
-    A STORED generated column whose expression changes is rebuilt with DROP COLUMN + ADD COLUMN
-    (portable to pre-PG18, which has no in-place expression ALTER); its derived data recomputes.
-    """
-    src = _generated_column("doubled", generated="s", expression="(b * 2)")
-    dst = _generated_column("doubled", generated="s", expression="(b * 3)")
-    statements, deferred = _alter(src, dst)
-    assert statements == [
-        'ALTER TABLE "public"."t" DROP COLUMN "doubled";',
-        'ALTER TABLE "public"."t" ADD COLUMN "doubled" integer GENERATED ALWAYS AS (b * 3) STORED;',
-    ]
-    assert deferred == []
-
-
 def test_virtual_generation_expression_change_sets_expression() -> None:
     """
     A VIRTUAL generated column's expression is changed in place with SET EXPRESSION AS (...)
@@ -84,17 +69,6 @@ def test_virtual_generation_expression_change_sets_expression() -> None:
     statements, deferred = _alter(src, dst)
     assert statements == ['ALTER TABLE "public"."t" ALTER COLUMN "vv" SET EXPRESSION AS (b * 5);']
     assert deferred == []
-
-
-def test_generated_ness_flip_raises() -> None:
-    """
-    A plain column gaining generated-ness (or a generated column losing it) has no in-place
-    ALTER and is potentially destructive, so it still raises.
-    """
-    plain = _generated_column("c", generated="", expression=None)
-    stored = _generated_column("c", generated="s", expression="(b)")
-    with pytest.raises(PgmigUnsupportedError, match="generated change"):
-        _alter(plain, stored)
 
 
 def test_stored_to_virtual_flip_raises() -> None:

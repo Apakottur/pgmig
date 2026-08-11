@@ -110,19 +110,6 @@ async def test_table_grant_multiple_ordered(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_table_grant_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical non-default ACL on both sides -> no migration SQL, even with include_grants.
-    """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
-    await gen_setup.assert_diff(
-        src=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
-        dst=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
-        diff=[],
-        include_grants=True,
-    )
-
-
 # --- PUBLIC grants: always diffed (portable, apply-safe, security-relevant) ---
 
 

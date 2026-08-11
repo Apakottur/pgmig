@@ -1,3 +1,5 @@
+import pytest
+
 from tests._api.generate_setup import GenerateSetup
 
 
@@ -18,38 +20,17 @@ async def test_owned_sequence_on_non_integer_column_is_unsupported(gen_setup: Ge
     )
 
 
-async def test_serial_column_emitted_as_serial(gen_setup: GenerateSetup) -> None:
+@pytest.mark.parametrize("serial_type", ["serial", "bigserial", "smallserial"])
+async def test_serial_column_emitted_as_pseudo_type(gen_setup: GenerateSetup, serial_type: str) -> None:
     """
-    A serial column is emitted with the `serial` pseudo-type, not its expanded
-    integer + nextval() default. The owned backing sequence stays excluded, so
-    the emitted CREATE TABLE is self-contained and can be applied on its own.
-    """
-    await gen_setup.assert_diff(
-        src=[],
-        dst=["CREATE TABLE person (id serial)"],
-        diff=['CREATE TABLE "public"."person" ("id" serial)'],
-    )
-
-
-async def test_bigserial_column_emitted_as_bigserial(gen_setup: GenerateSetup) -> None:
-    """
-    A bigserial (int8) column is emitted with the `bigserial` pseudo-type.
+    A serial column (int4/int8/int2) is emitted with its pseudo-type, not its expanded
+    integer + nextval() default. The owned backing sequence stays excluded, so the
+    emitted CREATE TABLE is self-contained and can be applied on its own.
     """
     await gen_setup.assert_diff(
         src=[],
-        dst=["CREATE TABLE person (id bigserial)"],
-        diff=['CREATE TABLE "public"."person" ("id" bigserial)'],
-    )
-
-
-async def test_smallserial_column_emitted_as_smallserial(gen_setup: GenerateSetup) -> None:
-    """
-    A smallserial (int2) column is emitted with the `smallserial` pseudo-type.
-    """
-    await gen_setup.assert_diff(
-        src=[],
-        dst=["CREATE TABLE person (id smallserial)"],
-        diff=['CREATE TABLE "public"."person" ("id" smallserial)'],
+        dst=[f"CREATE TABLE person (id {serial_type})"],
+        diff=[f'CREATE TABLE "public"."person" ("id" {serial_type})'],
     )
 
 

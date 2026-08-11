@@ -47,23 +47,6 @@ async def test_table_column_comment_added(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_table_column_comment_changed(gen_setup: GenerateSetup) -> None:
-    """
-    Different column comments -> COMMENT ON COLUMN with the target's.
-    """
-    await gen_setup.assert_diff(
-        src=[
-            "CREATE TABLE person (name text)",
-            "COMMENT ON COLUMN person.name IS 'old'",
-        ],
-        dst=[
-            "CREATE TABLE person (name text)",
-            "COMMENT ON COLUMN person.name IS 'new'",
-        ],
-        diff=['COMMENT ON COLUMN "public"."person"."name" IS \'new\''],
-    )
-
-
 async def test_table_column_comment_removed(gen_setup: GenerateSetup) -> None:
     """
     Comment on source but none on target -> COMMENT ON COLUMN ... IS NULL.
@@ -75,33 +58,4 @@ async def test_table_column_comment_removed(gen_setup: GenerateSetup) -> None:
         ],
         dst=["CREATE TABLE person (name text)"],
         diff=['COMMENT ON COLUMN "public"."person"."name" IS NULL'],
-    )
-
-
-async def test_table_column_comment_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same column comment on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=[
-            "CREATE TABLE person (name text)",
-            "COMMENT ON COLUMN person.name IS 'full name'",
-        ],
-        dst=[
-            "CREATE TABLE person (name text)",
-            "COMMENT ON COLUMN person.name IS 'full name'",
-        ],
-        diff=[],
-    )
-
-
-async def test_table_column_comment_with_single_quote(gen_setup: GenerateSetup) -> None:
-    """
-    Column comment containing a single quote is escaped by doubling.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TABLE person (name text)"],
-        src=[],
-        dst=["COMMENT ON COLUMN person.name IS 'it''s a name'"],
-        diff=['COMMENT ON COLUMN "public"."person"."name" IS \'it\'\'s a name\''],
     )

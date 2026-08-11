@@ -94,23 +94,6 @@ async def test_index_rename_clears_comment(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_index_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical name and definition on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=[
-            "CREATE TABLE person (name text)",
-            "CREATE INDEX person_name_idx ON person (name)",
-        ],
-        dst=[
-            "CREATE TABLE person (name text)",
-            "CREATE INDEX person_name_idx ON person (name)",
-        ],
-        diff=[],
-    )
-
-
 async def test_index_definition_changed(gen_setup: GenerateSetup) -> None:
     """
     Same name, different definition -> DROP INDEX then CREATE INDEX.

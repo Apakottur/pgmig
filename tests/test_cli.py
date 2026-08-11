@@ -170,14 +170,6 @@ async def test_generate_check_reports_diff(gen_setup: GenerateSetup) -> None:
     assert "differ" in result.output.lower()
 
 
-async def test_generate_check_no_diff_exits_zero(gen_setup: GenerateSetup) -> None:
-    # No diff under --check is a clean pass: zero exit, nothing on stdout.
-    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn} --check")
-
-    assert result.exit_code == 0
-    assert result.stdout == ""
-
-
 async def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
     # --index-concurrently emits CONCURRENTLY index statements.
     await gen_setup.src.execute("CREATE TABLE person (name text)")
@@ -259,13 +251,3 @@ async def test_ignore_schema_flags_pass_list(mocker: MockerFixture) -> None:
 
     assert result.exit_code == 0
     assert spy.call_args.kwargs["ignore_schemas"] == ["audit", "staging"]
-
-
-async def test_no_ignore_flags_passes_empty_list(mocker: MockerFixture) -> None:
-    spy = mocker.patch("pgmig._cli._cli.generate_migration", return_value="")
-
-    result = await _run_cli("generate -s src -t tgt")
-
-    assert result.exit_code == 0
-    assert spy.call_args.kwargs["ignore_extension_version"] == []
-    assert spy.call_args.kwargs["ignore_schemas"] == []

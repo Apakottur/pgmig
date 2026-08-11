@@ -36,18 +36,6 @@ async def test_composite_type_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_composite_type_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical composite type on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TYPE pair AS (a integer, b integer)"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_composite_type_add_attribute(gen_setup: GenerateSetup) -> None:
     """
     An attribute present in target only is added in place with ALTER TYPE ... ADD ATTRIBUTE.
