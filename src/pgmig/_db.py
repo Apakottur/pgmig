@@ -58,7 +58,6 @@ class DbConnection:
         try:
             conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
         except psycopg.Error as error:
-            # Other DB driver error.
             raise PgmigDbDriverError(
                 label=db_conn_info.label,
                 driver=db_conn_info.driver,
