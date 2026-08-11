@@ -8,7 +8,7 @@ from psycopg.rows import class_row
 from pydantic import BaseModel
 
 from pgmig._drivers import DbDriver
-from pgmig._errors import DbDriverError, InvalidDsnError
+from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
 
 _RowT = TypeVar("_RowT", bound=BaseModel)
 
@@ -57,14 +57,14 @@ class DbConnection:
         """
         try:
             conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
-        except psycopg.ProgrammingError as error:
-            # The only failure whose message quotes the connection string, so it is the only
-            # one the driver's own words cannot be reported for.
-            raise DbDriverError(
-                label=db_conn_info.label, driver=db_conn_info.driver, driver_error=InvalidDsnError()
-            ) from error
         except psycopg.Error as error:
-            raise DbDriverError(label=db_conn_info.label, driver=db_conn_info.driver, driver_error=error) from error
+            # Other DB driver error.
+            raise PgmigDbDriverError(
+                label=db_conn_info.label,
+                driver=db_conn_info.driver,
+                # Wrap with a generic exception in case of a DSN parsing error to avoid leaking the DSN.
+                driver_error=PgmigInvalidDbDsnError() if isinstance(error, psycopg.ProgrammingError) else error,
+            ) from error
 
         async with conn:
             yield cls(db_conn_info=db_conn_info, conn=conn)

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pgmig._db import DbConnInfo
 from pgmig._diff._engine import get_diff
 from pgmig._drivers import DbDriver
-from pgmig._errors import DbConnectionError, DbDriverError, PgmigApiError
+from pgmig._errors import PgmigApiError, PgmigDbConnectionError, PgmigDbDriverError
 from pgmig._introspect._engine import introspect_db
 
 
@@ -54,12 +54,12 @@ async def agenerate(
     # Determine the outcome of the run.
     match (source_result, target_result):
         # DB Driver errors.
-        case (DbDriverError(), DbDriverError()):
-            raise DbConnectionError(source_error=source_result, target_error=target_result)
-        case (DbDriverError(), _):
-            raise DbConnectionError(source_error=source_result, target_error=None)
-        case (_, DbDriverError()):
-            raise DbConnectionError(source_error=None, target_error=target_result)
+        case (PgmigDbDriverError(), PgmigDbDriverError()):
+            raise PgmigDbConnectionError(source_error=source_result, target_error=target_result)
+        case (PgmigDbDriverError(), _):
+            raise PgmigDbConnectionError(source_error=source_result, target_error=None)
+        case (_, PgmigDbDriverError()):
+            raise PgmigDbConnectionError(source_error=None, target_error=target_result)
         # Other errors.
         case (BaseException(), _):
             raise source_result
