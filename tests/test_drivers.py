@@ -1,9 +1,10 @@
 from pgmig._drivers import DbDriver
 
 
-def test_resolved_names_a_concrete_driver() -> None:
-    # AUTO is a request to choose, so it must never survive resolution; a driver named
-    # explicitly is kept, which is what pinning one means. Nothing else reaches the
-    # property yet, so this is the only cover it has.
-    assert DbDriver.AUTO.resolved is DbDriver.PSYCOPG
-    assert DbDriver.PSYCOPG.resolved is DbDriver.PSYCOPG
+def test_db_driver_resolve() -> None:
+    for driver in DbDriver:
+        match driver:
+            case DbDriver.AUTO:
+                assert driver.resolved is DbDriver.PSYCOPG
+            case DbDriver.PSYCOPG:
+                assert driver.resolved is DbDriver.PSYCOPG
