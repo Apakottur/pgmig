@@ -3,8 +3,10 @@ from pgmig._drivers import DbDriver
 
 def test_db_driver_resolve() -> None:
     for driver in DbDriver:
+        resolved = driver.resolved
+
         match driver:
             case DbDriver.AUTO:
-                assert driver.resolved is DbDriver.PSYCOPG
+                assert resolved is DbDriver.PSYCOPG
             case DbDriver.PSYCOPG:
-                assert driver.resolved is DbDriver.PSYCOPG
+                assert resolved is DbDriver.PSYCOPG
