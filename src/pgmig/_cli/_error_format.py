@@ -2,8 +2,7 @@ import shutil
 import sys
 import textwrap
 
-from pgmig._drivers import DbDriver
-from pgmig._errors import DbConnectionError, _PgmigError
+from pgmig._errors import DbConnectionError, DbDriverError, _PgmigError
 
 # Layout of the box that sets verbatim third-party output apart from pgmig's own message.
 _BOX_INDENT = "  "
@@ -12,7 +11,7 @@ _BOX_UNICODE = ("╭", "╰", "─", "│")
 _BOX_ASCII = ("+", "+", "-", "|")
 
 
-def _format_database(label: str, error: BaseException | None, *, driver: DbDriver) -> list[str]:
+def _format_database(label: str, error: DbDriverError | None) -> list[str]:
     """
     One database's line in a connection report, followed by the driver's own words quoted in
     a box when it is the one that failed, so they do not read as more of pgmig's message.
@@ -37,7 +36,7 @@ def _format_database(label: str, error: BaseException | None, *, driver: DbDrive
     body_width = width - len(indent) - 2
 
     body = []
-    for line in str(error).splitlines():
+    for line in str(error.driver_error).splitlines():
         wrapped = textwrap.wrap(
             line,
             width=body_width,
@@ -48,7 +47,7 @@ def _format_database(label: str, error: BaseException | None, *, driver: DbDrive
         # An empty line wraps to nothing; keep it, it is part of the driver's own layout.
         body.extend(wrapped or [""])
 
-    header = f"{top_left}{horizontal} {driver.resolved} "
+    header = f"{top_left}{horizontal} {error.driver.resolved} "
     return [
         f"{_BOX_INDENT}{label} - UNREACHABLE",
         f"{indent}{header}{horizontal * max(body_width + 2 - len(header), 0)}",
@@ -57,7 +56,7 @@ def _format_database(label: str, error: BaseException | None, *, driver: DbDrive
     ]
 
 
-def format_error(error: _PgmigError, *, driver: DbDriver) -> str:
+def format_error(error: _PgmigError) -> str:
     """
     Render a known error for the terminal. A failure to connect reports both databases the
     run needed, with the driver's own words quoted in a box under the one that failed.
@@ -70,7 +69,7 @@ def format_error(error: _PgmigError, *, driver: DbDriver) -> str:
     return "\n".join(
         [
             f"\n{error.message}:",
-            *_format_database("Source", error.source_error, driver=driver),
-            *_format_database("Target", error.target_error, driver=driver),
+            *_format_database("Source", error.source_error),
+            *_format_database("Target", error.target_error),
         ]
     )

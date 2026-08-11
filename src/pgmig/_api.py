@@ -55,14 +55,11 @@ async def agenerate(
     match (source_result, target_result):
         # DB Driver errors.
         case (DbDriverError(), DbDriverError()):
-            raise DbConnectionError(
-                source_error=source_result.driver_error,
-                target_error=target_result.driver_error,
-            )
+            raise DbConnectionError(source_error=source_result, target_error=target_result)
         case (DbDriverError(), _):
-            raise DbConnectionError(source_error=source_result.driver_error, target_error=None)
+            raise DbConnectionError(source_error=source_result, target_error=None)
         case (_, DbDriverError()):
-            raise DbConnectionError(source_error=None, target_error=target_result.driver_error)
+            raise DbConnectionError(source_error=None, target_error=target_result)
         # Other errors.
         case (BaseException(), _):
             raise source_result

@@ -58,7 +58,7 @@ class DbConnection:
         try:
             conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
         except psycopg.Error as error:
-            raise DbDriverError(label=db_conn_info.label, driver_error=error) from error
+            raise DbDriverError(label=db_conn_info.label, driver=db_conn_info.driver, driver_error=error) from error
 
         async with conn:
             yield cls(db_conn_info=db_conn_info, conn=conn)

@@ -9,7 +9,7 @@ from typer.testing import CliRunner, Result
 from pgmig._cli._cli import app
 from pgmig._cli._error_format import _format_database, format_error
 from pgmig._drivers import DbDriver
-from pgmig._errors import _PgmigError
+from pgmig._errors import DbDriverError, _PgmigError
 from tests._api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
@@ -97,13 +97,17 @@ async def test_generate_reports_an_unreachable_source(gen_setup: GenerateSetup) 
 
 
 def test_format_error_of_a_plain_message_is_the_message() -> None:
-    assert format_error(_PgmigError("nothing to add"), driver=DbDriver.AUTO) == "nothing to add"
+    assert format_error(_PgmigError("nothing to add")) == "nothing to add"
 
 
 def test_format_database_boxes_wraps_and_keeps_blank_lines(mocker: MockerFixture) -> None:
     mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
 
-    assert _format_database("Target", OSError("connection failed for user pgmig\n\nsecond"), driver=DbDriver.AUTO) == [
+    error = DbDriverError(
+        label="target", driver=DbDriver.AUTO, driver_error=OSError("connection failed for user pgmig\n\nsecond")
+    )
+
+    assert _format_database("Target", error) == [
         "  Target - UNREACHABLE",
         "    ╭─ psycopg ───────────────",
         "    │ connection failed for",
@@ -119,7 +123,9 @@ def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: M
     mocker.patch("sys.stderr", io.TextIOWrapper(io.BytesIO(), encoding="ascii"))
     mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
 
-    assert _format_database("Source", OSError("boom"), driver=DbDriver.PSYCOPG) == [
+    error = DbDriverError(label="source", driver=DbDriver.PSYCOPG, driver_error=OSError("boom"))
+
+    assert _format_database("Source", error) == [
         "  Source - UNREACHABLE",
         "    +- psycopg ---------------",
         "    | boom",
@@ -128,7 +134,7 @@ def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: M
 
 
 def test_format_database_of_a_reachable_database_is_one_line() -> None:
-    assert _format_database("Source", None, driver=DbDriver.AUTO) == ["  Source - REACHABLE"]
+    assert _format_database("Source", None) == ["  Source - REACHABLE"]
 
 
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
