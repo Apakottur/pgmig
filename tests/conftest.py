@@ -81,14 +81,14 @@ async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnect
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
-    # Get the database DSN.
-    admin_db_dsn = get_dsn("postgres")
+    # Get the admin DB conn info.
+    admin_db_conn_info = DbConnInfo(dsn=get_dsn("postgres"), label="admin")
 
     # Wait for the database server to be ready.
-    await wait_for_db_connection(dsn=admin_db_dsn)
+    await wait_for_db_connection(db_conn_info=admin_db_conn_info.dsn)
 
     # Open a single connection to the admin database for the whole session.
-    async with DbConnection.connect(db_conn_info=DbConnInfo(dsn=admin_db_dsn, label="admin")) as admin_conn:
+    async with DbConnection.connect(db_conn_info=admin_db_conn_info) as admin_conn:
         yield admin_conn
 
     # Stop the database server, unless asked to leave it running.

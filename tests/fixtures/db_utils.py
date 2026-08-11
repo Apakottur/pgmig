@@ -53,11 +53,11 @@ def get_dsn(db_name: str, *, pgbouncer: bool = False) -> str:
     stop=tenacity.stop_after_delay(10),
     reraise=True,
 )
-async def wait_for_db_connection(*, dsn: str) -> None:
+async def wait_for_db_connection(*, db_conn_info: DbConnInfo) -> None:
     """
     Wait for a database to be ready to accept connections.
     """
-    async with DbConnection.connect(db_conn_info=DbConnInfo(dsn=dsn, label="admin")):
+    async with DbConnection.connect(db_conn_info=db_conn_info):
         pass
 
 

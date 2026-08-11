@@ -110,7 +110,9 @@ class _IntrospectionPreflight(IntrospectionRow):
 
 async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[str] = ()) -> DbIntrospectionResult:
     """
-    Build the full structure of the database described by `db_conn_info`.
+    Run the database introspection for the given database.
+
+    Returns the full introspection result.
     """
     # Initialize the introspection result.
     db_introspection_result = DbIntrospectionResult(
