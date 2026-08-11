@@ -33,7 +33,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--driver",
         action="store",
         default=None,
-        choices=[driver.value for driver in DbDriver],
+        choices=list(DbDriver),
         help=(
             f"Database driver to test against. Falls back to the PGMIG_DRIVER env var, then {DbDriver.AUTO.value!r}."
         ),
