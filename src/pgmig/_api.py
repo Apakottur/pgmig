@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pgmig._db import DbConnInfo
 from pgmig._diff._engine import get_diff
 from pgmig._drivers import DbDriver
-from pgmig._errors import PgmigApiError
+from pgmig._errors import DbConnectionError, PgmigApiError, _DbConnectionError
 from pgmig._introspect._engine import introspect_db
 
 
@@ -40,7 +40,9 @@ async def agenerate(
         driver: The database driver to connect with. AUTO (default) lets pgmig pick among the
                 supported drivers; naming one pins it.
     """
-    # Introspect both databases concurrently.
+    # Introspect both databases concurrently. Failures are collected rather than raced,
+    # so that a failure to connect can be reported against both databases at once: which
+    # side is unreachable is not visible from one side's error alone.
     source_result, target_result = await asyncio.gather(
         introspect_db(
             db_conn_info=DbConnInfo(dsn=source, label="source", driver=driver), ignore_schemas=ignore_schemas
@@ -48,7 +50,23 @@ async def agenerate(
         introspect_db(
             db_conn_info=DbConnInfo(dsn=target, label="target", driver=driver), ignore_schemas=ignore_schemas
         ),
+        return_exceptions=True,
     )
+
+    # A database is unreachable exactly when its outcome was a failure to connect, which is
+    # also the only outcome carrying the driver's error. Anything else means the connection
+    # worked, including a failure raised over it later.
+    if isinstance(source_result, _DbConnectionError) or isinstance(target_result, _DbConnectionError):
+        raise DbConnectionError(
+            source_error=source_result.driver_error if isinstance(source_result, _DbConnectionError) else None,
+            target_error=target_result.driver_error if isinstance(target_result, _DbConnectionError) else None,
+        )
+
+    # Any other failure is about a database's contents, not about reaching it: re-raise as is.
+    if isinstance(source_result, BaseException):
+        raise source_result
+    if isinstance(target_result, BaseException):
+        raise target_result
 
     # Generate migration SQL.
     return get_diff(

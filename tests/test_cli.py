@@ -1,10 +1,14 @@
 import asyncio
+import io
+import os
 from pathlib import Path
 
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner, Result
 
-from pgmig._cli import app
+from pgmig._cli import _format_database, _format_error, app
+from pgmig._drivers import DbDriver
+from pgmig._errors import _PgmigError
 from tests._api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
@@ -58,12 +62,63 @@ async def test_generate_empty_diff_truncates_stale_output(gen_setup: GenerateSet
 
 
 async def test_generate_connection_error_is_clean() -> None:
-    # A bad connection string is an expected failure: clean message, no traceback.
+    # A bad connection string is an expected failure: clean message, no traceback, and the
+    # driver's own text quoted in a box below it rather than run into pgmig's message.
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "Could not connect to source database" in result.output
+    assert "At least one of the databases is unreachable:" in result.output
+    assert "Source - UNREACHABLE" in result.output
+    assert "Target - UNREACHABLE" in result.output
+    assert "╭─ psycopg " in result.output
+    assert '│ missing "=" after' in result.output
     assert "Traceback" not in result.output
+
+
+async def test_generate_reports_the_reachable_side_too(gen_setup: GenerateSetup) -> None:
+    # Which side is the problem is the first thing to know, so a working database is
+    # listed as reachable rather than left out of the report.
+    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t postgresql://pgmig:pgmig@localhost:15432/nope")
+
+    assert result.exit_code == 1
+    assert "Source - REACHABLE" in result.output
+    assert "Target - UNREACHABLE" in result.output
+    assert 'database "nope" does not exist' in result.output
+
+
+def test_format_error_of_a_plain_message_is_the_message() -> None:
+    assert _format_error(_PgmigError("nothing to add"), driver=DbDriver.AUTO) == "nothing to add"
+
+
+def test_format_database_boxes_wraps_and_keeps_blank_lines(mocker: MockerFixture) -> None:
+    mocker.patch("pgmig._cli.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
+
+    assert _format_database("Target", OSError("connection failed for user pgmig\n\nsecond"), driver=DbDriver.AUTO) == [
+        "  Target - UNREACHABLE",
+        "    ╭─ psycopg ───────────────",
+        "    │ connection failed for",
+        "    │     user pgmig",
+        "    │",
+        "    │ second",
+        "    ╰─────────────────────────",
+    ]
+
+
+def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
+    # Output redirected under a legacy code page: drawing the nicer box would raise.
+    mocker.patch("sys.stderr", io.TextIOWrapper(io.BytesIO(), encoding="ascii"))
+    mocker.patch("pgmig._cli.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
+
+    assert _format_database("Source", OSError("boom"), driver=DbDriver.PSYCOPG) == [
+        "  Source - UNREACHABLE",
+        "    +- psycopg ---------------",
+        "    | boom",
+        "    +-------------------------",
+    ]
+
+
+def test_format_database_of_a_reachable_database_is_one_line() -> None:
+    assert _format_database("Source", None, driver=DbDriver.AUTO) == ["  Source - REACHABLE"]
 
 
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
