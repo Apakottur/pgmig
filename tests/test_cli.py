@@ -69,7 +69,7 @@ async def test_generate_connection_error_is_clean() -> None:
     assert "Source - UNREACHABLE" in result.output
     assert "Target - UNREACHABLE" in result.output
     assert "╭─ psycopg " in result.output
-    assert '│ missing "=" after' in result.output
+    assert "│ Invalid connection string." in result.output
     assert "Traceback" not in result.output
 
 
@@ -93,6 +93,17 @@ async def test_generate_reports_an_unreachable_source(gen_setup: GenerateSetup) 
     assert "Target - REACHABLE" in result.output
 
 
+async def test_generate_does_not_echo_an_unparsable_connection_string() -> None:
+    # A connection string that fails URI parsing is reported by libpq with the string
+    # quoted back, password and all, so that message is dropped rather than passed on.
+    result = await _run_cli("generate -s user:swordfish@localhost:5432/db -t user:swordfish@localhost:5432/db")
+
+    assert result.exit_code == 1
+    assert "swordfish" not in result.output
+    assert "localhost" not in result.output
+    assert "Invalid connection string." in result.output
+
+
 async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture) -> None:
     # The driver's text is quoted verbatim, wrapped to fit, with continuation lines indented
     # so a wrapped line cannot be mistaken for a new one.
@@ -102,10 +113,10 @@ async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: Moc
 
     assert result.exit_code == 1
     assert "  Source - UNREACHABLE" in result.output
-    assert "    ╭─ psycopg ───────────────────────────────────────────" in result.output
-    assert '    │ missing "=" after "not-a-dsn" in connection info' in result.output
-    assert "    │     string" in result.output
-    assert "    ╰─────────────────────────────────────────────────────" in result.output
+    assert "    ╭─ psycopg ─────────────────────────────────────────────" in result.output
+    assert "    │ Invalid connection string. The driver's own message is" in result.output
+    assert "    │     not shown here because it quotes the connection" in result.output
+    assert "    ╰───────────────────────────────────────────────────────" in result.output
 
 
 async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
@@ -118,7 +129,7 @@ async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(moc
 
     assert result.exit_code == 1
     assert "+- psycopg " in result.output
-    assert '| missing "=" after' in result.output
+    assert "| Invalid connection string." in result.output
     assert "╭" not in result.output
 
 

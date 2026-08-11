@@ -23,7 +23,19 @@ class PgmigApiError(_PgmigError):
     """
 
 
-class DbDriverError(_PgmigError):
+class PgmigInvalidDbDsnError(_PgmigError):
+    """
+    An error occurred while parsing a DB connection string.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Invalid connection string. The driver's own message is not shown here because "
+            "it quotes the connection string back, password included."
+        )
+
+
+class PgmigDbDriverError(_PgmigError):
     """
     An error occurred while connecting to a database via the DB driver.
     """
@@ -35,12 +47,12 @@ class DbDriverError(_PgmigError):
         super().__init__(f"Could not connect to {label} database.")
 
 
-class DbConnectionError(_PgmigError):
+class PgmigDbConnectionError(_PgmigError):
     """
     At least one of a run's two databases could not be connected to.
     """
 
-    def __init__(self, *, source_error: DbDriverError | None, target_error: DbDriverError | None) -> None:
+    def __init__(self, *, source_error: PgmigDbDriverError | None, target_error: PgmigDbDriverError | None) -> None:
         self.source_error = source_error
         self.target_error = target_error
         super().__init__("Failed to connect to one of the databases")
