@@ -86,6 +86,15 @@ async def test_generate_reports_the_reachable_side_too(gen_setup: GenerateSetup)
     assert 'database "nope" does not exist' in result.output
 
 
+async def test_generate_reports_an_unreachable_source(gen_setup: GenerateSetup) -> None:
+    # The mirror image: each side is reported on whichever one of them failed.
+    result = await _run_cli(f"generate -s postgresql://pgmig:pgmig@localhost:15432/nope -t {gen_setup.dst.dsn}")
+
+    assert result.exit_code == 1
+    assert "Source - UNREACHABLE" in result.output
+    assert "Target - REACHABLE" in result.output
+
+
 def test_format_error_of_a_plain_message_is_the_message() -> None:
     assert _format_error(_PgmigError("nothing to add"), driver=DbDriver.AUTO) == "nothing to add"
 
