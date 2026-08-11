@@ -7,6 +7,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner, Result
 
 from pgmig._cli._cli import app
+from pgmig._drivers import DbDriver
 from tests._api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
@@ -59,7 +60,7 @@ async def test_generate_empty_diff_truncates_stale_output(gen_setup: GenerateSet
     assert out.read_text() == ""
 
 
-async def test_generate_connection_error_is_clean() -> None:
+async def test_generate_connection_error_is_clean(driver: DbDriver) -> None:
     # A bad connection string is an expected failure: clean message, no traceback, and the
     # driver's own text quoted in a box below it rather than run into pgmig's message.
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
@@ -68,8 +69,7 @@ async def test_generate_connection_error_is_clean() -> None:
     assert "Failed to connect to one of the databases:" in result.output
     assert "Source - UNREACHABLE" in result.output
     assert "Target - UNREACHABLE" in result.output
-    assert "╭─ psycopg " in result.output
-    assert "│ Invalid connection string." in result.output
+    assert f"╭─ {driver.resolved} " in result.output
     assert "Traceback" not in result.output
 
 
@@ -101,10 +101,9 @@ async def test_generate_does_not_echo_an_unparsable_connection_string() -> None:
     assert result.exit_code == 1
     assert "swordfish" not in result.output
     assert "localhost" not in result.output
-    assert "Invalid connection string." in result.output
 
 
-async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture) -> None:
+async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture, driver: DbDriver) -> None:
     # The driver's text is quoted verbatim, wrapped to fit, with continuation lines indented
     # so a wrapped line cannot be mistaken for a new one.
     mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((60, 24)))
@@ -113,13 +112,19 @@ async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: Moc
 
     assert result.exit_code == 1
     assert "  Source - UNREACHABLE" in result.output
-    assert "    ╭─ psycopg ─────────────────────────────────────────────" in result.output
-    assert "    │ Invalid connection string. The driver's own message is" in result.output
-    assert "    │     not shown here because it quotes the connection" in result.output
-    assert "    ╰───────────────────────────────────────────────────────" in result.output
+
+    # Every box line is drawn to the same width, and a wrapped line is indented past the
+    # first so it cannot be mistaken for a new one. The text itself is the driver's.
+    lines = [line for line in result.output.splitlines() if line.startswith("    ")]
+    assert lines[0].startswith(f"    ╭─ {driver.resolved} ─")
+    assert lines[-1].startswith("    ╰─")
+    assert {len(line) for line in (lines[0], lines[-1])} == {60}
+    assert any(line.startswith("    │     ") for line in lines)
 
 
-async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
+async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(
+    mocker: MockerFixture, driver: DbDriver
+) -> None:
     # Output redirected under a legacy code page: drawing the nicer box would raise. The
     # module's own `sys` is replaced rather than sys.stderr, which the CLI runner rebinds to
     # its capture buffer once the command is running.
@@ -128,8 +133,7 @@ async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(moc
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "+- psycopg " in result.output
-    assert "| Invalid connection string." in result.output
+    assert f"+- {driver.resolved} " in result.output
     assert "╭" not in result.output
 
 

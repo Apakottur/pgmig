@@ -83,7 +83,7 @@ def _pg_major(request: pytest.FixtureRequest) -> int:
 
 
 @pytest.fixture(scope="session")
-def _driver(request: pytest.FixtureRequest) -> DbDriver:
+def driver(request: pytest.FixtureRequest) -> DbDriver:
     """
     Get the database driver under test.
     """
@@ -97,7 +97,7 @@ def _driver(request: pytest.FixtureRequest) -> DbDriver:
 
 
 @pytest.fixture(scope="session")
-async def _admin_conn(request: pytest.FixtureRequest, _driver: DbDriver) -> AsyncIterator[DbConnection]:
+async def _admin_conn(request: pytest.FixtureRequest, driver: DbDriver) -> AsyncIterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
@@ -106,7 +106,7 @@ async def _admin_conn(request: pytest.FixtureRequest, _driver: DbDriver) -> Asyn
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
     # Get the admin DB conn info.
-    admin_db_conn_info = DbConnInfo(dsn=get_dsn("postgres"), label="admin", driver=_driver)
+    admin_db_conn_info = DbConnInfo(dsn=get_dsn("postgres"), label="admin", driver=driver)
 
     # Wait for the database server to be ready.
     await wait_for_db_connection(db_conn_info=admin_db_conn_info)
@@ -124,7 +124,7 @@ async def _admin_conn(request: pytest.FixtureRequest, _driver: DbDriver) -> Asyn
 @pytest.fixture(scope="session")
 async def _persistent_dbs(
     _unique_key: str,
-    _driver: DbDriver,
+    driver: DbDriver,
     _admin_conn: DbConnection,
 ) -> AsyncIterator[tuple[str, str, DbConnection, DbConnection]]:
     """
@@ -139,10 +139,10 @@ async def _persistent_dbs(
 
     async with (
         DbConnection.connect(
-            db_conn_info=DbConnInfo(dsn=get_dsn(src_db_name), label="source", driver=_driver)
+            db_conn_info=DbConnInfo(dsn=get_dsn(src_db_name), label="source", driver=driver)
         ) as src_conn,
         DbConnection.connect(
-            db_conn_info=DbConnInfo(dsn=get_dsn(dst_db_name), label="target", driver=_driver)
+            db_conn_info=DbConnInfo(dsn=get_dsn(dst_db_name), label="target", driver=driver)
         ) as dst_conn,
     ):
         yield src_db_name, dst_db_name, src_conn, dst_conn
@@ -152,7 +152,7 @@ async def _persistent_dbs(
 async def gen_setup(
     _unique_key: str,
     _pg_major: int,
-    _driver: DbDriver,
+    driver: DbDriver,
     _persistent_dbs: tuple[str, str, DbConnection, DbConnection],
 ) -> GenerateSetup:
     """
@@ -171,6 +171,6 @@ async def gen_setup(
         src_conn=src_conn,
         dst_conn=dst_conn,
         pg_major=_pg_major,
-        driver=_driver,
+        driver=driver,
         unique_key=_unique_key,
     )
