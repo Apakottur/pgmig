@@ -20,13 +20,9 @@ class PgmigApiError(_PgmigError):
     """
 
 
-class _DbConnectionError(_PgmigError):
+class DbDriverError(_PgmigError):
     """
-    A single database could not be connected to.
-
-    Internal to a run: the API pairs it with the other database's outcome and raises
-    DbConnectionError, so this failure is never reported on its own. The driver's error is
-    kept as it is rather than rendered here, so whoever reports it decides how it looks.
+    An error occurred while connecting to a database via the DB driver.
     """
 
     def __init__(self, *, label: str, driver_error: Exception) -> None:
@@ -36,9 +32,7 @@ class _DbConnectionError(_PgmigError):
 
 class DbConnectionError(_PgmigError):
     """
-    At least one of a run's two databases could not be connected to. Holds the driver's
-    error for each of them, or None where the connection worked, since one side's failure
-    says nothing about the other.
+    At least one of a run's two databases could not be connected to.
     """
 
     def __init__(self, *, source_error: BaseException | None, target_error: BaseException | None) -> None:

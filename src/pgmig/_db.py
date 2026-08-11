@@ -8,7 +8,7 @@ from psycopg.rows import class_row
 from pydantic import BaseModel
 
 from pgmig._drivers import DbDriver
-from pgmig._errors import _DbConnectionError
+from pgmig._errors import DbDriverError
 
 _RowT = TypeVar("_RowT", bound=BaseModel)
 
@@ -58,7 +58,7 @@ class DbConnection:
         try:
             conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
         except psycopg.Error as error:
-            raise _DbConnectionError(label=db_conn_info.label, driver_error=error) from error
+            raise DbDriverError(label=db_conn_info.label, driver_error=error) from error
 
         async with conn:
             yield cls(db_conn_info=db_conn_info, conn=conn)

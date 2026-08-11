@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pgmig._db import DbConnInfo
 from pgmig._diff._engine import get_diff
 from pgmig._drivers import DbDriver
-from pgmig._errors import DbConnectionError, PgmigApiError, _DbConnectionError
+from pgmig._errors import DbConnectionError, DbDriverError, PgmigApiError
 from pgmig._introspect._engine import introspect_db
 
 
@@ -40,9 +40,7 @@ async def agenerate(
         driver: The database driver to connect with. AUTO (default) lets pgmig pick among the
                 supported drivers; naming one pins it.
     """
-    # Introspect both databases concurrently. Failures are collected rather than raced,
-    # so that a failure to connect can be reported against both databases at once: which
-    # side is unreachable is not visible from one side's error alone.
+    # Introspect both databases concurrently. Collect all failures instead of raising them.
     source_result, target_result = await asyncio.gather(
         introspect_db(
             db_conn_info=DbConnInfo(dsn=source, label="source", driver=driver), ignore_schemas=ignore_schemas
@@ -53,30 +51,33 @@ async def agenerate(
         return_exceptions=True,
     )
 
-    # A database is unreachable exactly when its outcome was a failure to connect, which is
-    # also the only outcome carrying the driver's error. Anything else means the connection
-    # worked, including a failure raised over it later.
-    if isinstance(source_result, _DbConnectionError) or isinstance(target_result, _DbConnectionError):
-        raise DbConnectionError(
-            source_error=source_result.driver_error if isinstance(source_result, _DbConnectionError) else None,
-            target_error=target_result.driver_error if isinstance(target_result, _DbConnectionError) else None,
-        )
-
-    # Any other failure is about a database's contents, not about reaching it: re-raise as is.
-    if isinstance(source_result, BaseException):
-        raise source_result
-    if isinstance(target_result, BaseException):
-        raise target_result
-
-    # Generate migration SQL.
-    return get_diff(
-        source=source_result,
-        target=target_result,
-        index_concurrently=index_concurrently,
-        ignore_extension_version=ignore_extension_version,
-        include_owner=include_owner,
-        include_grants=include_grants,
-    )
+    # Determine the outcome of the run.
+    match (source_result, target_result):
+        # DB Driver errors.
+        case (DbDriverError(), DbDriverError()):
+            raise DbConnectionError(
+                source_error=source_result.driver_error,
+                target_error=target_result.driver_error,
+            )
+        case (DbDriverError(), _):
+            raise DbConnectionError(source_error=source_result.driver_error, target_error=None)
+        case (_, DbDriverError()):
+            raise DbConnectionError(source_error=None, target_error=target_result.driver_error)
+        # Other errors.
+        case (BaseException(), _):
+            raise source_result
+        case (_, BaseException()):
+            raise target_result
+        # No errors - generate migration SQL.
+        case (_, _):
+            return get_diff(
+                source=source_result,
+                target=target_result,
+                index_concurrently=index_concurrently,
+                ignore_extension_version=ignore_extension_version,
+                include_owner=include_owner,
+                include_grants=include_grants,
+            )
 
 
 def generate(
