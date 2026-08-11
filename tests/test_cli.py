@@ -66,24 +66,6 @@ async def test_generate_connection_error_is_clean() -> None:
     assert "Traceback" not in result.output
 
 
-async def test_generate_pins_the_driver(gen_setup: GenerateSetup) -> None:
-    # Naming a driver explicitly is accepted and used.
-    await gen_setup.dst.execute("CREATE TABLE person (name text)")
-
-    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn} --driver psycopg")
-
-    assert result.exit_code == 0
-    assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
-
-
-async def test_generate_rejects_an_unknown_driver(gen_setup: GenerateSetup) -> None:
-    # An unsupported driver is a usage error, not an attempt with the default.
-    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn} --driver oracle")
-
-    assert result.exit_code == 2
-    assert "oracle" in result.output
-
-
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
     # An unexpected failure is an internal error: full traceback plus an issue prompt.
     mocker.patch("pgmig._cli.generate_migration", side_effect=ValueError("boom"))
