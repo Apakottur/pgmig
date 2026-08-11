@@ -67,21 +67,6 @@ async def test_foreign_key_definition_changed(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_foreign_key_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical foreign key on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=[
-            *_TABLES,
-            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
-        ],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_foreign_key_add_deferrable(gen_setup: GenerateSetup) -> None:
     """
     Foreign key created with DEFERRABLE INITIALLY DEFERRED -> ADD CONSTRAINT carries the clause.

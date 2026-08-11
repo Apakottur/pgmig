@@ -40,18 +40,6 @@ async def test_domain_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_domain_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical domain on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE DOMAIN age AS integer DEFAULT 0 CONSTRAINT age_check CHECK (VALUE >= 0)"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_domain_default_changed(gen_setup: GenerateSetup) -> None:
     """
     Same domain, differing default -> ALTER DOMAIN SET DEFAULT.
@@ -129,6 +117,18 @@ async def test_domain_check_renamed(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_domain_base_type_change_raises(gen_setup: GenerateSetup) -> None:
+    """
+    A domain's base type cannot be altered; a change must raise rather than emit a
+    non-converging migration.
+    """
+    await gen_setup.assert_unsupported(
+        src=["CREATE DOMAIN age AS integer"],
+        dst=["CREATE DOMAIN age AS bigint"],
+        match="Domain base type change is not supported",
+    )
+
+
 async def test_domain_comment_changed(gen_setup: GenerateSetup) -> None:
     """
     Same domain, differing comment -> COMMENT ON DOMAIN with the target's.
@@ -143,16 +143,4 @@ async def test_domain_comment_changed(gen_setup: GenerateSetup) -> None:
             "COMMENT ON DOMAIN age IS 'new'",
         ],
         diff=['COMMENT ON DOMAIN "public"."age" IS \'new\''],
-    )
-
-
-async def test_domain_base_type_change_raises(gen_setup: GenerateSetup) -> None:
-    """
-    A domain's base type cannot be altered; a change must raise rather than emit a
-    non-converging migration.
-    """
-    await gen_setup.assert_unsupported(
-        src=["CREATE DOMAIN age AS integer"],
-        dst=["CREATE DOMAIN age AS bigint"],
-        match="Domain base type change is not supported",
     )

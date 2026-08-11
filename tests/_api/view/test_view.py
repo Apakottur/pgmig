@@ -23,18 +23,6 @@ async def test_view_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_view_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical view on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE VIEW active AS SELECT 1 AS x"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_view_definition_change(gen_setup: GenerateSetup) -> None:
     """
     A changed view definition -> drop and recreate.

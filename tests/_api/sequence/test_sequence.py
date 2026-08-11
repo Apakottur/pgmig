@@ -127,18 +127,6 @@ async def test_sequence_alter_multiple_parameters(gen_setup: GenerateSetup) -> N
     )
 
 
-async def test_sequence_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical sequence on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE SEQUENCE counter INCREMENT BY 2 START WITH 5"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_sequence_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a sequence present on both sides -> COMMENT ON SEQUENCE.

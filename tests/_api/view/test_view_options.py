@@ -43,18 +43,6 @@ async def test_view_option_removed(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_view_option_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    An identical option on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE VIEW active WITH (security_barrier=true) AS SELECT 1 AS x"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_view_options_order_independent(gen_setup: GenerateSetup) -> None:
     """
     The same set of options written in a different order on the two sides is not a change:

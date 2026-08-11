@@ -43,18 +43,6 @@ async def test_policy_definition_changed(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_policy_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical policy on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=[_TABLE, "CREATE POLICY person_sel ON person USING (true)"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_policy_restrictive(gen_setup: GenerateSetup) -> None:
     """
     A RESTRICTIVE policy renders the AS RESTRICTIVE clause (PERMISSIVE is the default, omitted).

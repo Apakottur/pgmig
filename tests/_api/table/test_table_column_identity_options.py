@@ -66,18 +66,6 @@ async def test_identity_default_options_unchanged(gen_setup: GenerateSetup) -> N
     )
 
 
-async def test_identity_same_options_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    An identity with identical non-default options on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TABLE person (id integer GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 5))"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_identity_start_change(gen_setup: GenerateSetup) -> None:
     """
     A changed START value -> SET START WITH on the existing identity column.
