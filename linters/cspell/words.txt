@@ -33,7 +33,6 @@ dataclasses
 conftest
 healthcheck
 conninfo
-hostaddr
 autocommit
 dsn
 dsns
@@ -248,5 +247,3 @@ multirange
 opcdefault
 opcname
 rngcanonical
-userinfo
-secretpw

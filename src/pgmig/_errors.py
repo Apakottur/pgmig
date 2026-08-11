@@ -23,6 +23,22 @@ class PgmigApiError(_PgmigError):
     """
 
 
+class InvalidDsnError(Exception):
+    """
+    Stands in for a driver error raised while parsing a connection string.
+
+    Those errors quote the string they could not parse -- password and all -- so the
+    driver's own words are dropped in favour of these, and the original is left as the
+    raised exception's cause for anyone who needs it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Invalid connection string. The driver's own message is not shown here because "
+            "it quotes the connection string back, password included."
+        )
+
+
 class DbDriverError(_PgmigError):
     """
     An error occurred while connecting to a database via the DB driver.
