@@ -93,6 +93,16 @@ async def test_generate_reports_an_unreachable_source(gen_setup: GenerateSetup) 
     assert "Target - REACHABLE" in result.output
 
 
+async def test_generate_redacts_the_password_libpq_echoes() -> None:
+    # A DSN that fails URI parsing falls back to libpq keyword parsing, whose error quotes
+    # the offending token verbatim -- password included.
+    result = await _run_cli("generate -s user:secretpw@localhost:5432/db -t user:secretpw@localhost:5432/db")
+
+    assert result.exit_code == 1
+    assert "secretpw" not in result.output
+    assert 'missing "=" after "user:***@localhost:5432/db"' in result.output
+
+
 async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture) -> None:
     # The driver's text is quoted verbatim, wrapped to fit, with continuation lines indented
     # so a wrapped line cannot be mistaken for a new one.

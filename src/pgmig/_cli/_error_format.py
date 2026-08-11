@@ -3,6 +3,7 @@ import sys
 import textwrap
 
 from pgmig._errors import DbConnectionError, DbDriverError, _PgmigError
+from pgmig._redact import redact_dsn_secrets
 
 # Layout of the box that sets verbatim third-party output apart from pgmig's own message.
 _BOX_INDENT = "  "
@@ -35,7 +36,8 @@ def _format_db_driver_error(label: str, error: DbDriverError | None) -> list[str
     body_width = width - len(indent) - 2
 
     body = []
-    for line in str(error.driver_error).splitlines():
+    # libpq can echo the connection string it was given, password included.
+    for line in redact_dsn_secrets(str(error.driver_error)).splitlines():
         wrapped = textwrap.wrap(
             line,
             width=body_width,
