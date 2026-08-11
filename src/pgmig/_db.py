@@ -1,12 +1,11 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Self, TypeVar
 
 import psycopg
 from psycopg.rows import class_row
 from pydantic import BaseModel
-from typing_extensions import Self
 
 from pgmig._errors import _PgmigError
 
