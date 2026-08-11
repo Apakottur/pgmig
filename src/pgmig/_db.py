@@ -22,14 +22,13 @@ class UniqueViolation(Exception):
 @dataclass(frozen=True)
 class DbConnInfo:
     """
-    Everything needed to reach a single database: the DSN and the role the database plays
-    ("source", "target"), which names it in error messages.
-
-    Built once per database and passed around instead of the bare DSN, so a connection and
-    the label that makes its errors actionable cannot drift apart at a call site.
+    Information about a single database.
     """
 
+    # The database DSN.
     dsn: str
+
+    # Friendly label, used in error/log messages.
     label: str
 
 
