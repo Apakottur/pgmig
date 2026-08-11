@@ -11,10 +11,9 @@ _BOX_UNICODE = ("╭", "╰", "─", "│")
 _BOX_ASCII = ("+", "+", "-", "|")
 
 
-def _format_database(label: str, error: DbDriverError | None) -> list[str]:
+def _format_db_driver_error(label: str, error: DbDriverError | None) -> list[str]:
     """
-    One database's line in a connection report, followed by the driver's own words quoted in
-    a box when it is the one that failed, so they do not read as more of pgmig's message.
+    Format a database driver error.
     """
     if error is None:
         return [f"{_BOX_INDENT}{label} - REACHABLE"]
@@ -56,20 +55,23 @@ def _format_database(label: str, error: DbDriverError | None) -> list[str]:
     ]
 
 
-def format_error(error: _PgmigError) -> str:
-    """
-    Render a known error for the terminal. A failure to connect reports both databases the
-    run needed, with the driver's own words quoted in a box under the one that failed.
-    """
-    if not isinstance(error, DbConnectionError):
-        return error.message
-
-    # Set the report off from whatever the terminal printed before it, and lead into the
-    # per-database lines below.
+def _format_db_connection_error(error: DbConnectionError) -> str:
     return "\n".join(
         [
             f"\n{error.message}:",
-            *_format_database("Source", error.source_error),
-            *_format_database("Target", error.target_error),
+            *_format_db_driver_error("Source", error.source_error),
+            *_format_db_driver_error("Target", error.target_error),
         ]
     )
+
+
+def format_error(error: _PgmigError) -> str:
+    """
+    Format an error to be displayed to the user.
+    """
+    match error:
+        case DbConnectionError():
+            return _format_db_connection_error(error)
+        # Default formatting.
+        case _:
+            return error.message

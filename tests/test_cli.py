@@ -7,7 +7,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner, Result
 
 from pgmig._cli._cli import app
-from pgmig._cli._error_format import _format_database, format_error
+from pgmig._cli._error_format import _format_db_driver_error, format_error
 from pgmig._drivers import DbDriver
 from pgmig._errors import DbDriverError, _PgmigError
 from tests._api.generate_setup import GenerateSetup
@@ -107,7 +107,7 @@ def test_format_database_boxes_wraps_and_keeps_blank_lines(mocker: MockerFixture
         label="target", driver=DbDriver.AUTO, driver_error=OSError("connection failed for user pgmig\n\nsecond")
     )
 
-    assert _format_database("Target", error) == [
+    assert _format_db_driver_error("Target", error) == [
         "  Target - UNREACHABLE",
         "    ╭─ psycopg ───────────────",
         "    │ connection failed for",
@@ -125,7 +125,7 @@ def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: M
 
     error = DbDriverError(label="source", driver=DbDriver.PSYCOPG, driver_error=OSError("boom"))
 
-    assert _format_database("Source", error) == [
+    assert _format_db_driver_error("Source", error) == [
         "  Source - UNREACHABLE",
         "    +- psycopg ---------------",
         "    | boom",
@@ -134,7 +134,7 @@ def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: M
 
 
 def test_format_database_of_a_reachable_database_is_one_line() -> None:
-    assert _format_database("Source", None) == ["  Source - REACHABLE"]
+    assert _format_db_driver_error("Source", None) == ["  Source - REACHABLE"]
 
 
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
