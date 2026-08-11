@@ -1,5 +1,4 @@
 from enum import StrEnum
-from typing import Self
 
 
 class DbDriver(StrEnum):
@@ -14,7 +13,7 @@ class DbDriver(StrEnum):
     PSYCOPG = "psycopg"
 
     @property
-    def resolved(self) -> Self:
+    def resolved(self) -> "DbDriver":
         match self:
             case DbDriver.AUTO:
                 return DbDriver.PSYCOPG
