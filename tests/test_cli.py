@@ -67,7 +67,7 @@ async def test_generate_connection_error_is_clean() -> None:
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "At least one of the databases is unreachable:" in result.output
+    assert "At least one of the databases is unreachable" in result.output
     assert "Source - UNREACHABLE" in result.output
     assert "Target - UNREACHABLE" in result.output
     assert "╭─ psycopg " in result.output

@@ -68,8 +68,7 @@ async def agenerate(
             raise source_result
         case (_, BaseException()):
             raise target_result
-        # No errors - generate migration SQL. ty does not narrow through match patterns, so
-        # it still sees the union asyncio.gather returns for each result here.
+        # No errors - generate migration SQL.
         case _:
             return get_diff(
                 source=source_result,  # ty: ignore[invalid-argument-type]
