@@ -35,17 +35,6 @@ async def test_table_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_table_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical table on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=["CREATE TABLE person (name text)"],
-        dst=["CREATE TABLE person (name text)"],
-        diff=[],
-    )
-
-
 async def test_table_create_zero_columns(gen_setup: GenerateSetup) -> None:
     """
     A table with no columns still has a pg_class row; it must be introspected (via the

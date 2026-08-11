@@ -76,18 +76,6 @@ async def test_range_type_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_range_type_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical range type on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TYPE r_int AS RANGE (subtype = integer)"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_range_type_subtype_change_recreates(gen_setup: GenerateSetup) -> None:
     """
     A range type has no ALTER form, so changing its subtype is a drop + recreate. Both

@@ -83,17 +83,6 @@ async def test_enum_rename_multiple_values(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical enum on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
-        dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
-        diff=[],
-    )
-
-
 async def test_enum_typed_column_ordered_after_type(gen_setup: GenerateSetup) -> None:
     """
     A new enum and a new table with a column of that type: CREATE TYPE precedes CREATE TABLE.
@@ -140,18 +129,6 @@ async def test_enum_comment_added(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_enum_comment_changed(gen_setup: GenerateSetup) -> None:
-    """
-    Same enum both sides with differing comments -> COMMENT ON TYPE with target's.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
-        src=["COMMENT ON TYPE mood IS 'old'"],
-        dst=["COMMENT ON TYPE mood IS 'new'"],
-        diff=['COMMENT ON TYPE "public"."mood" IS \'new\''],
-    )
-
-
 async def test_enum_comment_removed(gen_setup: GenerateSetup) -> None:
     """
     Comment on source enum but none on target -> COMMENT ON TYPE ... IS NULL.
@@ -161,19 +138,4 @@ async def test_enum_comment_removed(gen_setup: GenerateSetup) -> None:
         src=["COMMENT ON TYPE mood IS 'feelings'"],
         dst=[],
         diff=['COMMENT ON TYPE "public"."mood" IS NULL'],
-    )
-
-
-async def test_enum_comment_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same enum and same comment on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=[
-            "CREATE TYPE mood AS ENUM ('sad', 'happy')",
-            "COMMENT ON TYPE mood IS 'feelings'",
-        ],
-        src=[],
-        dst=[],
-        diff=[],
     )

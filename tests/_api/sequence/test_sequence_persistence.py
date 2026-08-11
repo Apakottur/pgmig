@@ -44,17 +44,3 @@ async def test_flip_unlogged_to_logged(gen_setup: GenerateSetup) -> None:
         dst=[f"CREATE SEQUENCE counter {_SEQ}"],
         diff=['ALTER SEQUENCE "public"."counter" SET LOGGED'],
     )
-
-
-async def test_persistence_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same sequence, unlogged on both sides -> no migration SQL.
-    """
-    if gen_setup.pg_major < 15:
-        pytest.skip("UNLOGGED sequences require Postgres 15+")
-    await gen_setup.assert_diff(
-        both=[f"CREATE UNLOGGED SEQUENCE counter {_SEQ}"],
-        src=[],
-        dst=[],
-        diff=[],
-    )

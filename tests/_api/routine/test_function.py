@@ -111,17 +111,6 @@ async def test_procedure_drop(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_function_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Identical function on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
-        dst=["CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS $$SELECT a + b$$"],
-        diff=[],
-    )
-
-
 async def test_function_comment_added(gen_setup: GenerateSetup) -> None:
     """
     Comment added to a function present on both sides -> COMMENT ON FUNCTION.

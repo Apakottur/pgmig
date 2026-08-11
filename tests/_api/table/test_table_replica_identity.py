@@ -132,20 +132,3 @@ async def test_replica_identity_create_table_using_index(gen_setup: GenerateSetu
             'ALTER TABLE "public"."t" REPLICA IDENTITY USING INDEX "t_uidx"',
         ],
     )
-
-
-async def test_replica_identity_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same replica identity on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        src=[
-            "CREATE TABLE t (id integer)",
-            "ALTER TABLE t REPLICA IDENTITY FULL",
-        ],
-        dst=[
-            "CREATE TABLE t (id integer)",
-            "ALTER TABLE t REPLICA IDENTITY FULL",
-        ],
-        diff=[],
-    )

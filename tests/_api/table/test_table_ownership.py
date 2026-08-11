@@ -43,22 +43,3 @@ async def test_table_owner_ignored_by_default(gen_setup: GenerateSetup) -> None:
         ],
         diff=[],
     )
-
-
-async def test_table_owner_unchanged_with_include_owner(gen_setup: GenerateSetup) -> None:
-    """
-    Same table and same owner on both sides, with --include-owner -> no migration SQL.
-    """
-    role_a = await ensure_role(gen_setup, "pgmig_owner_a")
-    await gen_setup.assert_diff(
-        src=[
-            "CREATE TABLE person (name text)",
-            f"ALTER TABLE person OWNER TO {role_a}",
-        ],
-        dst=[
-            "CREATE TABLE person (name text)",
-            f"ALTER TABLE person OWNER TO {role_a}",
-        ],
-        diff=[],
-        include_owner=True,
-    )

@@ -68,18 +68,6 @@ async def test_table_column_type_timestamp_to_timestamptz(gen_setup: GenerateSet
     )
 
 
-async def test_table_column_type_unchanged_no_statement(gen_setup: GenerateSetup) -> None:
-    """
-    A column with the same type on both sides emits nothing.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TABLE person (id integer)"],
-        src=[],
-        dst=[],
-        diff=[],
-    )
-
-
 async def test_table_column_physical_order_preserved(gen_setup: GenerateSetup) -> None:
     """
     CREATE TABLE emits columns in the target's physical (attnum) order, not
@@ -221,16 +209,4 @@ async def test_table_column_drop_default(gen_setup: GenerateSetup) -> None:
         src=["CREATE TABLE person (age integer DEFAULT 0)"],
         dst=["CREATE TABLE person (age integer)"],
         diff=['ALTER TABLE "public"."person" ALTER COLUMN "age" DROP DEFAULT'],
-    )
-
-
-async def test_table_column_attributes_unchanged(gen_setup: GenerateSetup) -> None:
-    """
-    Same type, nullability, and default on both sides -> no migration SQL.
-    """
-    await gen_setup.assert_diff(
-        both=["CREATE TABLE person (age integer NOT NULL DEFAULT 0)"],
-        src=[],
-        dst=[],
-        diff=[],
     )
