@@ -7,6 +7,7 @@ import psycopg
 from psycopg.rows import class_row
 from pydantic import BaseModel
 
+from pgmig._drivers import DbDriver, resolve_driver
 from pgmig._errors import _PgmigError
 
 _RowT = TypeVar("_RowT", bound=BaseModel)
@@ -30,6 +31,9 @@ class DbConnInfo:
     # Friendly label, used in error/log messages.
     label: str
 
+    # The driver to connect with. AUTO leaves the choice to pgmig.
+    driver: DbDriver = DbDriver.AUTO
+
 
 class DbConnection:
     """
@@ -51,10 +55,15 @@ class DbConnection:
         """
         Connection context.
         """
+        # Name the driver in the error: which one produced the message is not otherwise
+        # visible, and AUTO means the caller may not know which one was chosen.
+        driver = resolve_driver(db_conn_info.driver)
         try:
             conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
         except psycopg.Error as error:
-            raise _PgmigError(f"Could not connect to {db_conn_info.label} database: {error}") from error
+            raise _PgmigError(
+                f"Could not connect to {db_conn_info.label} database via {driver.value}: {error}"
+            ) from error
 
         async with conn:
             yield cls(db_conn_info=db_conn_info, conn=conn)

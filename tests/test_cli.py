@@ -62,8 +62,26 @@ async def test_generate_connection_error_is_clean() -> None:
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "Could not connect to source database" in result.output
+    assert "Could not connect to source database via psycopg" in result.output
     assert "Traceback" not in result.output
+
+
+async def test_generate_pins_the_driver(gen_setup: GenerateSetup) -> None:
+    # Naming a driver explicitly is accepted and used.
+    await gen_setup.dst.execute("CREATE TABLE person (name text)")
+
+    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn} --driver psycopg")
+
+    assert result.exit_code == 0
+    assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
+
+
+async def test_generate_rejects_an_unknown_driver(gen_setup: GenerateSetup) -> None:
+    # An unsupported driver is a usage error, not an attempt with the default.
+    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn} --driver oracle")
+
+    assert result.exit_code == 2
+    assert "oracle" in result.output
 
 
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:

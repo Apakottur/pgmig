@@ -101,6 +101,7 @@ adds a few more (`—` in the library column):
 | `--ignore-schema`         | `ignore_schemas`     | Schema names to exclude from the diff entirely: their tables and every other object, and the `CREATE`/`DROP` of the schema itself, are ignored (even object kinds pgmig cannot otherwise process). The schema must be isolated — if it shares any dependency with a kept schema (a foreign key, a view read, a cross-schema type, …), pgmig errors rather than emit a migration that would fail at apply. Repeatable on the CLI; a list of names in the library. |
 | `--include-owner`        | `include_owner`      | Emit `ALTER ... OWNER TO` statements to reconcile ownership. Off by default: ownership references cluster-level roles that routinely differ across environments, so it is not part of the default convergence. |
 | `--include-grants`       | `include_grants`     | Also emit named-role `GRANT`/`REVOKE`. `PUBLIC` grants are always diffed (portable and apply-safe); named-role grants reference cluster-level roles that diverge across environments and fail on apply when the role is absent on the target, so they are opt-in. |
+| `--driver`               | `driver`             | Database driver to connect with: `auto` (default) or `psycopg`. `auto` picks among the supported drivers; naming one pins it. |
 | `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
 | `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 
@@ -126,6 +127,25 @@ Other commands:
 
 A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
 e.g. `postgresql://user:pass@host:5432/dbname`.
+
+### Drivers
+
+Connections are made through a database driver. `psycopg` is the only one implemented today,
+so `auto` always resolves to it; pin it explicitly if you want the choice fixed as more
+drivers are added:
+
+```shell
+pgmig generate --driver psycopg ...
+```
+
+```python
+import pgmig
+
+sql = pgmig.generate(source=..., target=..., driver=pgmig.DbDriver.PSYCOPG)
+```
+
+Connection errors name the driver that produced them, so it is clear which one was used
+when the choice was left to `auto`.
 
 ## FAQ
 
