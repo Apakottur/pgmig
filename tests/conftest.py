@@ -85,7 +85,7 @@ async def _admin_conn(request: pytest.FixtureRequest) -> AsyncIterator[DbConnect
     admin_db_conn_info = DbConnInfo(dsn=get_dsn("postgres"), label="admin")
 
     # Wait for the database server to be ready.
-    await wait_for_db_connection(db_conn_info=admin_db_conn_info.dsn)
+    await wait_for_db_connection(db_conn_info=admin_db_conn_info)
 
     # Open a single connection to the admin database for the whole session.
     async with DbConnection.connect(db_conn_info=admin_db_conn_info) as admin_conn:
