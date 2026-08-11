@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from pgmig._db import DbReadOnlyConnection
+from pgmig._db import DbConnInfo, DbReadOnlyConnection
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
     composite_type_dependencies,
@@ -108,9 +108,11 @@ class _IntrospectionPreflight(IntrospectionRow):
         return loaders
 
 
-async def introspect_db(*, dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIntrospectionResult:
+async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[str] = ()) -> DbIntrospectionResult:
     """
-    Build the full structure of the given database.
+    Run the database introspection for the given database.
+
+    Returns the full introspection result.
     """
     # Initialize the introspection result.
     db_introspection_result = DbIntrospectionResult(
@@ -124,7 +126,7 @@ async def introspect_db(*, dsn: str, ignore_schemas: Sequence[str] = ()) -> DbIn
         default_acl_by_key={},
     )
 
-    async with DbReadOnlyConnection.connect(dsn=dsn) as conn:
+    async with DbReadOnlyConnection.connect(db_conn_info=db_conn_info) as conn:
         # Run within the introspection context.
         with context.context_scope(
             conn=conn,

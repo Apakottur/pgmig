@@ -4,7 +4,7 @@ from pathlib import Path
 
 import tenacity
 
-from pgmig._db import DbConnection
+from pgmig._db import DbConnection, DbConnInfo
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
@@ -53,11 +53,11 @@ def get_dsn(db_name: str, *, pgbouncer: bool = False) -> str:
     stop=tenacity.stop_after_delay(10),
     reraise=True,
 )
-async def wait_for_db_connection(*, dsn: str) -> None:
+async def wait_for_db_connection(*, db_conn_info: DbConnInfo) -> None:
     """
     Wait for a database to be ready to accept connections.
     """
-    async with DbConnection.connect(dsn=dsn):
+    async with DbConnection.connect(db_conn_info=db_conn_info):
         pass
 
 

@@ -62,7 +62,7 @@ async def test_generate_connection_error_is_clean() -> None:
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "Could not connect to database" in result.output
+    assert "Could not connect to source database" in result.output
     assert "Traceback" not in result.output
 
 
