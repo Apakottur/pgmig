@@ -55,7 +55,7 @@ binary = [
 ]
 
 [project.scripts]
-pgmig = "pgmig._cli:app"
+pgmig = "pgmig._cli._cli:app"
 
 [project.urls]
 homepage = "https://github.com/Apakottur/pgmig"

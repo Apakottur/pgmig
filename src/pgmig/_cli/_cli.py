@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from pgmig._api import generate as generate_migration
+from pgmig._cli._error_format import format_error
 from pgmig._drivers import DbDriver
 from pgmig._errors import _PgmigError
 
@@ -135,7 +136,7 @@ def generate(
         )
     except _PgmigError as error:
         # Expected error - print message without traceback.
-        typer.echo(error.message, err=True)
+        typer.echo(format_error(error), err=True)
         raise typer.Exit(code=1) from error
     except Exception as error:
         # Internal error - print traceback and issue prompt.
