@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from pgmig._api import generate as generate_migration
+from pgmig._drivers import DbDriver
 from pgmig._errors import _PgmigError
 
 app = typer.Typer(
@@ -105,6 +106,13 @@ def generate(
             help="Also emit named-role GRANT / REVOKE (PUBLIC grants are always diffed).",
         ),
     ] = False,
+    driver: Annotated[
+        DbDriver,
+        typer.Option(
+            "--driver",
+            help="Database driver to connect with. 'auto' lets pgmig pick among the supported drivers.",
+        ),
+    ] = DbDriver.AUTO,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -123,6 +131,7 @@ def generate(
             ignore_schemas=ignore_schema or [],
             include_owner=include_owner,
             include_grants=include_grants,
+            driver=driver,
         )
     except _PgmigError as error:
         # Expected error - print message without traceback.

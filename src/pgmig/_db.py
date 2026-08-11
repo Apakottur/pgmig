@@ -7,6 +7,7 @@ import psycopg
 from psycopg.rows import class_row
 from pydantic import BaseModel
 
+from pgmig._drivers import DbDriver
 from pgmig._errors import _PgmigError
 
 _RowT = TypeVar("_RowT", bound=BaseModel)
@@ -29,6 +30,9 @@ class DbConnInfo:
 
     # Friendly label, used in error/log messages.
     label: str
+
+    # The driver to connect with.
+    driver: DbDriver = DbDriver.AUTO
 
 
 class DbConnection:

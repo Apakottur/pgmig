@@ -3,6 +3,7 @@ from collections.abc import Sequence
 
 from pgmig._db import DbConnInfo
 from pgmig._diff._engine import get_diff
+from pgmig._drivers import DbDriver
 from pgmig._errors import PgmigApiError
 from pgmig._introspect._engine import introspect_db
 
@@ -16,6 +17,7 @@ async def agenerate(
     ignore_schemas: Sequence[str] = (),
     include_owner: bool = False,
     include_grants: bool = False,
+    driver: DbDriver = DbDriver.AUTO,
 ) -> str:
     """
     Asynchronous equivalent of [`generate`][pgmig.generate].
@@ -35,11 +37,17 @@ async def agenerate(
                        part of the default convergence.
         include_grants: Also emit named-role GRANT / REVOKE. PUBLIC grants are always diffed;
                         named-role grants (role-dependent, may fail at apply) are opt-in.
+        driver: The database driver to connect with. AUTO (default) lets pgmig pick among the
+                supported drivers; naming one pins it.
     """
     # Introspect both databases concurrently.
     source_result, target_result = await asyncio.gather(
-        introspect_db(db_conn_info=DbConnInfo(dsn=source, label="source"), ignore_schemas=ignore_schemas),
-        introspect_db(db_conn_info=DbConnInfo(dsn=target, label="target"), ignore_schemas=ignore_schemas),
+        introspect_db(
+            db_conn_info=DbConnInfo(dsn=source, label="source", driver=driver), ignore_schemas=ignore_schemas
+        ),
+        introspect_db(
+            db_conn_info=DbConnInfo(dsn=target, label="target", driver=driver), ignore_schemas=ignore_schemas
+        ),
     )
 
     # Generate migration SQL.
@@ -62,6 +70,7 @@ def generate(
     ignore_schemas: Sequence[str] = (),
     include_owner: bool = False,
     include_grants: bool = False,
+    driver: DbDriver = DbDriver.AUTO,
 ) -> str:
     """
     Generate the migration SQL between the given source and target databases.
@@ -81,6 +90,8 @@ def generate(
                        part of the default convergence.
         include_grants: Also emit named-role GRANT / REVOKE. PUBLIC grants are always diffed;
                         named-role grants (role-dependent, may fail at apply) are opt-in.
+        driver: The database driver to connect with. AUTO (default) lets pgmig pick among the
+                supported drivers; naming one pins it.
 
     Raises:
         PgmigApiError: If called from within a running event loop. This synchronous wrapper
@@ -104,5 +115,6 @@ def generate(
             ignore_schemas=ignore_schemas,
             include_owner=include_owner,
             include_grants=include_grants,
+            driver=driver,
         )
     )
