@@ -9,7 +9,8 @@ import asyncio
 import statistics
 import time
 
-from pgmig._db import DbConnection
+from pgmig._db import DbConnection, DbConnInfo
+from pgmig._drivers import DbDriver
 from pgmig._introspect._engine import introspect_db
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
@@ -23,7 +24,9 @@ _ITERATIONS = 25
 
 
 async def _recreate_bench_db() -> None:
-    async with DbConnection.connect(dsn=_ADMIN_DSN, driver="psycopg") as admin:
+    async with DbConnection.connect(
+        db_conn_info=DbConnInfo(dsn=_ADMIN_DSN, label="admin", driver=DbDriver.PSYCOPG)
+    ) as admin:
         await admin.execute(f"DROP DATABASE IF EXISTS {_BENCH_DB} WITH (FORCE)")
         await admin.execute(f"CREATE DATABASE {_BENCH_DB}")
 
@@ -40,18 +43,22 @@ async def _populate() -> None:
     stmts.extend(f"CREATE VIEW v{i} AS SELECT id, name FROM t{i}" for i in range(_VIEWS))
     stmts.append("CREATE FUNCTION add(a integer, b integer) RETURNS integer LANGUAGE sql AS 'SELECT a + b'")
 
-    async with DbConnection.connect(dsn=_BENCH_DSN, driver="psycopg") as conn:
+    async with DbConnection.connect(
+        db_conn_info=DbConnInfo(dsn=_BENCH_DSN, label="bench", driver=DbDriver.PSYCOPG)
+    ) as conn:
         await conn.execute(";\n".join(stmts))
 
 
-async def _time_driver(driver: str) -> list[float]:
+async def _time_driver(driver: DbDriver) -> list[float]:
+    db_conn_info = DbConnInfo(dsn=_BENCH_DSN, label="bench", driver=driver)
+
     # Warm up (connection setup, prepared-statement caches) before timing.
-    await introspect_db(_BENCH_DSN, driver)  # type: ignore[arg-type]
+    await introspect_db(db_conn_info=db_conn_info)
 
     timings: list[float] = []
     for _ in range(_ITERATIONS):
         start = time.perf_counter()
-        await introspect_db(_BENCH_DSN, driver)  # type: ignore[arg-type]
+        await introspect_db(db_conn_info=db_conn_info)
         timings.append(time.perf_counter() - start)
     return timings
 
@@ -63,11 +70,13 @@ async def main() -> None:
     print(f"Introspecting {_TABLES} tables + {_VIEWS} views, {_ITERATIONS} iterations each.\n")
     print(f"{'driver':<10}{'mean (ms)':>12}{'min (ms)':>12}{'median (ms)':>14}")
     results: dict[str, float] = {}
-    for driver in ("psycopg", "asyncpg"):
+    for driver in (DbDriver.PSYCOPG, DbDriver.ASYNCPG):
         timings = await _time_driver(driver)
         mean_ms = statistics.mean(timings) * 1000
-        results[driver] = mean_ms
-        print(f"{driver:<10}{mean_ms:>12.2f}{min(timings) * 1000:>12.2f}{statistics.median(timings) * 1000:>14.2f}")
+        results[driver.value] = mean_ms
+        print(
+            f"{driver.value:<10}{mean_ms:>12.2f}{min(timings) * 1000:>12.2f}{statistics.median(timings) * 1000:>14.2f}"
+        )
 
     faster = min(results, key=lambda k: results[k])
     slower = max(results, key=lambda k: results[k])

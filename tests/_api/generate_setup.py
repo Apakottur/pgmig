@@ -1,7 +1,10 @@
+from collections.abc import Sequence
+
 import pytest
 
 from pgmig import PgmigUnsupportedError, agenerate
-from pgmig._db import DbConnection, Driver
+from pgmig._db import DbConnection
+from pgmig._drivers import DbDriver
 
 
 class GenerateSetup:
@@ -17,7 +20,7 @@ class GenerateSetup:
         src_conn: DbConnection,
         dst_conn: DbConnection,
         pg_major: int,
-        driver: Driver,
+        driver: DbDriver,
         unique_key: str,
     ) -> None:
         # Database names.
@@ -46,7 +49,9 @@ class GenerateSetup:
         both: list[str] | None = None,
         apply: bool = True,
         index_concurrently: bool = False,
-        ignore_owner: bool = False,
+        include_owner: bool = False,
+        include_grants: bool = False,
+        ignore_schemas: Sequence[str] = (),
     ) -> None:
         """
         Set up both databases, assert the generated migration, then apply and confirm it converges.
@@ -58,7 +63,9 @@ class GenerateSetup:
             both: statements to run on both databases.
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
-            ignore_owner: Pass through to `generate` to suppress ALTER ... OWNER TO statements.
+            include_owner: Pass through to `generate` to emit ALTER ... OWNER TO statements.
+            include_grants: Pass through to `generate` to emit named-role GRANT / REVOKE.
+            ignore_schemas: Pass through to `generate` to exclude these schemas from the diff.
         """
         # Shared setup runs on both DBs, before the side-specific statements.
         src = (both or []) + src
@@ -83,7 +90,9 @@ class GenerateSetup:
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
-            ignore_owner=ignore_owner,
+            include_owner=include_owner,
+            include_grants=include_grants,
+            ignore_schemas=ignore_schemas,
             driver=self.driver,
         )
 
@@ -98,7 +107,9 @@ class GenerateSetup:
                 source=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
-                ignore_owner=ignore_owner,
+                include_owner=include_owner,
+                include_grants=include_grants,
+                ignore_schemas=ignore_schemas,
                 driver=self.driver,
             )
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
@@ -110,6 +121,7 @@ class GenerateSetup:
         dst: list[str],
         both: list[str] | None = None,
         match: str | None = None,
+        ignore_schemas: Sequence[str] = (),
     ) -> None:
         """
         Wrapper around `assert_diff` that asserts the migration refuses the change with a
@@ -122,4 +134,5 @@ class GenerateSetup:
                 both=both,
                 diff=[],
                 apply=False,
+                ignore_schemas=ignore_schemas,
             )

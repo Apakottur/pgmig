@@ -2,7 +2,8 @@ from collections.abc import Iterator
 
 from pgmig._diff._core import Phase, Statement, ctx_iter_schema_pairs, recreated_matview_keys
 from pgmig._diff.indexes import diff_index_statements
-from pgmig._models import Index, ViewKey
+from pgmig._keys import RelationKey
+from pgmig._models import Index
 
 
 def generate() -> Iterator[Statement]:
@@ -10,7 +11,7 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of indexes on materialized views (create, drop, rename).
 
     An index is created after its matview exists, so all statements land in
-    Phase.MATVIEW_INDEX_CREATE, which follows Phase.VIEW_CREATE where matviews are created --
+    Phase.MATVIEW_INDEX_CREATE, which follows Phase.MATVIEW_CREATE where matviews are created --
     the ordering is a phase invariant, independent of generator registration order. A recreated
     matview loses every index; it is therefore diffed against an empty index set so all target
     indexes are created fresh. The shared recreated_matview_keys helper decides which matviews are
@@ -31,7 +32,7 @@ def generate() -> Iterator[Statement]:
             src_view = src_views.get(name)
             # A new or recreated matview starts with no indexes, so every target index must be
             # created fresh; otherwise diff against the source.
-            if src_view is None or ViewKey(schema_name, name) in recreated_keys:
+            if src_view is None or RelationKey(schema_name, name) in recreated_keys:
                 src_indexes: dict[str, Index] = {}
             else:
                 src_indexes = src_view.index_by_name

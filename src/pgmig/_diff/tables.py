@@ -1,27 +1,128 @@
 from collections.abc import Iterator
+from typing import NamedTuple, cast
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, _diff_comments, ctx_iter_table_pairs, diff_single_comment
+from pgmig._diff._core import (
+    Phase,
+    Statement,
+    _diff_comments,
+    ctx_iter_table_pairs,
+    diff_single_comment,
+    owner_statements,
+)
+from pgmig._diff.grants import grant_statements
 from pgmig._errors import PgmigUnsupportedError
+from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
 from pgmig._sql import comment_on, ident, qualified
+
+# Value bounds per integer type an identity column may use (smallint/integer/bigint only).
+# An identity sequence's default MINVALUE/MAXVALUE are derived from these and the increment
+# sign, so an explicitly-set bound can be told apart from a default one.
+_IDENTITY_TYPE_BOUNDS: dict[str, tuple[int, int]] = {
+    "smallint": (-32768, 32767),
+    "integer": (-2147483648, 2147483647),
+    "bigint": (-9223372036854775808, 9223372036854775807),
+}
+
+
+def _identity_options_clause(column: Column) -> str:
+    """
+    The " (OPTION value ...)" tail for an identity column's CREATE/ADD, listing only the
+    sequence options that differ from their defaults, or "" when every option is a default.
+
+    Defaults depend on the sign of the increment and on the column's integer type: an
+    ascending sequence runs 1..type_max and a descending one runs type_min..-1, and in both
+    cases the start defaults to the range's near end (MINVALUE ascending, MAXVALUE descending).
+    Call only for an identity column (every identity_* field is then set).
+    """
+    increment = cast("int", column.identity_increment)
+    type_min, type_max = _IDENTITY_TYPE_BOUNDS[column.type]
+    ascending = increment > 0
+    default_start = column.identity_min if ascending else column.identity_max
+    parts: list[str] = []
+    if column.identity_start != default_start:
+        parts.append(f"START WITH {column.identity_start}")
+    if increment != 1:
+        parts.append(f"INCREMENT BY {increment}")
+    if column.identity_min != (1 if ascending else type_min):
+        parts.append(f"MINVALUE {column.identity_min}")
+    if column.identity_max != (type_max if ascending else -1):
+        parts.append(f"MAXVALUE {column.identity_max}")
+    if column.identity_cache != 1:
+        parts.append(f"CACHE {column.identity_cache}")
+    if column.identity_cycle:
+        parts.append("CYCLE")
+    return f" ({' '.join(parts)})" if parts else ""
+
+
+def _identity_option_set_clauses(src_column: Column, dst_column: Column) -> list[str]:
+    """
+    The `SET <option>` clauses for the identity sequence options that differ between two
+    columns that are both identity columns. Chained into a single ALTER COLUMN by the caller.
+    A value returning to its default still differs from the source value, so it is emitted
+    (SET INCREMENT BY 1) rather than dropped, keeping the diff convergent.
+    """
+    clauses: list[str] = []
+    if src_column.identity_start != dst_column.identity_start:
+        clauses.append(f"SET START WITH {dst_column.identity_start}")
+    if src_column.identity_increment != dst_column.identity_increment:
+        clauses.append(f"SET INCREMENT BY {dst_column.identity_increment}")
+    if src_column.identity_min != dst_column.identity_min:
+        clauses.append(f"SET MINVALUE {dst_column.identity_min}")
+    if src_column.identity_max != dst_column.identity_max:
+        clauses.append(f"SET MAXVALUE {dst_column.identity_max}")
+    if src_column.identity_cache != dst_column.identity_cache:
+        clauses.append(f"SET CACHE {dst_column.identity_cache}")
+    if src_column.identity_cycle != dst_column.identity_cycle:
+        clauses.append("SET CYCLE" if dst_column.identity_cycle else "SET NO CYCLE")
+    return clauses
+
+
+class ColumnDiff(NamedTuple):
+    """
+    Column-sync statements split by phase. `statements` run in the TABLE phase;
+    `deferred_drop_not_null` must run after the CONSTRAINT phase (a DROP NOT NULL on a
+    column whose covering primary key is dropped this run -- Postgres refuses it while the
+    column is still in a primary key).
+    """
+
+    statements: list[str]
+    deferred_drop_not_null: list[str]
 
 
 def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
     """
-    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different
-    owner than the target.
-
-    Ownership of a newly created table (absent source) is not managed: it is left owned
-    by the role running the migration, so nothing is emitted here. Such a table only
-    reconciles to the target owner on a later run, once it exists on both sides and this
-    same-owner comparison applies.
-
-    With --ignore-owner, ownership reconciliation is skipped entirely.
+    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different owner
+    than the target. Delegates to the shared owner_statements (see it for the created-object
+    and --include-owner semantics).
     """
-    if context.ignore_owner or src_table is None or src_table.owner == dst_table.owner:
-        return []
-    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} OWNER TO {ident(dst_table.owner)};"]
+    return owner_statements(
+        "TABLE",
+        qualified(schema_name, dst_table.name),
+        None if src_table is None else src_table.owner,
+        dst_table.owner,
+    )
+
+
+def _table_grant_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
+    """
+    Emit GRANT/REVOKE to reconcile a table's ACL to the target's. Only called for a table
+    present on both sides (the alter path); a newly created table has no grants reconciled here
+    and, like owner, converges on a later run once it exists on both sides.
+
+    PUBLIC grants are always reconciled; named-role grants only under --include-grants (see
+    grant_statements).
+    """
+    return grant_statements(
+        "TABLE",
+        qualified(schema_name, dst_table.name),
+        src_table.grants,
+        dst_table.grants,
+        src_table.owner,
+        dst_table.owner,
+        include_named_roles=context.include_grants,
+    )
 
 
 def _parenthesize_generation(expression: str) -> str:
@@ -49,6 +150,17 @@ def _parenthesize_generation(expression: str) -> str:
     return f"({inner})"
 
 
+def _type_clause(column: Column) -> str:
+    """
+    The column's type, with a COLLATE clause when the column overrides the type's default
+    collation. Introspection only records a collation that differs from the type default, so
+    a non-collated column renders as the bare type.
+    """
+    if column.collation is not None:
+        return f"{column.type} COLLATE {ident(column.collation)}"
+    return column.type
+
+
 def _column_def(column: Column) -> str:
     """
     Render a column for CREATE TABLE / ADD COLUMN, with NOT NULL and DEFAULT inline.
@@ -62,19 +174,18 @@ def _column_def(column: Column) -> str:
     # implies NOT NULL and owns its backing sequence, both of which must not be emitted
     # alongside it (mirrors the serial pseudo-type above).
     if column.identity_clause is not None:
-        return f"{ident(column.name)} {column.type} {column.identity_clause}"
+        return f"{ident(column.name)} {column.type} {column.identity_clause}{_identity_options_clause(column)}"
 
     # A generated column carries its expression as a GENERATED ALWAYS AS (...) clause, not a
-    # DEFAULT. Virtual columns (PG18+) are unsupported. A stored generated column may still
+    # DEFAULT, followed by STORED or VIRTUAL (VIRTUAL is PG18+). A generated column may still
     # be NOT NULL, appended after the clause.
-    if column.generated == "v":
-        raise PgmigUnsupportedError(f"Virtual generated column is not supported: {ident(column.name)}")
-    if column.generated == "s":
+    if column.generated in ("s", "v"):
         expression = _parenthesize_generation(column.generation_expression or "")
-        clause = f"{ident(column.name)} {column.type} GENERATED ALWAYS AS {expression} STORED"
+        storage = "STORED" if column.generated == "s" else "VIRTUAL"
+        clause = f"{ident(column.name)} {_type_clause(column)} GENERATED ALWAYS AS {expression} {storage}"
         return f"{clause} NOT NULL" if column.not_null else clause
 
-    parts = [f"{ident(column.name)} {column.type}"]
+    parts = [f"{ident(column.name)} {_type_clause(column)}"]
     if column.default is not None:
         parts.append(f"DEFAULT {column.default}")
     if column.not_null:
@@ -89,12 +200,16 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
     A partition is created with PARTITION OF (no column list -- columns are inherited from
     the parent); a partitioned parent (or a sub-partitioned partition) carries a trailing
     PARTITION BY clause.
+
+    A partition child may be UNLOGGED independently of its (always-logged) parent, so the
+    keyword is emitted on both the plain and PARTITION OF forms.
     """
+    keyword = "UNLOGGED TABLE" if table.unlogged else "TABLE"
     if table.partition_parent is not None:
-        parent_schema, parent_name = table.partition_parent
+        parent = table.partition_parent
         statement = (
-            f"CREATE TABLE {qualified(schema_name, table.name)} "
-            f"PARTITION OF {qualified(parent_schema, parent_name)} {table.partition_bound}"
+            f"CREATE {keyword} {qualified(schema_name, table.name)} "
+            f"PARTITION OF {qualified(parent.schema, parent.name)} {table.partition_bound}"
         )
         if table.is_partitioned:
             statement += f" PARTITION BY {table.partition_key}"
@@ -102,28 +217,26 @@ def _create_table(schema_name: str, table: Table) -> list[str]:
 
     columns = ", ".join(_column_def(column) for column in table.columns)
     partition_by = f" PARTITION BY {table.partition_key}" if table.is_partitioned else ""
-    return [f"CREATE TABLE {qualified(schema_name, table.name)} ({columns}){partition_by};"]
+    return [f"CREATE {keyword} {qualified(schema_name, table.name)} ({columns}){partition_by};"]
 
 
-def _attach_partition(schema_name: str, table_name: str, parent: tuple[str, str], bound: str | None) -> str:
+def _attach_partition(schema_name: str, table_name: str, parent: RelationKey, bound: str | None) -> str:
     """
     ALTER TABLE <parent> ATTACH PARTITION <child> <bound> -- make an existing standalone
     table a partition.
     """
-    parent_schema, parent_name = parent
     return (
-        f"ALTER TABLE {qualified(parent_schema, parent_name)} "
+        f"ALTER TABLE {qualified(parent.schema, parent.name)} "
         f"ATTACH PARTITION {qualified(schema_name, table_name)} {bound};"
     )
 
 
-def _detach_partition(schema_name: str, table_name: str, parent: tuple[str, str]) -> str:
+def _detach_partition(schema_name: str, table_name: str, parent: RelationKey) -> str:
     """
     ALTER TABLE <parent> DETACH PARTITION <child> -- turn a partition back into a
     standalone table (the table itself survives).
     """
-    parent_schema, parent_name = parent
-    return f"ALTER TABLE {qualified(parent_schema, parent_name)} DETACH PARTITION {qualified(schema_name, table_name)};"
+    return f"ALTER TABLE {qualified(parent.schema, parent.name)} DETACH PARTITION {qualified(schema_name, table_name)};"
 
 
 def _alter_columns(
@@ -134,15 +247,15 @@ def _alter_columns(
     dst_table: Table,
     pk_columns: set[str],
     src_pk_columns: set[str],
-) -> tuple[list[str], list[str]]:
+) -> ColumnDiff:
     """
     Sync the columns of a table present on both sides: add/drop by name, and for a
     shared column sync TYPE, then DEFAULT, then NOT NULL. An identity or serial change is
     unsupported and raises rather than emitting a silently-empty (falsely converged)
     migration.
 
-    Returns (statements, deferred_drop_not_null). The first run in the TABLE phase; the
-    second must run after the CONSTRAINT phase (see below).
+    Returns a ColumnDiff: TABLE-phase statements plus the DROP NOT NULLs deferred past the
+    CONSTRAINT phase (see below).
 
     A column covered by a target primary key (`pk_columns`) is made NOT NULL by the
     ADD PRIMARY KEY, so its standalone SET NOT NULL is skipped. The mirror case: a column
@@ -153,8 +266,8 @@ def _alter_columns(
     """
     statements: list[str] = []
     deferred_drop_not_null: list[str] = []
-    src_columns = {column.name: column for column in src_table.columns}
-    dst_columns = {column.name: column for column in dst_table.columns}
+    src_columns = src_table.column_by_name
+    dst_columns = dst_table.column_by_name
 
     for column_name in sorted(src_columns.keys() | dst_columns.keys()):
         if column_name not in src_columns:
@@ -174,7 +287,7 @@ def _alter_columns(
             )
             statements.extend(column_statements)
             deferred_drop_not_null.extend(column_deferred)
-    return statements, deferred_drop_not_null
+    return ColumnDiff(statements, deferred_drop_not_null)
 
 
 def _alter_shared_column(
@@ -186,14 +299,14 @@ def _alter_shared_column(
     dst_column: Column,
     pk_columns: set[str],
     src_pk_columns: set[str],
-) -> tuple[list[str], list[str]]:
+) -> ColumnDiff:
     """
     Sync one column present on both sides: TYPE, then DEFAULT, then NOT NULL, with the
     identity ADD/SET/DROP interleaved in the order Postgres requires. An identity or serial
     change that cannot be expressed raises rather than emitting a silently-empty diff.
 
-    Returns (statements, deferred_drop_not_null) for this column; see `_alter_columns` for
-    why a DROP NOT NULL on a source-PK column is deferred past the CONSTRAINT phase.
+    Returns a ColumnDiff for this column; see `_alter_columns` for why a DROP NOT NULL on a
+    source-PK column is deferred past the CONSTRAINT phase.
     """
     statements: list[str] = []
     deferred_drop_not_null: list[str] = []
@@ -213,15 +326,31 @@ def _alter_shared_column(
             f"{qualified(schema_name, table_name)}.{ident(column_name)} "
             f"{src_column.serial_type} -> {dst_column.serial_type}"
         )
-    # Generated columns cannot be altered in place: Postgres has no ADD GENERATED,
-    # and a generation-expression change has no in-place ALTER (pre-PG18). Raise on a
-    # generated-ness flip or an expression change rather than mis-diff. A generated
+    # A generated-ness change (plain <-> generated, or STORED <-> VIRTUAL) has no in-place
+    # ALTER and is potentially destructive (Postgres has no ADD GENERATED, and switching
+    # storage rebuilds the column), so it still raises rather than mis-diff. A generated
     # column's `default` is None on both sides, so the DEFAULT sync below is inert.
-    if src_column.generated != dst_column.generated or (
-        src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
-    ):
+    if src_column.generated != dst_column.generated:
         raise PgmigUnsupportedError(
             f"Column generated change is not supported: {qualified(schema_name, table_name)}.{ident(column_name)}"
+        )
+    # A generation-expression change on a column that keeps the same generated kind is
+    # supported. A STORED column's data is derived, so it is rebuilt non-destructively with
+    # DROP COLUMN + ADD COLUMN (portable to pre-PG18, which has no in-place expression ALTER);
+    # the re-added definition carries the new expression, type and NOT NULL, so no further
+    # per-column sync is needed. A VIRTUAL column (PG18+) has no stored data and changes in
+    # place with SET EXPRESSION AS (...), handled after the type change below.
+    expression_changed = (
+        src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
+    )
+    if expression_changed and src_column.generated == "s":
+        table_prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
+        return ColumnDiff(
+            [
+                f"{table_prefix} DROP COLUMN {ident(column_name)};",
+                f"{table_prefix} ADD COLUMN {_column_def(dst_column)};",
+            ],
+            [],
         )
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)} ALTER COLUMN {ident(column_name)}"
     # Emit order matters: drops before adds. Postgres refuses ADD IDENTITY on a
@@ -239,11 +368,18 @@ def _alter_shared_column(
     # A generated column is the exception: Postgres recomputes it from its
     # expression on a type change and refuses USING ("cannot specify USING when
     # altering type of generated column"), so the USING clause is omitted for it.
-    if src_column.type != dst_column.type:
+    if (src_column.type, src_column.collation) != (dst_column.type, dst_column.collation):
         if dst_column.generated != "":
-            statements.append(f"{prefix} TYPE {dst_column.type};")
+            statements.append(f"{prefix} TYPE {_type_clause(dst_column)};")
         else:
-            statements.append(f"{prefix} TYPE {dst_column.type} USING {ident(column_name)}::{dst_column.type};")
+            statements.append(
+                f"{prefix} TYPE {_type_clause(dst_column)} USING {ident(column_name)}::{dst_column.type};"
+            )
+    # A VIRTUAL generated column's expression is changed in place (PG18+); STORED is rebuilt
+    # via DROP + ADD above, which returns early, so only VIRTUAL reaches here.
+    if expression_changed:
+        expression = _parenthesize_generation(dst_column.generation_expression or "")
+        statements.append(f"{prefix} SET EXPRESSION AS {expression};")
     if identity_changed and dst_column.identity_kind is None:
         # Loses its identity. The owned identity sequence drops with it; the
         # column stays NOT NULL (handled by the NOT NULL block below).
@@ -260,10 +396,17 @@ def _alter_shared_column(
             # NOT NULL block below is skipped for identity targets, so no double).
             if not src_column.not_null:
                 statements.append(f"{prefix} SET NOT NULL;")
-            statements.append(f"{prefix} ADD {dst_column.identity_clause};")
+            statements.append(f"{prefix} ADD {dst_column.identity_clause}{_identity_options_clause(dst_column)};")
         else:
             # Stays an identity, generation kind flips (ALWAYS <-> BY DEFAULT).
             statements.append(f"{prefix} SET GENERATED {dst_column.identity_kind};")
+    # Sequence-option changes on a column that is an identity on both sides. A column that
+    # gains its identity here carries these options inline in the ADD above (src has no
+    # identity, so this is skipped); one that loses its identity has no sequence to alter.
+    if src_column.identity_kind is not None and dst_column.identity_kind is not None:
+        option_clauses = _identity_option_set_clauses(src_column, dst_column)
+        if option_clauses:
+            statements.append(f"{prefix} {' '.join(option_clauses)};")
     if dst_column.default is not None and src_column.default != dst_column.default:
         statements.append(f"{prefix} SET DEFAULT {dst_column.default};")
     if src_column.not_null != dst_column.not_null:
@@ -277,7 +420,70 @@ def _alter_shared_column(
             deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")
         else:
             statements.append(f"{prefix} DROP NOT NULL;")
-    return statements, deferred_drop_not_null
+    return ColumnDiff(statements, deferred_drop_not_null)
+
+
+def _persistence_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... SET LOGGED / SET UNLOGGED when a table's durability flips between
+    sides. Applies to plain tables and partition children alike (a partitioned parent is
+    always logged, so it never flips here).
+    """
+    if src_table.unlogged == dst_table.unlogged:
+        return []
+    action = "SET UNLOGGED" if dst_table.unlogged else "SET LOGGED"
+    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} {action};"]
+
+
+def _rls_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... {ENABLE|DISABLE} ROW LEVEL SECURITY and ... {FORCE|NO FORCE} ROW LEVEL
+    SECURITY when a table's RLS flags flip. CREATE TABLE has no inline RLS syntax, so a fresh
+    table (src None, both flags default off) gets the ALTERs here too. ENABLE precedes FORCE.
+    """
+    src_enabled, src_forced = (
+        (False, False) if src_table is None else (src_table.row_security, src_table.force_row_security)
+    )
+    prefix = f"ALTER TABLE {qualified(schema_name, dst_table.name)}"
+    statements = []
+    if src_enabled != dst_table.row_security:
+        statements.append(f"{prefix} {'ENABLE' if dst_table.row_security else 'DISABLE'} ROW LEVEL SECURITY;")
+    if src_forced != dst_table.force_row_security:
+        statements.append(f"{prefix} {'FORCE' if dst_table.force_row_security else 'NO FORCE'} ROW LEVEL SECURITY;")
+    return statements
+
+
+def _replica_identity_clause(table: Table) -> str:
+    """
+    Render the REPLICA IDENTITY clause matching a table's stored relreplident.
+    """
+    match table.replica_identity:
+        case "d":
+            return "REPLICA IDENTITY DEFAULT"
+        case "n":
+            return "REPLICA IDENTITY NOTHING"
+        case "f":
+            return "REPLICA IDENTITY FULL"
+        case "i":
+            # replica_identity_index is always set when relreplident is 'i' (see tables.sql).
+            return f"REPLICA IDENTITY USING INDEX {ident(table.replica_identity_index or '')}"
+        case _:
+            raise PgmigUnsupportedError(f"Unknown replica identity: {table.replica_identity!r}")
+
+
+def _replica_identity_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
+    """
+    Emit ALTER TABLE ... REPLICA IDENTITY when the (mode, index) pair differs from source.
+    An absent source table (a fresh CREATE) starts at the default ('d'), so a non-default
+    target identity is emitted for a new table too. The statement lands in the
+    REPLICA_IDENTITY phase because USING INDEX references an index by name, which must exist
+    (created/renamed in the INDEX/CONSTRAINT phases) first.
+    """
+    src_identity = ("d", None) if src_table is None else (src_table.replica_identity, src_table.replica_identity_index)
+    dst_identity = (dst_table.replica_identity, dst_table.replica_identity_index)
+    if src_identity == dst_identity:
+        return []
+    return [f"ALTER TABLE {qualified(schema_name, dst_table.name)} {_replica_identity_clause(dst_table)};"]
 
 
 def _table_comment_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
@@ -296,8 +502,8 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     Emit COMMENT ON COLUMN for every target column whose comment differs from the
     source (absent source column = no comment). A separate statement; not inline.
     """
-    src_columns = {column.name: column for column in src_table.columns} if src_table else {}
-    dst_columns = {column.name: column for column in dst_table.columns}
+    src_columns = src_table.column_by_name if src_table else {}
+    dst_columns = dst_table.column_by_name
 
     return _diff_comments(
         src_columns,
@@ -306,14 +512,14 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     )
 
 
-def _partition_depth(key: tuple[str, str], table_map: dict[tuple[str, str], Table]) -> int:
+def _partition_depth(key: RelationKey, table_map: dict[RelationKey, Table]) -> int:
     """
     Depth of a table in the partition hierarchy (0 = root / not a partition), walking the
     partition_parent chain within `table_map`. Sorting creates by depth guarantees a
     parent is created before its partitions (and sub-partitions).
     """
     depth = 0
-    seen: set[tuple[str, str]] = set()
+    seen: set[RelationKey] = set()
     table: Table | None = table_map.get(key)
     while table is not None and table.partition_parent is not None and table.partition_parent not in seen:
         seen.add(table.partition_parent)
@@ -322,21 +528,43 @@ def _partition_depth(key: tuple[str, str], table_map: dict[tuple[str, str], Tabl
     return depth
 
 
+def _partition_key_changed(src_table: Table, dst_table: Table) -> bool:
+    """
+    Whether a table's declarative partitioning key or strategy differs between the two sides
+    (including a plain table gaining or losing PARTITION BY). Postgres has no in-place ALTER
+    for this, so the table diff recreates the whole subtree destructively (see `generate`).
+    """
+    return (src_table.is_partitioned or dst_table.is_partitioned) and (
+        src_table.partition_strategy != dst_table.partition_strategy
+        or src_table.partition_key != dst_table.partition_key
+    )
+
+
+def _source_subtree(root: RelationKey, src_map: dict[RelationKey, Table]) -> set[RelationKey]:
+    """
+    Every source table in the partition subtree rooted at `root` (inclusive): the root plus
+    all of its partitions, sub-partitions, and so on, walking `partition_parent` links.
+    """
+    subtree = {root}
+    # Fixed-point loop: a table joins once its parent is in the subtree. Bounded by len(src_map).
+    added = True
+    while added:
+        added = False
+        for key, table in src_map.items():
+            if key not in subtree and table.partition_parent in subtree:
+                subtree.add(key)
+                added = True
+    return subtree
+
+
 def _membership_statements(schema_name: str, table_name: str, src_table: Table, dst_table: Table) -> list[str]:
     """
     Statements reconciling a table's partition membership across the diff: ATTACH a
-    standalone table, DETACH a partition, or re-parent (detach + attach). Changes Postgres
-    cannot make in place -- partition key/strategy, or a bound change on the same parent --
-    raise rather than emit a data-destructive DROP + CREATE.
+    standalone table, DETACH a partition, re-parent (detach + attach), or re-bound on the
+    same parent (detach + attach at the new bound). A partition key/strategy change cannot be
+    made in place and is handled earlier by `generate` (destructive subtree recreate), so it
+    never reaches here.
     """
-    if (src_table.is_partitioned or dst_table.is_partitioned) and (
-        src_table.partition_strategy != dst_table.partition_strategy
-        or src_table.partition_key != dst_table.partition_key
-    ):
-        raise PgmigUnsupportedError(
-            f"Partition key/strategy change is not supported: {qualified(schema_name, table_name)}"
-        )
-
     src_parent = src_table.partition_parent
     dst_parent = dst_table.partition_parent
     if src_parent is not None and dst_parent is not None:
@@ -347,9 +575,14 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
                 _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
             ]
         if src_table.partition_bound != dst_table.partition_bound:
-            raise PgmigUnsupportedError(
-                f"Partition bound change is not supported: {qualified(schema_name, table_name)}"
-            )
+            # Bound change on the same parent: no in-place ALTER exists, but DETACH then
+            # re-ATTACH at the new bound is non-destructive (the table and its rows
+            # survive; Postgres validates the rows against the new bound on ATTACH, same
+            # as any ATTACH).
+            return [
+                _detach_partition(schema_name, table_name, dst_parent),
+                _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
+            ]
         return []
     if src_parent is not None:
         return [_detach_partition(schema_name, table_name, src_parent)]
@@ -363,14 +596,52 @@ def generate() -> Iterator[Statement]:
     Generate the migration SQL of tables: create, alter, or drop, plus partition
     attach/detach and table/column comment sync.
 
-    Emission order within the TABLE phase is create -> alter -> drop, and creates are
-    ordered parent-before-child, so a partition is always created after (or attached to) an
-    existing parent. Dropping a partitioned parent cascades to its partitions, so a
-    partition whose parent is also dropped is skipped.
+    Emission order within the TABLE phase is recreate-drop -> create -> alter -> drop, and
+    creates are ordered parent-before-child, so a partition is always created after (or
+    attached to) an existing parent. Dropping a partitioned parent cascades to its partitions,
+    so a partition whose parent is also dropped is skipped.
     """
     pairs = list(ctx_iter_table_pairs())
-    src_map = {(schema, name): src for schema, name, src, _dst in pairs if src is not None}
-    dst_map = {(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
+    src_map = {RelationKey(schema, name): src for schema, name, src, _dst in pairs if src is not None}
+    dst_map = {RelationKey(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
+
+    # Partition key/strategy change: Postgres has no in-place ALTER for the partition key, so
+    # the only path is a destructive recreate of the whole partition subtree -- DROP the parent
+    # (its partitions cascade away, DELETING THEIR DATA) and re-CREATE the parent and every
+    # target partition from scratch. This is intentionally destructive; a future safety-level
+    # flag may gate or refuse it (see the recreate note below). To recreate through the existing
+    # create paths, the affected source tables are removed from the source model, so tables,
+    # indexes, constraints, triggers and comments are all re-emitted as if newly created (their
+    # old copies vanish with the cascading DROP); an explicit DROP of each subtree root is
+    # emitted first. A root nested inside another recreated subtree is not dropped explicitly --
+    # its ancestor's DROP already cascades to it.
+    #
+    # NOTE: this recreate deletes data and, if another table's foreign key references the
+    # subtree, its plain DROP TABLE fails loudly at apply rather than silently cascading. A
+    # planned safety-level flag may later refuse or gate this path; when it lands, revisit this.
+    recreate_drops: list[str] = []
+    recreate_roots = [
+        RelationKey(schema_name, table_name)
+        for schema_name, table_name, src_table, dst_table in pairs
+        if src_table is not None and dst_table is not None and _partition_key_changed(src_table, dst_table)
+    ]
+    if recreate_roots:
+        removed: set[RelationKey] = set()
+        for root in recreate_roots:
+            removed |= _source_subtree(root, src_map)
+        # Explicit DROP for each subtree top -- a removed table whose parent is not itself
+        # removed; a nested table (its parent is also removed) cascades from that DROP.
+        for key in sorted(removed, key=lambda relation: (relation.schema, relation.name)):
+            parent = src_map[key].partition_parent
+            if parent is None or parent not in removed:
+                recreate_drops.append(f"DROP TABLE {qualified(key.schema, key.name)};")
+        # Remove the whole source subtree so every generator treats these as create-from-scratch.
+        for key in removed:
+            del context.source.schema_by_name[key.schema].table_by_name[key.name]
+        # Rebuild pairs/maps from the mutated source.
+        pairs = list(ctx_iter_table_pairs())
+        src_map = {RelationKey(schema, name): src for schema, name, src, _dst in pairs if src is not None}
+        dst_map = {RelationKey(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
 
     creates: list[tuple[str, str, Table]] = []
     alters: list[tuple[str, str, Table, Table]] = []
@@ -383,19 +654,32 @@ def generate() -> Iterator[Statement]:
         else:
             alters.append((schema_name, table_name, src_table, dst_table))
 
+    # Recreate-drop: DROP each repartitioned subtree root before anything is (re)created, so
+    # the CREATE of the same-named parent below does not collide with the old one.
+    for sql in recreate_drops:
+        yield Statement(Phase.TABLE, sql)
+
     # Create: parent before child (and comments; a new table has no source owner to sync).
-    creates.sort(key=lambda item: (_partition_depth((item[0], item[1]), dst_map), item[0], item[1]))
+    creates.sort(key=lambda item: (_partition_depth(RelationKey(item[0], item[1]), dst_map), item[0], item[1]))
     for schema_name, _table_name, dst_table in creates:
         rendered = _create_table(schema_name, dst_table)
+        rendered += _rls_statements(schema_name, None, dst_table)
         rendered += _table_comment_statements(schema_name, None, dst_table)
         rendered += _column_comment_statements(schema_name, None, dst_table)
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
+        # Replica identity is phased after the table's indexes exist (USING INDEX).
+        for sql in _replica_identity_statements(schema_name, None, dst_table):
+            yield Statement(Phase.REPLICA_IDENTITY, sql)
 
     # Alter: membership transitions, then columns (skipped for a partition child, whose
     # columns are inherited), then owner and comments.
     for schema_name, table_name, src_table, dst_table in alters:
         rendered = _membership_statements(schema_name, table_name, src_table, dst_table)
+        # Persistence and RLS flips apply to partition children too, so they are outside the
+        # is_partition column-diff gate below.
+        rendered += _persistence_statements(schema_name, src_table, dst_table)
+        rendered += _rls_statements(schema_name, src_table, dst_table)
         deferred_drop_not_null: list[str] = []
         if not dst_table.is_partition:
             column_statements, deferred_drop_not_null = _alter_columns(
@@ -412,15 +696,22 @@ def generate() -> Iterator[Statement]:
         rendered += _column_comment_statements(schema_name, src_table, dst_table)
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
+        # ACL reconciliation is phased after every object exists (GRANT/REVOKE targets).
+        for sql in _table_grant_statements(schema_name, src_table, dst_table):
+            yield Statement(Phase.GRANT, sql)
         # DROP NOT NULL for a column whose covering primary key drops this run must run
         # after the CONSTRAINT-phase DROP CONSTRAINT.
         for sql in deferred_drop_not_null:
             yield Statement(Phase.COLUMN_DROP_NOT_NULL, sql)
+        # Replica identity is phased after INDEX/CONSTRAINT so a USING INDEX target exists;
+        # outside the is_partition gate, as a partition child carries its own identity.
+        for sql in _replica_identity_statements(schema_name, src_table, dst_table):
+            yield Statement(Phase.REPLICA_IDENTITY, sql)
 
     # Drop: skip a partition whose parent is also dropped (the parent's DROP TABLE
     # cascades to it). Attached objects are dropped with the table.
     for schema_name, table_name in drops:
-        parent = src_map[schema_name, table_name].partition_parent
+        parent = src_map[RelationKey(schema_name, table_name)].partition_parent
         if parent is not None and parent in src_map and parent not in dst_map:
             continue
         yield Statement(Phase.TABLE, f"DROP TABLE {qualified(schema_name, table_name)};")

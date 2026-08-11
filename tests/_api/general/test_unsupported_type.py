@@ -1,33 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-async def test_range_type_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A range type (pg_type typtype 'r') is not modelled yet and must raise.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TYPE float_range AS RANGE (subtype = float8)"],
-        match=r"range type .* is not supported",
-    )
-
-
-async def test_instead_of_trigger_on_view_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    An INSTEAD OF trigger on a view (pg_trigger on relkind 'v') is not modelled and must raise
-    rather than be silently ignored.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=[
-            "CREATE VIEW v AS SELECT 1 AS n",
-            "CREATE FUNCTION v_trig() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END;$$",
-            "CREATE TRIGGER v_ins INSTEAD OF INSERT ON v FOR EACH ROW EXECUTE FUNCTION v_trig()",
-        ],
-        match=r"INSTEAD OF trigger .* is not supported",
-    )
-
-
 async def test_rule_raises_not_supported(gen_setup: GenerateSetup) -> None:
     """
     A user rule (pg_rewrite, not a view's auto _RETURN rule) is not modelled and must raise.
@@ -48,29 +21,6 @@ async def test_view_return_rule_not_reported(gen_setup: GenerateSetup) -> None:
         src=[],
         dst=["CREATE VIEW v AS SELECT 1 AS n"],
         diff=['CREATE VIEW "public"."v" AS SELECT 1 AS n'],
-    )
-
-
-async def test_rls_policy_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A row-level security policy (pg_policy) is not modelled and must raise.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TABLE t (n integer)", "CREATE POLICY t_pol ON t USING (true)"],
-        match=r"row-level security policy .* is not supported",
-    )
-
-
-async def test_rls_enabled_table_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    A table with row-level security enabled but no policy (pg_class.relrowsecurity) changes
-    access semantics that are not modelled, so it must raise rather than converge silently.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TABLE t (n integer)", "ALTER TABLE t ENABLE ROW LEVEL SECURITY"],
-        match=r"row-level security .* is not supported",
     )
 
 

@@ -1,3 +1,5 @@
+import pytest
+
 from tests._api.generate_setup import GenerateSetup
 
 # Shared setup: a referenced table (with a primary key) and a referencing table, on both sides.
@@ -80,6 +82,116 @@ async def test_foreign_key_unchanged(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_foreign_key_add_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Foreign key created with DEFERRABLE INITIALLY DEFERRED -> ADD CONSTRAINT carries the clause.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) DEFERRABLE INITIALLY DEFERRED"
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) DEFERRABLE INITIALLY DEFERRED"
+        ],
+    )
+
+
+async def test_foreign_key_make_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Only the deferrability differs (not deferrable -> deferrable initially deferred): emit a
+    single ALTER CONSTRAINT rather than dropping and re-adding the constraint.
+    """
+    await gen_setup.assert_diff(
+        both=[
+            *_TABLES,
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)",
+        ],
+        src=[],
+        dst=[
+            "ALTER TABLE person DROP CONSTRAINT person_team_fkey",
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) DEFERRABLE INITIALLY DEFERRED",
+        ],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" DEFERRABLE INITIALLY DEFERRED'],
+    )
+
+
+async def test_foreign_key_make_not_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Deferrability drops away (deferrable initially deferred -> not deferrable): a single
+    ALTER CONSTRAINT ... NOT DEFERRABLE.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) DEFERRABLE INITIALLY DEFERRED"
+        ],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" NOT DEFERRABLE'],
+    )
+
+
+async def test_foreign_key_deferred_to_immediate(gen_setup: GenerateSetup) -> None:
+    """
+    Deferrable on both sides, only the initial timing differs (deferred -> immediate):
+    ALTER CONSTRAINT ... DEFERRABLE INITIALLY IMMEDIATE.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) DEFERRABLE INITIALLY DEFERRED"
+        ],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) DEFERRABLE INITIALLY IMMEDIATE"
+        ],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" DEFERRABLE INITIALLY IMMEDIATE'],
+    )
+
+
+async def test_foreign_key_deferrable_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical deferrable foreign key on both sides -> no migration SQL.
+    """
+    await gen_setup.assert_diff(
+        both=[
+            *_TABLES,
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) DEFERRABLE INITIALLY DEFERRED",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
+    )
+
+
+async def test_foreign_key_deferrability_and_definition_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    Both the deferrability and the referential action change at once: this is a real
+    definition change, so it falls back to DROP + ADD (the ALTER CONSTRAINT fast path only
+    covers a pure deferrability difference).
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED",
+        ],
+    )
+
+
 async def test_foreign_key_add_ordered_after_referenced_pk(gen_setup: GenerateSetup) -> None:
     """
     Creating referenced and referencing tables together: the referenced PRIMARY KEY
@@ -119,6 +231,75 @@ async def test_foreign_key_drop_ordered_before_referenced_table(gen_setup: Gener
     )
 
 
+async def test_foreign_key_add_not_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    A NOT ENFORCED foreign key (Postgres 18+) rides through pg_get_constraintdef on a fresh ADD.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED"
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) NOT ENFORCED"
+        ],
+    )
+
+
+async def test_foreign_key_enforce_to_not_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    Only the enforced state differs (Postgres 18+): ALTER CONSTRAINT ... NOT ENFORCED, not drop + re-add.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED"
+        ],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" NOT ENFORCED'],
+    )
+
+
+async def test_foreign_key_not_enforced_to_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    The reverse enforced-state change (Postgres 18+): ALTER CONSTRAINT ... ENFORCED.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED"
+        ],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=['ALTER TABLE "public"."person" ALTER CONSTRAINT "person_team_fkey" ENFORCED'],
+    )
+
+
+async def test_foreign_key_not_enforced_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical NOT ENFORCED foreign key on both sides (Postgres 18+) -> no migration SQL.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        both=[
+            *_TABLES,
+            "ALTER TABLE person ADD CONSTRAINT person_team_fkey "
+            "FOREIGN KEY (team_id) REFERENCES team (id) NOT ENFORCED",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
+    )
+
+
 async def test_foreign_key_dropped_with_its_own_table_before_referenced_table(gen_setup: GenerateSetup) -> None:
     """
     Both the referencing table and the referenced table are dropped: the FOREIGN KEY
@@ -136,5 +317,50 @@ async def test_foreign_key_dropped_with_its_own_table_before_referenced_table(ge
             'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
             'DROP TABLE "public"."person"',
             'DROP TABLE "public"."team"',
+        ],
+    )
+
+
+async def test_foreign_key_validate(gen_setup: GenerateSetup) -> None:
+    """
+    Foreign key is NOT VALID in source, valid in target (same definition) ->
+    VALIDATE CONSTRAINT in place, not a drop-and-recheck under a stronger lock.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT VALID"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        diff=['ALTER TABLE "public"."person" VALIDATE CONSTRAINT "person_team_fkey"'],
+    )
+
+
+async def test_foreign_key_becomes_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    Foreign key is valid in source, NOT VALID in target -> Postgres has no un-validate
+    ALTER, so drop and re-add it NOT VALID.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT VALID"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_team_fkey"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) NOT VALID",
+        ],
+    )
+
+
+async def test_foreign_key_add_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    New foreign key created NOT VALID -> the NOT VALID rides in the definition.
+    """
+    await gen_setup.assert_diff(
+        both=_TABLES,
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_team_fkey FOREIGN KEY (team_id) REFERENCES team (id) NOT VALID"],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_team_fkey" '
+            "FOREIGN KEY (team_id) REFERENCES public.team(id) NOT VALID"
         ],
     )

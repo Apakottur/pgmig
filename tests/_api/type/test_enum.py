@@ -58,6 +58,31 @@ async def test_enum_add_value_inserted(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_enum_rename_value(gen_setup: GenerateSetup) -> None:
+    """
+    A value renamed in place (same length, same order) -> ALTER TYPE RENAME VALUE.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'fine', 'happy')"],
+        diff=["ALTER TYPE \"public\".\"mood\" RENAME VALUE 'ok' TO 'fine'"],
+    )
+
+
+async def test_enum_rename_multiple_values(gen_setup: GenerateSetup) -> None:
+    """
+    Two independent renames at once -> one RENAME VALUE per differing position.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
+        dst=["CREATE TYPE mood AS ENUM ('down', 'ok', 'glad')"],
+        diff=[
+            "ALTER TYPE \"public\".\"mood\" RENAME VALUE 'sad' TO 'down'",
+            "ALTER TYPE \"public\".\"mood\" RENAME VALUE 'happy' TO 'glad'",
+        ],
+    )
+
+
 async def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Identical enum on both sides -> no migration SQL.
@@ -66,26 +91,6 @@ async def test_enum_unchanged(gen_setup: GenerateSetup) -> None:
         src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
         dst=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
         diff=[],
-    )
-
-
-async def test_enum_value_removal_unsupported(gen_setup: GenerateSetup) -> None:
-    """
-    Removing a value is unsupported -> UnsupportedChangeError.
-    """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')"],
-        dst=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
-    )
-
-
-async def test_enum_value_reorder_unsupported(gen_setup: GenerateSetup) -> None:
-    """
-    Reordering values is unsupported -> UnsupportedChangeError.
-    """
-    await gen_setup.assert_unsupported(
-        src=["CREATE TYPE mood AS ENUM ('sad', 'happy')"],
-        dst=["CREATE TYPE mood AS ENUM ('happy', 'sad')"],
     )
 
 

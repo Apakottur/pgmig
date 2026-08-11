@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from pgmig._diff import (
     composite_types,
     constraints,
+    default_privileges,
     domains,
     enums,
     extensions,
@@ -10,6 +11,8 @@ from pgmig._diff import (
     indexes,
     materialized_views,
     matview_indexes,
+    policies,
+    range_types,
     schemas,
     sequences,
     tables,
@@ -23,17 +26,18 @@ from pgmig._models import DbIntrospectionResult
 # Cross-phase ordering is decided by each statement's phase, but WITHIN a single phase
 # statements keep this registration order (the collection loop is a stable sort). So this
 # order is load-bearing wherever two kinds share a phase and one depends on the other:
-#   enums before domains before composite_types -- a domain/composite may use an earlier type
-#     (all Phase.TYPE_CREATE);
+#   enums before domains before composite_types before range_types -- a later type may use an
+#     earlier one as a field/base/subtype (all Phase.TYPE_CREATE);
 # matview indexes no longer belong here: they were split into Phase.MATVIEW_INDEX_CREATE so
 # their dependency on the matview create (Phase.VIEW_CREATE) is structural, not registration-
 # order luck. A new object kind is a new module plus one entry here.
-_GENERATORS: tuple[Generator, ...] = (
+_GENERATORS: list[Generator] = [
     schemas.generate,
     extensions.generate,
     enums.generate,
     domains.generate,
     composite_types.generate,
+    range_types.generate,
     sequences.generate,
     tables.generate,
     indexes.generate,
@@ -41,10 +45,12 @@ _GENERATORS: tuple[Generator, ...] = (
     constraints.generate_foreign_keys,
     functions.generate,
     triggers.generate,
+    policies.generate,
     views.generate,
     materialized_views.generate,
     matview_indexes.generate,
-)
+    default_privileges.generate,
+]
 
 
 def get_diff(
@@ -53,7 +59,8 @@ def get_diff(
     target: DbIntrospectionResult,
     index_concurrently: bool,
     ignore_extension_version: Sequence[str],
-    ignore_owner: bool,
+    include_owner: bool,
+    include_grants: bool,
 ) -> str:
     """
     Get the migration SQL for the current diff context.
@@ -67,7 +74,8 @@ def get_diff(
         target=target,
         index_concurrently=index_concurrently,
         ignore_extension_version=ignore_extension_version,
-        ignore_owner=ignore_owner,
+        include_owner=include_owner,
+        include_grants=include_grants,
     ):
         # Collect all statements by phase.
         for generate in _GENERATORS:

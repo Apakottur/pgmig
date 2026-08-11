@@ -19,6 +19,9 @@ class _ContextData:
     # Result being assembled by the loaders.
     db_introspection_result: DbIntrospectionResult
 
+    # Schemas to exclude from the diff entirely.
+    ignore_schemas: frozenset[str]
+
 
 # Context of the current introspection.
 _context: ContextVar[_ContextData] = ContextVar("pgmig_introspection_context")
@@ -35,11 +38,13 @@ class _Context:
         *,
         conn: DbReadOnlyConnection,
         db_introspection_result: DbIntrospectionResult,
+        ignore_schemas: frozenset[str],
     ) -> Iterator[None]:
         token = _context.set(
             _ContextData(
                 conn=conn,
                 db_introspection_result=db_introspection_result,
+                ignore_schemas=ignore_schemas,
             )
         )
         try:
@@ -54,6 +59,10 @@ class _Context:
     @property
     def db_introspection_result(self) -> DbIntrospectionResult:
         return _context.get().db_introspection_result
+
+    @property
+    def ignore_schemas(self) -> frozenset[str]:
+        return _context.get().ignore_schemas
 
 
 context = _Context()

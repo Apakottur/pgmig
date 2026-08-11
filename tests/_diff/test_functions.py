@@ -1,5 +1,6 @@
 from pgmig._diff.functions import _topological_drop_order
-from pgmig._models import Function, FunctionKey
+from pgmig._keys import FunctionKey
+from pgmig._models import Function
 
 
 def _func(name: str, depends_on: set[FunctionKey]) -> Function:
@@ -10,7 +11,10 @@ def _func(name: str, depends_on: set[FunctionKey]) -> Function:
         return_type="integer",
         kind="f",
         comment=None,
+        owner="postgres",
+        grants=frozenset(),
         has_dependents=True,
+        dependents=(),
         depends_on_functions=frozenset(depends_on),
         depends_on_relations=frozenset(),
     )
@@ -43,10 +47,12 @@ def test_drop_order_ignores_deps_outside_late_set() -> None:
 
 def test_drop_order_diamond_leaf_last() -> None:
     # top -> mid1, mid2 -> leaf: leaf, depended on by both mids, drops only after both.
+    # The two independent mids are dropped in an arbitrary-but-deterministic order (the
+    # reverse of the dependency-first sort's ties): mid2 before mid1.
     late = {
         LEAF: ("public", _func("leaf", set())),
         MID1: ("public", _func("mid1", {LEAF})),
         MID2: ("public", _func("mid2", {LEAF})),
         TOP: ("public", _func("top", {MID1, MID2})),
     }
-    assert _topological_drop_order(late) == [TOP, MID1, MID2, LEAF]
+    assert _topological_drop_order(late) == [TOP, MID2, MID1, LEAF]

@@ -1,16 +1,6 @@
+import pytest
+
 from tests._api.generate_setup import GenerateSetup
-
-
-async def test_exclusion_constraint_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    An EXCLUDE constraint (pg_constraint contype 'x') is not modelled yet and must raise
-    rather than be silently dropped by the constraint query's contype filter.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=["CREATE TABLE room (during int4range, EXCLUDE USING gist (during WITH &&))"],
-        match=r"exclusion constraint .* is not supported",
-    )
 
 
 async def test_constraint_add_primary_key(gen_setup: GenerateSetup) -> None:
@@ -139,6 +129,69 @@ async def test_constraint_unchanged(gen_setup: GenerateSetup) -> None:
     )
 
 
+async def test_constraint_add_unique_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Deferrable unique constraint created -> ADD CONSTRAINT carries the DEFERRABLE clause.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED"],
+        diff=[
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" '
+            "UNIQUE (email) DEFERRABLE INITIALLY DEFERRED"
+        ],
+    )
+
+
+async def test_constraint_drop_unique_deferrable(gen_setup: GenerateSetup) -> None:
+    """
+    Deferrable unique constraint dropped -> DROP CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (email text)",
+            "ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED",
+        ],
+        dst=["CREATE TABLE person (email text)"],
+        diff=['ALTER TABLE "public"."person" DROP CONSTRAINT "person_email_key"'],
+    )
+
+
+async def test_constraint_unique_deferrable_state_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    A deferrability-only change on a unique constraint falls back to DROP + ADD: Postgres has no
+    ALTER CONSTRAINT deferrability support for non-foreign-key constraints on any supported
+    version, so the backing index is rebuilt. This pins that behavior (only foreign keys get the
+    ALTER CONSTRAINT fast path).
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (email text)"],
+        src=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_email_key"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_email_key" '
+            "UNIQUE (email) DEFERRABLE INITIALLY DEFERRED",
+        ],
+    )
+
+
+async def test_constraint_unique_deferrable_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Identical deferrable unique constraint on both sides -> no migration SQL.
+    """
+    await gen_setup.assert_diff(
+        both=[
+            "CREATE TABLE person (email text)",
+            "ALTER TABLE person ADD CONSTRAINT person_email_key UNIQUE (email) DEFERRABLE INITIALLY DEFERRED",
+        ],
+        src=[],
+        dst=[],
+        diff=[],
+    )
+
+
 async def test_constraint_primary_key_suppresses_set_not_null(gen_setup: GenerateSetup) -> None:
     """
     Adding a primary key on a source-nullable column emits only ADD CONSTRAINT;
@@ -233,6 +286,45 @@ async def test_constraint_check_definition_changed(gen_setup: GenerateSetup) -> 
     )
 
 
+async def test_constraint_add_check_not_enforced(gen_setup: GenerateSetup) -> None:
+    """
+    A NOT ENFORCED check constraint (Postgres 18+) rides through pg_get_constraintdef on a fresh ADD.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE person (age integer)"],
+        dst=[
+            "CREATE TABLE person (age integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT ENFORCED",
+        ],
+        diff=['ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT ENFORCED'],
+    )
+
+
+async def test_constraint_check_enforcement_change_recreates(gen_setup: GenerateSetup) -> None:
+    """
+    Postgres cannot alter a check constraint's enforceability in place, so an enforced-state
+    change is a DROP + ADD, not an ALTER CONSTRAINT (Postgres 18+).
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("NOT ENFORCED constraints require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE person (age integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)",
+        ],
+        dst=[
+            "CREATE TABLE person (age integer)",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT ENFORCED",
+        ],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT ENFORCED',
+        ],
+    )
+
+
 async def test_constraint_check_unchanged(gen_setup: GenerateSetup) -> None:
     """
     Same check name and definition on both sides -> no migration SQL.
@@ -247,6 +339,47 @@ async def test_constraint_check_unchanged(gen_setup: GenerateSetup) -> None:
             "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)",
         ],
         diff=[],
+    )
+
+
+async def test_constraint_check_validate(gen_setup: GenerateSetup) -> None:
+    """
+    Check constraint is NOT VALID in source, valid in target (same expression) ->
+    VALIDATE CONSTRAINT in place, not a drop-and-recheck under a stronger lock.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer)"],
+        src=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT VALID"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)"],
+        diff=['ALTER TABLE "public"."person" VALIDATE CONSTRAINT "person_age_check"'],
+    )
+
+
+async def test_constraint_check_becomes_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    Check constraint is valid in source, NOT VALID in target -> Postgres has no
+    un-validate ALTER, so drop and re-add it NOT VALID.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer)"],
+        src=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)"],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT VALID"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_age_check"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT VALID',
+        ],
+    )
+
+
+async def test_constraint_add_check_not_valid(gen_setup: GenerateSetup) -> None:
+    """
+    New check constraint created NOT VALID -> the NOT VALID rides in the definition.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (age integer)"],
+        src=[],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0) NOT VALID"],
+        diff=['ALTER TABLE "public"."person" ADD CONSTRAINT "person_age_check" CHECK ((age > 0)) NOT VALID'],
     )
 
 
@@ -278,4 +411,85 @@ async def test_foreign_key_comment_added(gen_setup: GenerateSetup) -> None:
         src=[],
         dst=["COMMENT ON CONSTRAINT person_team_fkey ON person IS 'team ref'"],
         diff=['COMMENT ON CONSTRAINT "person_team_fkey" ON "public"."person" IS \'team ref\''],
+    )
+
+
+async def test_constraint_add_exclusion(gen_setup: GenerateSetup) -> None:
+    """
+    Exclusion constraint (contype 'x') present in target but missing in source -> ADD CONSTRAINT.
+    The backing gist index rides along with the constraint and is not emitted separately.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE room (during int4range)"],
+        src=[],
+        dst=["ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)"],
+        diff=['ALTER TABLE "public"."room" ADD CONSTRAINT "room_during_excl" EXCLUDE USING gist (during WITH &&)'],
+    )
+
+
+async def test_constraint_drop_exclusion(gen_setup: GenerateSetup) -> None:
+    """
+    Exclusion constraint present in source but missing in target -> DROP CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=["CREATE TABLE room (during int4range)"],
+        diff=['ALTER TABLE "public"."room" DROP CONSTRAINT "room_during_excl"'],
+    )
+
+
+async def test_constraint_rename_exclusion(gen_setup: GenerateSetup) -> None:
+    """
+    Same exclusion definition on both sides, only the name differs -> RENAME CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl_old EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl_new EXCLUDE USING gist (during WITH &&)",
+        ],
+        diff=['ALTER TABLE "public"."room" RENAME CONSTRAINT "room_excl_old" TO "room_excl_new"'],
+    )
+
+
+async def test_constraint_exclusion_definition_changed(gen_setup: GenerateSetup) -> None:
+    """
+    Same name, different exclusion operator -> DROP CONSTRAINT then ADD CONSTRAINT.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_excl EXCLUDE USING gist (during WITH -|-)",
+        ],
+        diff=[
+            'ALTER TABLE "public"."room" DROP CONSTRAINT "room_excl"',
+            'ALTER TABLE "public"."room" ADD CONSTRAINT "room_excl" EXCLUDE USING gist (during WITH -|-)',
+        ],
+    )
+
+
+async def test_constraint_exclusion_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    Same exclusion name and definition on both sides -> no migration SQL.
+    """
+    await gen_setup.assert_diff(
+        src=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[
+            "CREATE TABLE room (during int4range)",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        diff=[],
     )

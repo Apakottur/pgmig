@@ -1,9 +1,11 @@
 -- Dependencies involving a materialized view: a view or matview whose definition reads
 -- from another view or matview, where at least one side is a materialized view. Plain
--- view-on-view dependencies are ordered by a topological sort (view_dependencies.sql);
--- matviews are not folded into that sort yet, so a matview-involving pair is reported
--- rather than emitted in a possibly-wrong order. A dependency on a plain table is fine
--- (tables are created before, and dropped after, the view phases).
+-- view-on-view dependencies live in view_dependencies.sql; every matview-involving edge
+-- lives here. matview_dependencies.py splits the rows by dependent kind: a matview reading
+-- a view/matview is loaded as an ordering edge; a plain view reading a matview is refused
+-- (the matview's phase is later than the view's, so the view cannot be ordered first). A
+-- dependency on a plain table is fine (tables are created before, and dropped after, the
+-- view phases).
 SELECT DISTINCT
     dependent_ns.nspname AS dependent_schema,
     dependent.relname AS dependent_view,

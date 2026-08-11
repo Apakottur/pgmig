@@ -1,16 +1,20 @@
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import cast
 
 import pytest
 import shpyx
 
-from pgmig._db import DEFAULT_DRIVER, DbConnection, Driver
+from pgmig._db import DbConnection, DbConnInfo
+from pgmig._drivers import DbDriver
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import get_dsn, get_unique_postgres_name, recreate_database, wait_for_db_connection
-
-_VALID_DRIVERS = ("psycopg", "asyncpg")
+from tests.fixtures.db_utils import (
+    get_dsn,
+    get_unique_postgres_name,
+    recreate_database,
+    reset_database,
+    wait_for_db_connection,
+)
 
 _COMPOSE_FILE_DIR = Path(__file__).parent
 
@@ -26,22 +30,21 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Tear down the docker compose stack after the test session (default: leave it running).",
     )
     parser.addoption(
+        "--driver",
+        action="store",
+        default=None,
+        choices=[driver.value for driver in DbDriver],
+        help=(
+            f"Database driver to test against. Falls back to the PGMIG_DRIVER env var, then {DbDriver.AUTO.value!r}."
+        ),
+    )
+    parser.addoption(
         "--pg-version",
         action="store",
         default=None,
         help=(
             "Postgres major version to test against (e.g. 14). "
             "Falls back to the PGMIG_TEST_PG_VERSION env var, then 18."
-        ),
-    )
-    parser.addoption(
-        "--driver",
-        action="store",
-        default=None,
-        choices=_VALID_DRIVERS,
-        help=(
-            f"Database driver to test against ({' or '.join(_VALID_DRIVERS)}). "
-            f"Falls back to the PGMIG_DRIVER env var, then {DEFAULT_DRIVER!r}."
         ),
     )
 
@@ -80,25 +83,21 @@ def _pg_major(request: pytest.FixtureRequest) -> int:
 
 
 @pytest.fixture(scope="session")
-def _driver(request: pytest.FixtureRequest) -> Driver:
+def _driver(request: pytest.FixtureRequest) -> DbDriver:
     """
-    Get the database driver under test ("psycopg" or "asyncpg").
+    Get the database driver under test.
     """
-    config_option = request.config.getoption("--driver")
-    env_var = os.environ.get("PGMIG_DRIVER")
-
-    # Resolve the final driver: --driver, then PGMIG_DRIVER, then the default. Both sources are
-    # validated (option choices / a real install), so narrow the str back to Driver.
-    final_driver = cast("Driver", config_option or env_var or DEFAULT_DRIVER)
+    # Resolve the driver: --driver, then PGMIG_DRIVER, then the default.
+    driver = DbDriver(request.config.getoption("--driver") or os.environ.get("PGMIG_DRIVER") or DbDriver.AUTO)
 
     # Export it so CLI invocations (which read PGMIG_DRIVER) use the same driver.
-    os.environ["PGMIG_DRIVER"] = final_driver
+    os.environ["PGMIG_DRIVER"] = driver.value
 
-    return final_driver
+    return driver
 
 
 @pytest.fixture(scope="session")
-async def _admin_conn(request: pytest.FixtureRequest, _driver: Driver) -> AsyncIterator[DbConnection]:
+async def _admin_conn(request: pytest.FixtureRequest, _driver: DbDriver) -> AsyncIterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
     database, reused to (re)create the per-test databases.
@@ -106,14 +105,14 @@ async def _admin_conn(request: pytest.FixtureRequest, _driver: Driver) -> AsyncI
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)
 
-    # Get the database DSN.
-    admin_db_dsn = get_dsn("postgres")
+    # Get the admin DB conn info.
+    admin_db_conn_info = DbConnInfo(dsn=get_dsn("postgres"), label="admin", driver=_driver)
 
     # Wait for the database server to be ready.
-    await wait_for_db_connection(dsn=admin_db_dsn, driver=_driver)
+    await wait_for_db_connection(db_conn_info=admin_db_conn_info)
 
     # Open a single connection to the admin database for the whole session.
-    async with DbConnection.connect(dsn=admin_db_dsn, driver=_driver) as admin_conn:
+    async with DbConnection.connect(db_conn_info=admin_db_conn_info) as admin_conn:
         yield admin_conn
 
     # Stop the database server, unless asked to leave it running.
@@ -122,37 +121,56 @@ async def _admin_conn(request: pytest.FixtureRequest, _driver: Driver) -> AsyncI
         shpyx.run("docker compose down -v", exec_dir=_COMPOSE_FILE_DIR)
 
 
+@pytest.fixture(scope="session")
+async def _persistent_dbs(
+    _unique_key: str,
+    _driver: DbDriver,
+    _admin_conn: DbConnection,
+) -> AsyncIterator[tuple[str, str, DbConnection, DbConnection]]:
+    """
+    Create the source and target databases once for the whole session and hold a connection open to each.
+    """
+    src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
+    dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
+
+    # Create the DBs.
+    await recreate_database(_admin_conn, src_db_name)
+    await recreate_database(_admin_conn, dst_db_name)
+
+    async with (
+        DbConnection.connect(
+            db_conn_info=DbConnInfo(dsn=get_dsn(src_db_name), label="source", driver=_driver)
+        ) as src_conn,
+        DbConnection.connect(
+            db_conn_info=DbConnInfo(dsn=get_dsn(dst_db_name), label="target", driver=_driver)
+        ) as dst_conn,
+    ):
+        yield src_db_name, dst_db_name, src_conn, dst_conn
+
+
 @pytest.fixture(scope="function")
 async def gen_setup(
     _unique_key: str,
     _pg_major: int,
-    _driver: Driver,
-    _admin_conn: DbConnection,
-) -> AsyncIterator[GenerateSetup]:
+    _driver: DbDriver,
+    _persistent_dbs: tuple[str, str, DbConnection, DbConnection],
+) -> GenerateSetup:
     """
     Main fixture for testing `generate`.
     """
-    # Get the database names and DSNs.
-    src_db_name = get_unique_postgres_name("pgmig_src", _unique_key)
-    dst_db_name = get_unique_postgres_name("pgmig_dst", _unique_key)
-    src_db_dsn = get_dsn(src_db_name)
-    dst_db_dsn = get_dsn(dst_db_name)
+    src_db_name, dst_db_name, src_conn, dst_conn = _persistent_dbs
 
-    # Recreate the DBs before each test.
-    await recreate_database(_admin_conn, src_db_name)
-    await recreate_database(_admin_conn, dst_db_name)
+    # Reset the persistent DBs to empty before each test.
+    await reset_database(src_conn)
+    await reset_database(dst_conn)
 
-    # Create DB connections and yield for the test.
-    async with (
-        DbConnection.connect(dsn=src_db_dsn, driver=_driver) as src_conn,
-        DbConnection.connect(dsn=dst_db_dsn, driver=_driver) as dst_conn,
-    ):
-        yield GenerateSetup(
-            src_db_name=src_db_name,
-            dst_db_name=dst_db_name,
-            src_conn=src_conn,
-            dst_conn=dst_conn,
-            pg_major=_pg_major,
-            driver=_driver,
-            unique_key=_unique_key,
-        )
+    # Return the setup.
+    return GenerateSetup(
+        src_db_name=src_db_name,
+        dst_db_name=dst_db_name,
+        src_conn=src_conn,
+        dst_conn=dst_conn,
+        pg_major=_pg_major,
+        driver=_driver,
+        unique_key=_unique_key,
+    )

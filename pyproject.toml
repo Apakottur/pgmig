@@ -9,17 +9,17 @@ dev = [
   "asyncpg-stubs>=0.31.3",
   "httpx==0.28.1",
   "mypy==2.3.0",
-  "pre-commit==4.6.0",
+  "prek==0.4.13",
   "psycopg==3.3.4",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest-sugar==1.1.1",
   "pytest==9.1.1",
-  "ruff==0.15.21",
+  "ruff==0.16.2",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.60",
+  "ty==0.0.69",
   "typing-extensions==4.16.0",
 ]
 
@@ -30,7 +30,7 @@ description = "Generate migrations between Postgres databases"
 authors = [{name = "Yossi Rozantsev"}]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["postgres", "postgresql", "migrations", "database", "schema"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -39,7 +39,6 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -62,7 +61,7 @@ binary = ["psycopg[binary]>=3.3.4"]
 asyncpg = ["asyncpg>=0.31.0"]
 
 [project.scripts]
-pgmig = "pgmig._cli:app"
+pgmig = "pgmig._cli._cli:app"
 
 [project.urls]
 homepage = "https://github.com/Apakottur/pgmig"

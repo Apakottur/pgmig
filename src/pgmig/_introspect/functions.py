@@ -1,9 +1,21 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import _QueryRow, run_introspection_query
-from pgmig._models import Function, FunctionKey, RelationKey
+from pgmig._introspect._core import (
+    IntrospectionQuery,
+    IntrospectionRow,
+    IntrospectionRowWithSchema,
+    run_introspection_query,
+)
+from pgmig._keys import FunctionKey, RelationKey
+from pgmig._models import Function, FunctionDependent, Grant
 
 
-class _FunctionDep(_QueryRow):
+class _GrantRow(IntrospectionRow):
+    grantee: str
+    privilege: str
+    grantable: bool
+
+
+class _FunctionDep(IntrospectionRow):
     """A routine another routine hard-depends on (jsonb object from functions.sql)."""
 
     schema_name: str
@@ -11,22 +23,33 @@ class _FunctionDep(_QueryRow):
     args: str  # pg_get_function_identity_arguments
 
 
-class _RelationDep(_QueryRow):
+class _FunctionDependent(IntrospectionRow):
+    """A non-trigger object depending on a routine (jsonb object from functions.sql)."""
+
+    kind: str  # 'default' | 'constraint' | 'index' | 'routine' | 'other'
+    schema_name: str
+    table: str
+    name: str
+
+
+class _RelationDep(IntrospectionRow):
     """A table/view/matview a routine hard-depends on (jsonb object from functions.sql)."""
 
     schema_name: str
     name: str
 
 
-class _FunctionRow(_QueryRow):
-    schema_name: str
+class _FunctionRow(IntrospectionRowWithSchema):
     func_name: str
     func_args: str
     func_def: str
     func_rettype: str
     func_kind: str
     func_comment: str | None
+    func_owner: str
+    func_grants: list[_GrantRow]
     func_has_dependents: bool
+    func_dependents: list[_FunctionDependent]
     func_depends_on_functions: list[_FunctionDep]
     func_depends_on_relations: list[_RelationDep]
 
@@ -35,7 +58,7 @@ async def load() -> None:
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
-    for func_row in await run_introspection_query("functions.sql", _FunctionRow):
+    for func_row in await run_introspection_query(IntrospectionQuery.FUNCTIONS, _FunctionRow):
         signature = f"{func_row.func_name}({func_row.func_args})"
         context.db_introspection_result.schema_by_name[func_row.schema_name].function_by_signature[signature] = (
             Function(
@@ -45,7 +68,16 @@ async def load() -> None:
                 return_type=func_row.func_rettype,
                 kind=func_row.func_kind,
                 comment=func_row.func_comment,
+                owner=func_row.func_owner,
+                grants=frozenset(
+                    Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
+                    for grant in func_row.func_grants
+                ),
                 has_dependents=func_row.func_has_dependents,
+                dependents=tuple(
+                    FunctionDependent(kind=dep.kind, schema=dep.schema_name, table=dep.table, name=dep.name)
+                    for dep in func_row.func_dependents
+                ),
                 depends_on_functions=frozenset(
                     FunctionKey(schema=dep.schema_name, signature=f"{dep.name}({dep.args})")
                     for dep in func_row.func_depends_on_functions

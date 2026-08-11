@@ -1,3 +1,5 @@
+import pytest
+
 from tests._api.generate_setup import GenerateSetup
 
 
@@ -85,13 +87,72 @@ async def test_generated_ness_change_raises(gen_setup: GenerateSetup) -> None:
     )
 
 
-async def test_generation_expression_change_raises(gen_setup: GenerateSetup) -> None:
+async def test_stored_generation_expression_change_drops_and_readds(gen_setup: GenerateSetup) -> None:
     """
-    A stored generated column whose expression changes is unsupported (no in-place
-    expression ALTER pre-PG18); it must raise rather than mis-diff.
+    A stored generated column whose expression changes is rebuilt with DROP COLUMN + ADD COLUMN.
+    A stored column's data is derived, so the drop+add recomputes it non-destructively, and this
+    is portable to pre-PG18 (which has no in-place expression ALTER).
     """
-    await gen_setup.assert_unsupported(
+    await gen_setup.assert_diff(
         src=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) STORED)"],
         dst=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 3) STORED)"],
-        match="generated change",
+        diff=[
+            'ALTER TABLE "public"."item" DROP COLUMN "doubled"',
+            'ALTER TABLE "public"."item" ADD COLUMN "doubled" integer GENERATED ALWAYS AS (b * 3) STORED',
+        ],
+    )
+
+
+async def test_virtual_generated_column_emitted(gen_setup: GenerateSetup) -> None:
+    """
+    A virtual generated column (PG18+) is emitted with its GENERATED ALWAYS AS (...) VIRTUAL
+    clause.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("virtual generated columns require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) VIRTUAL)"],
+        diff=['CREATE TABLE "public"."item" ("b" integer, "doubled" integer GENERATED ALWAYS AS (b * 2) VIRTUAL)'],
+    )
+
+
+async def test_virtual_generated_column_added_to_existing_table(gen_setup: GenerateSetup) -> None:
+    """
+    Adding a virtual generated column to a table present on both sides emits ADD COLUMN with the
+    VIRTUAL clause inline.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("virtual generated columns require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE item (b integer)"],
+        dst=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) VIRTUAL)"],
+        diff=['ALTER TABLE "public"."item" ADD COLUMN "doubled" integer GENERATED ALWAYS AS (b * 2) VIRTUAL'],
+    )
+
+
+async def test_virtual_generated_column_dropped(gen_setup: GenerateSetup) -> None:
+    """
+    Dropping a virtual generated column is a plain DROP COLUMN.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("virtual generated columns require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) VIRTUAL)"],
+        dst=["CREATE TABLE item (b integer)"],
+        diff=['ALTER TABLE "public"."item" DROP COLUMN "doubled"'],
+    )
+
+
+async def test_virtual_generation_expression_change_sets_expression(gen_setup: GenerateSetup) -> None:
+    """
+    A virtual generated column's expression changes in place via SET EXPRESSION AS (...) (PG18);
+    it has no stored data to rebuild, so no DROP/ADD is needed.
+    """
+    if gen_setup.pg_major < 18:
+        pytest.skip("virtual generated columns require Postgres 18+")
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 2) VIRTUAL)"],
+        dst=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 5) VIRTUAL)"],
+        diff=['ALTER TABLE "public"."item" ALTER COLUMN "doubled" SET EXPRESSION AS (b * 5)'],
     )

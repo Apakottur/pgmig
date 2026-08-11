@@ -6,7 +6,8 @@ from typing import Annotated
 import typer
 
 from pgmig._api import generate as generate_migration
-from pgmig._db import DEFAULT_DRIVER, Driver
+from pgmig._cli._error_format import format_error
+from pgmig._drivers import DbDriver
 from pgmig._errors import _PgmigError
 
 app = typer.Typer(
@@ -84,21 +85,36 @@ def generate(
             help="Do not emit ALTER EXTENSION ... UPDATE TO for this extension's version mismatch (repeatable).",
         ),
     ] = None,
-    ignore_owner: Annotated[
+    ignore_schema: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--ignore-schema",
+            help="Exclude this schema from the diff entirely -- its objects and the schema "
+            "create/drop are ignored (repeatable).",
+        ),
+    ] = None,
+    include_owner: Annotated[
         bool,
         typer.Option(
-            "--ignore-owner",
-            help="Suppress all ALTER ... OWNER TO statements.",
+            "--include-owner",
+            help="Emit ALTER ... OWNER TO statements to reconcile ownership (off by default).",
+        ),
+    ] = False,
+    include_grants: Annotated[
+        bool,
+        typer.Option(
+            "--include-grants",
+            help="Also emit named-role GRANT / REVOKE (PUBLIC grants are always diffed).",
         ),
     ] = False,
     driver: Annotated[
-        Driver,
+        DbDriver,
         typer.Option(
             "--driver",
             envvar="PGMIG_DRIVER",
-            help="Database driver to use for introspection.",
+            help="Database driver to connect with. 'auto' lets pgmig pick among the supported drivers.",
         ),
-    ] = DEFAULT_DRIVER,
+    ] = DbDriver.AUTO,
 ) -> None:
     """
     Generate the migration SQL that turns the source database into the target database.
@@ -114,12 +130,14 @@ def generate(
             target=target,
             index_concurrently=index_concurrently,
             ignore_extension_version=ignore_extension_version or [],
-            ignore_owner=ignore_owner,
+            ignore_schemas=ignore_schema or [],
+            include_owner=include_owner,
+            include_grants=include_grants,
             driver=driver,
         )
     except _PgmigError as error:
         # Expected error - print message without traceback.
-        typer.echo(error.message, err=True)
+        typer.echo(format_error(error), err=True)
         raise typer.Exit(code=1) from error
     except Exception as error:
         # Internal error - print traceback and issue prompt.

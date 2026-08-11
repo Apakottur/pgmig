@@ -1,47 +1,8 @@
 from dataclasses import dataclass
 
 from pgmig._errors import PgmigUnsupportedError
-
-
-@dataclass(frozen=True, order=True)
-class ViewKey:
-    """
-    Full view identifier within a database.
-    """
-
-    schema: str
-    name: str
-
-
-@dataclass(frozen=True, order=True)
-class FunctionKey:
-    """
-    Full function identifier within a database (schema plus overload signature).
-    """
-
-    schema: str
-    signature: str  # "name(identity_arguments)"
-
-
-@dataclass(frozen=True, order=True)
-class RelationKey:
-    """
-    Full identifier of a table, view, or materialized view within a database.
-    """
-
-    schema: str
-    name: str
-
-
-@dataclass(frozen=True, order=True)
-class ColumnKey:
-    """
-    Full identifier of a table column within a database.
-    """
-
-    schema: str
-    table: str
-    column: str
+from pgmig._keys import ColumnKey, CompositeTypeKey, DefaultAclKey, EnumKey, FunctionKey, RelationKey
+from pgmig._sql import ident
 
 
 @dataclass(frozen=True)
@@ -52,6 +13,7 @@ class Column:
 
     name: str
     type: str
+    collation: str | None  # explicit collation name when it overrides the type default, else None
     not_null: bool
     default: str | None
     comment: str | None
@@ -59,6 +21,13 @@ class Column:
     serial_sequence: str | None  # sequence owned via a nextval() default, else None
     generated: str  # pg_attribute.attgenerated ('' none, 's' stored, 'v' virtual)
     generation_expression: str | None  # generation expression, kept separate from `default`
+    # Backing-sequence options of an identity column (pg_sequence); all None otherwise.
+    identity_start: int | None
+    identity_increment: int | None
+    identity_min: int | None
+    identity_max: int | None
+    identity_cache: int | None
+    identity_cycle: bool | None
 
     @property
     def serial_type(self) -> str | None:
@@ -67,8 +36,16 @@ class Column:
 
         A serial column owns a sequence via its nextval() default and is not an
         identity column; its integer type maps to the matching pseudo-type.
+
+        The nextval() default is load-bearing, not incidental: pg_get_serial_sequence
+        resolves `serial_sequence` from the OWNED BY dependency alone, so a column tied to
+        a manually created sequence via `ALTER SEQUENCE ... OWNED BY` (with no nextval
+        default) also has `serial_sequence` set -- yet it is not serial. Requiring the
+        nextval default excludes that manual-ownership case.
         """
         if self.serial_sequence is None or self.identity != "":
+            return None
+        if self.default is None or not self.default.startswith("nextval("):
             return None
         match self.type:
             case "smallint":
@@ -101,7 +78,8 @@ class Column:
     @property
     def identity_clause(self) -> str | None:
         """
-        The GENERATED ... AS IDENTITY clause for an identity column, or None.
+        The GENERATED ... AS IDENTITY clause for an identity column, or None. The backing
+        sequence's options are rendered separately at emit time (see the tables diff).
         """
         kind = self.identity_kind
         return None if kind is None else f"GENERATED {kind} AS IDENTITY"
@@ -131,21 +109,67 @@ class Trigger:
     definition: str  # pg_get_triggerdef output: a full CREATE TRIGGER ...
     # `definition` with the trigger's own name stripped out, for rename detection.
     canonical: str
+    # pg_trigger.tgenabled: the enable state, which pg_get_triggerdef does not carry.
+    # O=origin/default, D=disabled, R=enable replica, A=enable always.
+    enabled: str
     comment: str | None
 
 
-@dataclass
+# pg_policy.polcmd code -> the FOR keyword; ALL ('*') is the default and is omitted.
+_POLICY_COMMANDS = {"r": "SELECT", "a": "INSERT", "w": "UPDATE", "d": "DELETE"}
+
+
+@dataclass(frozen=True)
+class Policy:
+    """
+    A row-level security policy (pg_policy), owned by a table.
+    """
+
+    name: str
+    command: str  # pg_policy.polcmd: 'r' SELECT, 'a' INSERT, 'w' UPDATE, 'd' DELETE, '*' ALL
+    permissive: bool  # polpermissive: PERMISSIVE (default) vs RESTRICTIVE
+    roles: list[str]  # role names the policy applies to; empty means PUBLIC (the default)
+    using: str | None  # USING expression (pg_get_expr of polqual), or None
+    check: str | None  # WITH CHECK expression (pg_get_expr of polwithcheck), or None
+    comment: str | None
+
+    @property
+    def definition(self) -> str:
+        """
+        The clause body following `CREATE POLICY <name> ON <table>`: the string the diff
+        compares to decide a recreate, and renders into CREATE POLICY. Defaults are omitted
+        (PERMISSIVE, FOR ALL, TO PUBLIC) so a policy relying on them matches Postgres's own.
+        """
+        parts: list[str] = []
+        if not self.permissive:
+            parts.append("AS RESTRICTIVE")
+        if self.command in _POLICY_COMMANDS:
+            parts.append(f"FOR {_POLICY_COMMANDS[self.command]}")
+        if self.roles:
+            parts.append("TO " + ", ".join(ident(role) for role in self.roles))
+        if self.using is not None:
+            parts.append(f"USING ({self.using})")
+        if self.check is not None:
+            parts.append(f"WITH CHECK ({self.check})")
+        return " ".join(parts)
+
+
+@dataclass(frozen=True)
 class Constraint:
     """
     A Postgres primary key, unique, check, or foreign key constraint, owned by a table.
     """
 
     name: str
-    # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent
+    # pg_get_constraintdef output, e.g. "PRIMARY KEY (id)"; name-independent. Carries the
+    # trailing DEFERRABLE / INITIALLY DEFERRED clause, so the deferrable/deferred booleans
+    # below are what the diff compares against once that clause is set aside.
     definition: str
     contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
     comment: str | None
+    deferrable: bool  # condeferrable: DEFERRABLE
+    deferred: bool  # condeferred: DEFERRABLE INITIALLY DEFERRED (implies deferrable)
 
     @property
     def is_primary_key(self) -> bool:
@@ -156,7 +180,23 @@ class Constraint:
         return self.contype == "f"
 
 
-@dataclass
+@dataclass(frozen=True)
+class Grant:
+    """
+    A single privilege on an object: one row of the object's exploded ACL.
+
+    The grantee is a role name, or the literal "PUBLIC" for the public pseudo-role. The set of
+    Grants on an object is the effective ACL with a NULL (owner-default) ACL expanded via
+    acldefault, so a default-ACL object compares equal to another default-ACL object with the
+    same owner rather than diffing against an empty set.
+    """
+
+    grantee: str
+    privilege: str  # e.g. "SELECT", "INSERT", "USAGE", "EXECUTE"
+    grantable: bool  # WITH GRANT OPTION
+
+
+@dataclass(frozen=True)
 class Table:
     """
     A Postgres table. Owned by the schema that holds it.
@@ -167,18 +207,27 @@ class Table:
     columns: list[Column]
     comment: str | None
     owner: str
+    grants: frozenset[Grant]
+    unlogged: bool  # UNLOGGED table (relpersistence 'u'); a partitioned parent is always logged
+    row_security: bool  # relrowsecurity: ENABLE ROW LEVEL SECURITY
+    force_row_security: bool  # relforcerowsecurity: FORCE ROW LEVEL SECURITY
+    # Replica identity: pg_class.relreplident ('d' default, 'n' nothing, 'f' full, 'i' using
+    # index). replica_identity_index holds the index name when 'i', else None.
+    replica_identity: str
+    replica_identity_index: str | None
 
     # Declarative partitioning metadata.
     partition_strategy: str | None
     partition_key: str | None
     partition_bound: str | None
-    partition_parent: tuple[str, str] | None
+    partition_parent: RelationKey | None
 
     # Relations.
     index_by_name: dict[str, Index]
     constraint_by_name: dict[str, Constraint]
     foreign_key_by_name: dict[str, Constraint]
     trigger_by_name: dict[str, Trigger]
+    policy_by_name: dict[str, Policy]
 
     @property
     def is_partitioned(self) -> bool:
@@ -189,6 +238,17 @@ class Table:
     def is_partition(self) -> bool:
         """Whether this table is a partition of some parent."""
         return self.partition_parent is not None
+
+    @property
+    def column_by_name(self) -> dict[str, Column]:
+        """
+        The table's columns indexed by name.
+
+        A plain (recomputed) property rather than a cached one: `columns` is appended to
+        row by row during introspection, so a value cached before loading finished would go
+        stale. Recomputing on each access keeps it correct at the cost of rebuilding the dict.
+        """
+        return {column.name: column for column in self.columns}
 
     def get_primary_key_columns(self) -> set[str]:
         """
@@ -205,7 +265,12 @@ class Table:
 @dataclass(frozen=True)
 class Sequence:
     """
-    A standalone Postgres sequence (not owned by a serial/identity column).
+    A standalone Postgres sequence (not the backing sequence of a serial/identity column).
+
+    A sequence may still carry a manual OWNED BY: `owned_by` is the ColumnKey it is tied to,
+    or None when it is truly standalone. Unlike a serial/identity backing sequence -- whose
+    lifecycle the table layer owns and which is excluded from introspection -- a manually
+    owned sequence is a first-class object whose ownership is diffed here.
     """
 
     name: str
@@ -217,6 +282,23 @@ class Sequence:
     cache: int
     cycle: bool
     comment: str | None
+    owner: str  # role that owns the sequence (pg_get_userbyid(relowner))
+    grants: frozenset[Grant]  # effective ACL (relacl expanded via acldefault('s', owner))
+    owned_by: ColumnKey | None
+    unlogged: bool  # UNLOGGED sequence (relpersistence 'u'); PG15+ only
+
+
+@dataclass(frozen=True)
+class FunctionDependent:
+    """
+    A non-trigger object that depends on a routine (from pg_depend), resolved to a structured
+    identity. Drives the recreate-around-dependents path on a return-type change.
+    """
+
+    kind: str  # 'default' | 'constraint' | 'index' | 'routine' | 'other'
+    schema: str
+    table: str  # owning table for default/constraint/index; "" for routine/other (unused)
+    name: str  # column / constraint / index / routine name (catalog name for 'other')
 
 
 @dataclass(frozen=True)
@@ -231,10 +313,15 @@ class Function:
     return_type: str  # format_type(prorettype); "void" for a procedure
     kind: str  # pg_proc.prokind: 'f' (function) or 'p' (procedure)
     comment: str | None
+    owner: str  # role that owns the routine (pg_get_userbyid(proowner))
+    grants: frozenset[Grant]  # effective ACL (proacl expanded via acldefault('f', owner))
     # Whether a non-trigger object (column default, check constraint, expression index,
     # another routine, ...) depends on this routine. Drives drop phasing: a routine with
     # dependents is dropped late (after those dependents), one without stays early.
     has_dependents: bool
+    # The resolved non-trigger dependents (same objects has_dependents counts). Used by the
+    # return-type-change recreate to drop and re-create each dependent around the recreate.
+    dependents: tuple[FunctionDependent, ...]
     # Forward hard dependencies of this routine (pg_depend deptype 'n'):
     #   depends_on_functions -- routines this one depends on; when both are dropped, this
     #     one drops first (topologically ordered in the late phase).
@@ -251,7 +338,7 @@ class Function:
         return "PROCEDURE" if self.kind == "p" else "FUNCTION"
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnumType:
     """
     A Postgres enum type, owned by a schema.
@@ -260,6 +347,7 @@ class EnumType:
     name: str
     values: list[str]  # labels in enum sort order
     comment: str | None
+    owner: str  # role that owns the enum type (pg_get_userbyid(typowner))
 
 
 @dataclass(frozen=True)
@@ -271,9 +359,18 @@ class View:
     name: str
     definition: str  # pg_get_viewdef output: the SELECT the view wraps (no trailing semicolon)
     comment: str | None
+    # pg_class.reloptions, sorted for order-independent comparison: security_invoker,
+    # security_barrier, and check_option (WITH CHECK OPTION) all live here as "key=value"
+    # strings. Emitted verbatim in a CREATE VIEW ... WITH (...) clause; empty when the view
+    # has none.
+    options: tuple[str, ...]
+    owner: str  # role that owns the view (pg_get_userbyid(relowner))
+    # INSTEAD OF triggers owned by this view (the only trigger kind a view can carry). Mirrors
+    # Table.trigger_by_name so the trigger diff walks views the same way it walks tables.
+    trigger_by_name: dict[str, Trigger]
 
 
-@dataclass
+@dataclass(frozen=True)
 class MaterializedView:
     """
     A Postgres materialized view, owned by a schema.
@@ -282,6 +379,7 @@ class MaterializedView:
     name: str
     definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
     comment: str | None
+    owner: str  # role that owns the matview (pg_get_userbyid(relowner))
     index_by_name: dict[str, Index]
 
 
@@ -295,7 +393,7 @@ class CompositeField:
     type: str  # format_type(atttypid, atttypmod)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CompositeType:
     """
     A Postgres standalone composite type (CREATE TYPE ... AS (...)), owned by a schema.
@@ -304,9 +402,31 @@ class CompositeType:
     name: str
     fields: list[CompositeField]  # attributes in attribute (attnum) order
     comment: str | None
+    owner: str  # role that owns the composite type (pg_get_userbyid(typowner))
 
 
-@dataclass
+@dataclass(frozen=True)
+class RangeType:
+    """
+    A Postgres range type (CREATE TYPE ... AS RANGE), owned by a schema.
+
+    The multirange type Postgres auto-creates alongside every range is not modelled
+    separately: it is created and dropped with its range. Each property below is stored
+    as the ready-to-emit clause value (already quoted/qualified where needed) or None
+    when the range does not carry that clause, so the diff renders CREATE TYPE without
+    re-deriving defaults.
+    """
+
+    name: str
+    subtype: str  # format_type of rngsubtype, e.g. "integer"
+    subtype_opclass: str | None  # SUBTYPE_OPCLASS, only when not the subtype's default opclass
+    collation: str | None  # COLLATION, only when explicit and not the subtype's default collation
+    subtype_diff: str | None  # SUBTYPE_DIFF function name, None when rngsubdiff is absent
+    comment: str | None
+    owner: str  # role that owns the range type (pg_get_userbyid(typowner))
+
+
+@dataclass(frozen=True)
 class Domain:
     """
     A Postgres domain type, owned by a schema.
@@ -318,9 +438,10 @@ class Domain:
     not_null: bool
     check_by_name: dict[str, str]  # CHECK constraint name -> pg_get_constraintdef ("CHECK (...)")
     comment: str | None
+    owner: str  # role that owns the domain (pg_get_userbyid(typowner))
 
 
-@dataclass
+@dataclass(frozen=True)
 class Schema:
     """
     A Postgres schema (namespace) and the objects it contains.
@@ -328,6 +449,8 @@ class Schema:
 
     name: str
     comment: str | None
+    owner: str  # role that owns the schema (pg_get_userbyid(nspowner))
+    grants: frozenset[Grant]  # effective ACL (nspacl expanded via acldefault('n', owner))
     table_by_name: dict[str, Table]
     sequence_by_name: dict[str, Sequence]
     function_by_signature: dict[str, Function]
@@ -336,6 +459,7 @@ class Schema:
     materialized_view_by_name: dict[str, MaterializedView]
     domain_by_name: dict[str, Domain]
     composite_type_by_name: dict[str, CompositeType]
+    range_type_by_name: dict[str, RangeType]
 
 
 @dataclass(frozen=True)
@@ -350,6 +474,48 @@ class Extension:
     comment: str | None
 
 
+@dataclass(frozen=True)
+class DefaultAcl:
+    """
+    One ALTER DEFAULT PRIVILEGES rule: a pg_default_acl row.
+
+    A row exists only where defaults were altered; its absence means the built-in defaults
+    apply. So `grants` (the effective ACL, aclexplode of defaclacl) is meaningful only against
+    `baseline` (the built-in default, aclexplode of acldefault(object-type code, role)): the delta
+    between them is what the user actually configured. Diffing raw rows would misfire when only
+    one side has a row -- the diff compares effective-vs-effective, treating an absent row as
+    the baseline.
+
+    `object_type` is the plural GRANT keyword (TABLES / SEQUENCES / FUNCTIONS / TYPES /
+    SCHEMAS). `schema` is None for a global (no IN SCHEMA) rule.
+    """
+
+    role: str  # defaclrole (the FOR ROLE target), pg_get_userbyid(defaclrole)
+    schema: str | None  # defaclnamespace name; None when 0 (a global rule)
+    object_type: str  # plural keyword: TABLES / SEQUENCES / FUNCTIONS / TYPES / SCHEMAS
+    grants: frozenset[Grant]  # effective ACL (aclexplode of defaclacl)
+    baseline: frozenset[Grant]  # built-in default (aclexplode of acldefault(object-type code, role))
+
+
+@dataclass(frozen=True)
+class EnumColumnDependency:
+    """
+    A table column whose type is an enum (directly, or as an array of the enum).
+
+    Recorded so the enum diff can rewrite the column when the enum's values are removed or
+    reordered (a type rewrite Postgres has no ALTER form for). The hazard flags let the diff
+    raise on shapes the rewrite does not handle rather than emit failing SQL.
+    """
+
+    schema: str
+    table: str
+    column: str
+    is_array: bool  # column type is enum[] rather than the enum directly
+    is_generated: bool  # generated column: ALTER COLUMN TYPE rejects USING
+    in_index: bool  # column participates in an index
+    in_constraint: bool  # column participates in a constraint
+
+
 @dataclass
 class DbIntrospectionResult:
     """
@@ -360,7 +526,20 @@ class DbIntrospectionResult:
     extension_by_name: dict[str, Extension]
 
     # Mapping from a view to the set of views it depends on.
-    view_dependencies: dict[ViewKey, set[ViewKey]]
+    view_dependencies: dict[RelationKey, set[RelationKey]]
+
+    # Mapping from a materialized view to the set of views/matviews it reads from.
+    matview_dependencies: dict[RelationKey, set[RelationKey]]
 
     # Mapping from a view to the set of table columns it reads.
-    view_column_dependencies: dict[ViewKey, set[ColumnKey]]
+    view_column_dependencies: dict[RelationKey, set[ColumnKey]]
+
+    # Mapping from a composite type to the set of composite types it depends on.
+    composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]
+
+    # Mapping from an enum type to the table columns typed by it (directly or as an array).
+    enum_column_dependencies: dict[EnumKey, list[EnumColumnDependency]]
+
+    # ALTER DEFAULT PRIVILEGES rules (pg_default_acl), keyed by (role, schema-or-None,
+    # object_type) so the diff can pair a source rule with its target counterpart.
+    default_acl_by_key: dict["DefaultAclKey", DefaultAcl]

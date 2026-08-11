@@ -6,6 +6,7 @@ SELECT
     t.typnotnull AS not_null,
     t.typdefault AS default_expr,
     obj_description(t.oid, 'pg_type') AS comment,
+    pg_get_userbyid(t.typowner) AS domain_owner,
     -- CHECK constraints as {name: definition}; the domain's NOT NULL is a separate
     -- pg_constraint row (contype 'n') and is handled via typnotnull, so keep only 'c'.
     COALESCE((

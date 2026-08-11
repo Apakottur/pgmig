@@ -1,13 +1,16 @@
 import hashlib
 import re
+from pathlib import Path
 
 import tenacity
 
-from pgmig._db import DEFAULT_DRIVER, DbConnection, Driver
+from pgmig._db import DbConnection, DbConnInfo
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"
 
+# SQL that wipes a database back to a freshly-created state.
+_RESET_SQL = (Path(__file__).parent / "db_reset.sql").read_text(encoding="utf-8")
 
 # Postgres truncates identifiers past this length, which would silently collapse
 # distinct long branch names to the same database name.
@@ -50,11 +53,11 @@ def get_dsn(db_name: str, *, pgbouncer: bool = False) -> str:
     stop=tenacity.stop_after_delay(10),
     reraise=True,
 )
-async def wait_for_db_connection(*, dsn: str, driver: Driver = DEFAULT_DRIVER) -> None:
+async def wait_for_db_connection(*, db_conn_info: DbConnInfo) -> None:
     """
     Wait for a database to be ready to accept connections.
     """
-    async with DbConnection.connect(dsn=dsn, driver=driver):
+    async with DbConnection.connect(db_conn_info=db_conn_info):
         pass
 
 
@@ -69,3 +72,12 @@ async def recreate_database(admin_conn: DbConnection, db_name: str) -> None:
 
     # Create the database.
     await admin_conn.execute(f"CREATE DATABASE {db_name}")
+
+
+async def reset_database(conn: DbConnection) -> None:
+    """
+    Reset a database to the state of a freshly created one.
+
+    This is ~25% faster than recreating the database, keeping the connection open.
+    """
+    await conn.execute(_RESET_SQL)
