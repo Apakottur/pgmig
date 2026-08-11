@@ -38,4 +38,4 @@ class DbConnectionError(_PgmigError):
     def __init__(self, *, source_error: BaseException | None, target_error: BaseException | None) -> None:
         self.source_error = source_error
         self.target_error = target_error
-        super().__init__("At least one of the databases is unreachable")
+        super().__init__("Failed to connect to one of the databases")

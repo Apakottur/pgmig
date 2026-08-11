@@ -6,7 +6,8 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner, Result
 
-from pgmig._cli import _format_database, _format_error, app
+from pgmig._cli._cli import app
+from pgmig._cli._error_format import _format_database, format_error
 from pgmig._drivers import DbDriver
 from pgmig._errors import _PgmigError
 from tests._api.generate_setup import GenerateSetup
@@ -67,7 +68,7 @@ async def test_generate_connection_error_is_clean() -> None:
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "At least one of the databases is unreachable" in result.output
+    assert "Failed to connect to one of the databases:" in result.output
     assert "Source - UNREACHABLE" in result.output
     assert "Target - UNREACHABLE" in result.output
     assert "╭─ psycopg " in result.output
@@ -96,11 +97,11 @@ async def test_generate_reports_an_unreachable_source(gen_setup: GenerateSetup) 
 
 
 def test_format_error_of_a_plain_message_is_the_message() -> None:
-    assert _format_error(_PgmigError("nothing to add"), driver=DbDriver.AUTO) == "nothing to add"
+    assert format_error(_PgmigError("nothing to add"), driver=DbDriver.AUTO) == "nothing to add"
 
 
 def test_format_database_boxes_wraps_and_keeps_blank_lines(mocker: MockerFixture) -> None:
-    mocker.patch("pgmig._cli.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
+    mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
 
     assert _format_database("Target", OSError("connection failed for user pgmig\n\nsecond"), driver=DbDriver.AUTO) == [
         "  Target - UNREACHABLE",
@@ -116,7 +117,7 @@ def test_format_database_boxes_wraps_and_keeps_blank_lines(mocker: MockerFixture
 def test_format_database_falls_back_to_ascii_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
     # Output redirected under a legacy code page: drawing the nicer box would raise.
     mocker.patch("sys.stderr", io.TextIOWrapper(io.BytesIO(), encoding="ascii"))
-    mocker.patch("pgmig._cli.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
+    mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((30, 24)))
 
     assert _format_database("Source", OSError("boom"), driver=DbDriver.PSYCOPG) == [
         "  Source - UNREACHABLE",
@@ -132,7 +133,7 @@ def test_format_database_of_a_reachable_database_is_one_line() -> None:
 
 async def test_generate_internal_error_reports_issue(mocker: MockerFixture) -> None:
     # An unexpected failure is an internal error: full traceback plus an issue prompt.
-    mocker.patch("pgmig._cli.generate_migration", side_effect=ValueError("boom"))
+    mocker.patch("pgmig._cli._cli.generate_migration", side_effect=ValueError("boom"))
 
     result = await _run_cli("generate -s src -t tgt")
 
@@ -239,7 +240,7 @@ async def test_generate_unwritable_output_is_clean(gen_setup: GenerateSetup, tmp
 
 
 async def test_ignore_extension_version_flags_pass_list(mocker: MockerFixture) -> None:
-    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
+    spy = mocker.patch("pgmig._cli._cli.generate_migration", return_value="")
 
     result = await _run_cli(
         "generate -s src -t tgt --ignore-extension-version postgis --ignore-extension-version hstore"
@@ -250,7 +251,7 @@ async def test_ignore_extension_version_flags_pass_list(mocker: MockerFixture) -
 
 
 async def test_ignore_schema_flags_pass_list(mocker: MockerFixture) -> None:
-    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
+    spy = mocker.patch("pgmig._cli._cli.generate_migration", return_value="")
 
     result = await _run_cli("generate -s src -t tgt --ignore-schema audit --ignore-schema staging")
 
@@ -259,7 +260,7 @@ async def test_ignore_schema_flags_pass_list(mocker: MockerFixture) -> None:
 
 
 async def test_no_ignore_flags_passes_empty_list(mocker: MockerFixture) -> None:
-    spy = mocker.patch("pgmig._cli.generate_migration", return_value="")
+    spy = mocker.patch("pgmig._cli._cli.generate_migration", return_value="")
 
     result = await _run_cli("generate -s src -t tgt")
 
