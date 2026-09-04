@@ -7,7 +7,8 @@ from pgmig._diff._core import (
     ctx_iter_table_pairs,
     diff_child_comment_statements,
     diff_renamable,
-    without_column_drop_cascades,
+    removed_columns,
+    without_column_removal_cascades,
 )
 from pgmig._models import Constraint
 from pgmig._sql import ident, qualified
@@ -169,6 +170,19 @@ def _diff_constraints(
     return diff, [*deferrability_alters, *enforcement_alters], validations
 
 
+def _blocks_column_removal(constraint: Constraint, removed: frozenset[str]) -> bool:
+    """
+    Whether this run's column removals would be refused rather than cascaded because of this
+    constraint: it reaches a removed column only through an expression or WHERE predicate in
+    its backing index, which records no dependency of the constraint's own. Postgres then sees
+    the constraint as a non-auto dependent of the column and rejects the DROP COLUMN, so the
+    constraint has to go first.
+    """
+    return constraint.dependency_columns.isdisjoint(removed) and not constraint.index_dependency_columns.isdisjoint(
+        removed
+    )
+
+
 def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of primary key, unique, check, and exclusion constraints
@@ -179,9 +193,19 @@ def generate() -> Iterator[Statement]:
         if dst_table is None:
             continue
 
-        # A constraint on a column dropped this run is already gone by the CONSTRAINT phase.
-        src_constraints = without_column_drop_cascades(
-            src_table.constraint_by_name if src_table else {}, src_table, dst_table
+        removed = removed_columns(src_table, dst_table)
+        all_src_constraints = src_table.constraint_by_name if src_table else {}
+        # A constraint Postgres would refuse to cascade is dropped before the column removal
+        # it blocks. Both it and the constraints that do cascade away are then out of the
+        # ordinary diff below, which re-adds whichever the target still declares.
+        blocking = {name for name, con in all_src_constraints.items() if _blocks_column_removal(con, removed)}
+        for name in sorted(blocking):
+            yield Statement(
+                Phase.CONSTRAINT_DROP_EARLY,
+                f"ALTER TABLE {qualified(schema_name, table_name)} DROP CONSTRAINT {ident(name)};",
+            )
+        src_constraints = without_column_removal_cascades(
+            {name: con for name, con in all_src_constraints.items() if name not in blocking}, removed
         )
         dst_constraints = dst_table.constraint_by_name
         (drops, renames, adds, recreated, renamed_from), alters, validations = _diff_constraints(

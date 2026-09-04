@@ -8,7 +8,8 @@ from pgmig._diff._core import (
     ctx_iter_table_pairs,
     diff_comment_statements,
     diff_renamable,
-    without_column_drop_cascades,
+    removed_columns,
+    without_column_removal_cascades,
 )
 from pgmig._models import Index
 from pgmig._sql import ident, qualified
@@ -74,7 +75,11 @@ def generate() -> Iterator[Statement]:
         if dst_table is None:
             continue
 
-        # An index on a column dropped this run is already gone by the INDEX phase.
-        src_indexes = without_column_drop_cascades(src_table.index_by_name if src_table else {}, src_table, dst_table)
+        # An index over a column removed this run is already gone by the INDEX phase. An index
+        # always cascades (it depends on every column it names, expressions and predicate
+        # included), so unlike a constraint it never blocks the removal.
+        src_indexes = without_column_removal_cascades(
+            src_table.index_by_name if src_table else {}, removed_columns(src_table, dst_table)
+        )
         for sql in diff_index_statements(schema_name, src_indexes, dst_table.index_by_name):
             yield Statement(Phase.INDEX, sql)

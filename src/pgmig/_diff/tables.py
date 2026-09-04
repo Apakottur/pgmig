@@ -8,6 +8,7 @@ from pgmig._diff._core import (
     _diff_comments,
     ctx_iter_table_pairs,
     diff_single_comment,
+    is_stored_column_rebuild,
     owner_statements,
 )
 from pgmig._diff.grants import grant_statements
@@ -343,7 +344,7 @@ def _alter_shared_column(
     expression_changed = (
         src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
     )
-    if expression_changed and src_column.generated == "s":
+    if is_stored_column_rebuild(src_column, dst_column):
         table_prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
         return ColumnDiff(
             [
