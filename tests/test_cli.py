@@ -209,6 +209,18 @@ async def test_generate_flag_overrides_env_var(gen_setup: GenerateSetup) -> None
     assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
 
 
+async def test_generate_driver_from_env_var(gen_setup: GenerateSetup) -> None:
+    # With no --driver flag, the driver is read from PGMIG_DRIVER and validated against the
+    # supported set -- an unknown name is a usage error rather than a silently ignored value.
+    result = await _run_cli(
+        f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn}",
+        env={"PGMIG_DRIVER": "not-a-driver"},
+    )
+
+    assert result.exit_code == 2
+    assert "not-a-driver" in result.output
+
+
 async def test_generate_missing_source_mentions_env_var(gen_setup: GenerateSetup) -> None:
     # No flag and no env var: the error must point at both ways of passing the DSN.
     result = await _run_cli(f"generate --target {gen_setup.dst.dsn}")

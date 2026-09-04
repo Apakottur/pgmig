@@ -5,13 +5,27 @@ from pgmig._models import Constraint
 
 def _fk(name: str, definition: str) -> Constraint:
     return Constraint(
-        name=name, definition=definition, contype="f", columns=[], comment=None, deferrable=False, deferred=False
+        name=name,
+        definition=definition,
+        contype="f",
+        columns=[],
+        dependency_columns=frozenset(),
+        comment=None,
+        deferrable=False,
+        deferred=False,
     )
 
 
 def _check(name: str, definition: str) -> Constraint:
     return Constraint(
-        name=name, definition=definition, contype="c", columns=[], comment=None, deferrable=False, deferred=False
+        name=name,
+        definition=definition,
+        contype="c",
+        columns=[],
+        dependency_columns=frozenset(),
+        comment=None,
+        deferrable=False,
+        deferred=False,
     )
 
 

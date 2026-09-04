@@ -15,9 +15,31 @@ SELECT
             WITH ORDINALITY AS k (attnum, ord)
             JOIN pg_attribute a ON a.attrelid = con.conrelid
                 AND a.attnum = k.attnum) AS con_columns,
+        -- Every column of the owning table the constraint depends on directly: dropping any
+        -- one of them makes Postgres drop the constraint too, so the diff must not then emit
+        -- its own DROP CONSTRAINT. Only the constraint's own pg_depend rows count. A column
+        -- an index-backed constraint reaches solely through an expression in its backing
+        -- index is deliberately excluded: there the column drop maps to the constraint as a
+        -- non-auto dependent and Postgres refuses it outright ("cannot drop column ...
+        -- because other objects depend on it") rather than cascading, so the constraint is
+        -- still there and its DROP CONSTRAINT must still be emitted. DISTINCT because a
+        -- check constraint records both an auto and a normal dependency on its columns.
+        (
+            SELECT
+                array_agg(DISTINCT a.attname)
+            FROM
+                pg_depend d
+            JOIN pg_attribute a ON a.attrelid = d.refobjid
+                AND a.attnum = d.refobjsubid
+        WHERE
+            d.classid = 'pg_constraint'::regclass
+            AND d.objid = con.oid
+            AND d.refclassid = 'pg_class'::regclass
+            AND d.refobjid = con.conrelid
+            AND d.refobjsubid > 0) AS con_dependency_columns,
         obj_description(con.oid, 'pg_constraint') AS con_comment
-    FROM
-        pg_constraint con
+FROM
+    pg_constraint con
     JOIN pg_class c ON c.oid = con.conrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE

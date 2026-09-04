@@ -11,6 +11,7 @@ class _ConstraintRow(IntrospectionRowWithSchema):
     con_deferrable: bool
     con_deferred: bool
     con_columns: list[str] | None
+    con_dependency_columns: list[str] | None
     con_comment: str | None
 
 
@@ -25,6 +26,7 @@ async def load() -> None:
             definition=con_row.con_def,
             contype=con_row.con_type,
             columns=con_row.con_columns or [],
+            dependency_columns=frozenset(con_row.con_dependency_columns or ()),
             comment=con_row.con_comment,
             deferrable=con_row.con_deferrable,
             deferred=con_row.con_deferred,

@@ -5,6 +5,23 @@ SELECT
     ic.relname AS index_name,
     stripped.def AS index_def,
     replace(stripped.def, 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ') AS index_canonical,
+    -- Every column of the owning relation the index depends on: dropping any one of them
+    -- makes Postgres drop the index too, so the diff must not then emit its own DROP INDEX.
+    -- pg_depend is the whole set -- indkey carries a bare 0 for an expression key and says
+    -- nothing at all about a partial index's WHERE predicate.
+    (
+        SELECT
+            array_agg(DISTINCT a.attname)
+        FROM
+            pg_depend d
+            JOIN pg_attribute a ON a.attrelid = d.refobjid
+                AND a.attnum = d.refobjsubid
+        WHERE
+            d.classid = 'pg_class'::regclass
+            AND d.objid = i.indexrelid
+            AND d.refclassid = 'pg_class'::regclass
+            AND d.refobjid = i.indrelid
+            AND d.refobjsubid > 0) AS index_dependency_columns,
     obj_description(i.indexrelid, 'pg_class') AS index_comment
 FROM
     pg_index i

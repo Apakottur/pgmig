@@ -10,6 +10,22 @@ SELECT
     pg_get_indexdef(i.indexrelid) AS index_def,
     replace(pg_get_indexdef(i.indexrelid), 'INDEX ' || quote_ident(ic.relname) || ' ON ', 'INDEX ON ')
 	AS index_canonical,
+    -- The columns the index depends on, as in indexes.sql. A matview index is only ever
+    -- dropped along with its matview, so nothing consumes this on the matview side; it is
+    -- selected to keep the two index queries a single row shape.
+    (
+        SELECT
+            array_agg(DISTINCT a.attname)
+        FROM
+            pg_depend d
+            JOIN pg_attribute a ON a.attrelid = d.refobjid
+                AND a.attnum = d.refobjsubid
+        WHERE
+            d.classid = 'pg_class'::regclass
+            AND d.objid = i.indexrelid
+            AND d.refclassid = 'pg_class'::regclass
+            AND d.refobjid = i.indrelid
+            AND d.refobjsubid > 0) AS index_dependency_columns,
     obj_description(i.indexrelid, 'pg_class') AS index_comment
 FROM
     pg_index i
