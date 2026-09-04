@@ -5,18 +5,18 @@ requires = ["hatchling", "hatch-vcs"]
 [dependency-groups]
 dev = [
   "httpx==0.28.1",
-  "mypy==2.3.0",
-  "prek==0.4.13",
-  "psycopg==3.3.4",
+  "mypy==2.3.1",
+  "prek==0.5.2",
+  "psycopg==3.3.5",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest-sugar==1.1.1",
   "pytest==9.1.1",
-  "ruff==0.16.2",
+  "ruff==0.16.6",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.69",
+  "ty==0.0.78",
   "typing-extensions==4.16.0",
 ]
 
@@ -43,7 +43,7 @@ classifiers = [
 ]
 dependencies = [
   #
-  "psycopg>=3.3.4",
+  "psycopg>=3.3.5",
   "pydantic>=2",
   "typer>=0.12",
 ]
@@ -51,7 +51,7 @@ dependencies = [
 [project.optional-dependencies]
 binary = [
   #
-  "psycopg[binary]>=3.3.4",
+  "psycopg[binary]>=3.3.5",
 ]
 
 [project.scripts]
