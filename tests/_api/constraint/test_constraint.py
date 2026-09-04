@@ -311,3 +311,66 @@ async def test_constraint_drop_exclusion(gen_setup: GenerateSetup) -> None:
         dst=["CREATE TABLE room (during int4range)"],
         diff=['ALTER TABLE "public"."room" DROP CONSTRAINT "room_during_excl"'],
     )
+
+
+async def test_constraint_drop_skipped_when_only_column_dropped(gen_setup: GenerateSetup) -> None:
+    """
+    A primary key whose only column is dropped this run: DROP COLUMN cascades the constraint
+    away before the CONSTRAINT phase runs, so no explicit DROP CONSTRAINT may be emitted.
+    """
+    await gen_setup.assert_diff(
+        src=["CREATE TABLE pass (secret text NOT NULL, CONSTRAINT pass_pkey PRIMARY KEY (secret))"],
+        dst=["CREATE TABLE pass (secret_hash text NOT NULL, CONSTRAINT pass_pkey PRIMARY KEY (secret_hash))"],
+        diff=[
+            'ALTER TABLE "public"."pass" DROP COLUMN "secret"',
+            'ALTER TABLE "public"."pass" ADD COLUMN "secret_hash" text NOT NULL',
+            'ALTER TABLE "public"."pass" ADD CONSTRAINT "pass_pkey" PRIMARY KEY (secret_hash)',
+        ],
+    )
+
+
+async def test_constraint_drop_skipped_for_check_on_dropped_column(gen_setup: GenerateSetup) -> None:
+    """
+    A check constraint referencing a dropped column cascades away with the column.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN age integer",
+            "ALTER TABLE person ADD CONSTRAINT person_age_check CHECK (age > 0)",
+        ],
+        dst=[],
+        diff=['ALTER TABLE "public"."person" DROP COLUMN "age"'],
+    )
+
+
+async def test_constraint_drop_skipped_when_one_key_column_dropped(gen_setup: GenerateSetup) -> None:
+    """
+    A multi-column unique constraint losing any one of its columns cascades away entirely,
+    even though its other key columns survive.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (a integer, b integer)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN c integer",
+            "ALTER TABLE person ADD CONSTRAINT person_abc_key UNIQUE (a, b, c)",
+        ],
+        dst=[],
+        diff=['ALTER TABLE "public"."person" DROP COLUMN "c"'],
+    )
+
+
+async def test_constraint_drop_skipped_for_exclusion_on_dropped_column(gen_setup: GenerateSetup) -> None:
+    """
+    An exclusion constraint over a dropped column cascades away with it, like every other
+    index-backed kind.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE room (id integer)"],
+        src=[
+            "ALTER TABLE room ADD COLUMN during int4range",
+            "ALTER TABLE room ADD CONSTRAINT room_during_excl EXCLUDE USING gist (during WITH &&)",
+        ],
+        dst=[],
+        diff=['ALTER TABLE "public"."room" DROP COLUMN "during"'],
+    )

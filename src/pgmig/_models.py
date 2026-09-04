@@ -96,6 +96,10 @@ class Index:
     # `definition` with the index's own name stripped out, so two indexes that
     # differ only by name compare equal (drives rename detection).
     canonical: str
+    # Every column of the owning relation the index depends on, so a drop cascaded by a
+    # dropped column can be recognized. Covers expression and WHERE-predicate columns,
+    # which the index key alone does not carry.
+    dependency_columns: frozenset[str]
     comment: str | None
 
 
@@ -167,6 +171,10 @@ class Constraint:
     definition: str
     contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
+    # Every column of the owning table the constraint depends on directly, so a drop cascaded
+    # by a dropped column can be recognized. Not the same set as `columns`: a check constraint
+    # records the columns its expression reads, which its (empty) key does not carry.
+    dependency_columns: frozenset[str]
     comment: str | None
     deferrable: bool  # condeferrable: DEFERRABLE
     deferred: bool  # condeferred: DEFERRABLE INITIALLY DEFERRED (implies deferrable)

@@ -274,3 +274,51 @@ async def test_index_rename_not_concurrent(gen_setup: GenerateSetup) -> None:
         diff=['ALTER INDEX "public"."person_name_old" RENAME TO "person_name_new"'],
         index_concurrently=True,
     )
+
+
+async def test_index_drop_skipped_when_key_column_dropped(gen_setup: GenerateSetup) -> None:
+    """
+    An index on a column dropped this run: DROP COLUMN cascades the index away before the
+    INDEX phase runs, so no explicit DROP INDEX may be emitted.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN email text",
+            "CREATE INDEX person_email_idx ON person (email)",
+        ],
+        dst=[],
+        diff=['ALTER TABLE "public"."person" DROP COLUMN "email"'],
+    )
+
+
+async def test_index_drop_skipped_when_expression_column_dropped(gen_setup: GenerateSetup) -> None:
+    """
+    An expression index depends on the columns inside its expression, which never appear in
+    indkey; dropping one cascades the index away.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN email text",
+            "CREATE INDEX person_email_lower_idx ON person (lower(email))",
+        ],
+        dst=[],
+        diff=['ALTER TABLE "public"."person" DROP COLUMN "email"'],
+    )
+
+
+async def test_index_drop_skipped_when_predicate_column_dropped(gen_setup: GenerateSetup) -> None:
+    """
+    A partial index depends on the columns of its WHERE predicate too, so dropping one
+    cascades the index away even though its key column survives.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN email text",
+            "CREATE INDEX person_id_idx ON person (id) WHERE email IS NOT NULL",
+        ],
+        dst=[],
+        diff=['ALTER TABLE "public"."person" DROP COLUMN "email"'],
+    )

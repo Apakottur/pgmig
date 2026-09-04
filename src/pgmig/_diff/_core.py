@@ -299,6 +299,39 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
 
 
+class _HasDependencyColumns(Protocol):
+    """
+    Any table-owned object that records the columns whose drop takes it with them.
+    """
+
+    @property
+    def dependency_columns(self) -> frozenset[str]: ...
+
+
+_DependentT = TypeVar("_DependentT", bound=_HasDependencyColumns)
+
+
+def without_column_drop_cascades(
+    objects: Mapping[str, _DependentT], src_table: Table | None, dst_table: Table
+) -> dict[str, _DependentT]:
+    """
+    Remove from a source-side map of table-owned objects (constraints, indexes) every entry
+    Postgres drops for us as a side effect of this run's column drops.
+
+    Dropping a column drops every constraint and index that depends on it, and both of those
+    phases run after the TABLE phase that emits DROP COLUMN -- so an explicit DROP CONSTRAINT
+    / DROP INDEX for one of them would hit an object that is already gone and fail. Treating
+    such an object as absent from the source is right for the whole diff, not just the drop:
+    one that is also absent from the target needs no statement at all, and one that the
+    target still declares under the same name is correctly re-added rather than renamed.
+
+    This is the column-granular form of the dropped-table skip each generator already makes,
+    and the mirror of the owned-sequence skip in the sequence diff.
+    """
+    dropped = src_table.column_by_name.keys() - dst_table.column_by_name.keys() if src_table else set()
+    return {name: obj for name, obj in objects.items() if obj.dependency_columns.isdisjoint(dropped)}
+
+
 def ctx_iter_view_pairs() -> Iterator[tuple[str, str, View | None, View | None]]:
     """
     Yield (schema_name, view_name, source_view, target_view) for every view across both
