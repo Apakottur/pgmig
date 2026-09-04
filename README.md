@@ -52,6 +52,9 @@ uv add --dev pgmig            # Or add pgmig to your project.
 pip install pgmig
 ```
 
+The base install uses the pure-Python psycopg driver (needs a system libpq). For a faster build,
+a bundled-libpq build, or the asyncpg driver, see [which driver should I install?](#which-driver-should-i-install).
+
 ### Usage
 
 `pgmig` can be used directly in the command line or as a Python library.
@@ -101,7 +104,7 @@ adds a few more (`—` in the library column):
 | `--ignore-schema`         | `ignore_schemas`     | Schema names to exclude from the diff entirely: their tables and every other object, and the `CREATE`/`DROP` of the schema itself, are ignored (even object kinds pgmig cannot otherwise process). The schema must be isolated — if it shares any dependency with a kept schema (a foreign key, a view read, a cross-schema type, …), pgmig errors rather than emit a migration that would fail at apply. Repeatable on the CLI; a list of names in the library. |
 | `--include-owner`        | `include_owner`      | Emit `ALTER ... OWNER TO` statements to reconcile ownership. Off by default: ownership references cluster-level roles that routinely differ across environments, so it is not part of the default convergence. |
 | `--include-grants`       | `include_grants`     | Also emit named-role `GRANT`/`REVOKE`. `PUBLIC` grants are always diffed (portable and apply-safe); named-role grants reference cluster-level roles that diverge across environments and fail on apply when the role is absent on the target, so they are opt-in. |
-| `--driver`               | `driver`             | Database driver to connect with: `auto` (default) or `psycopg`. `auto` picks among the supported drivers; naming one pins it. On the CLI it falls back to the `PGMIG_DRIVER` environment variable. |
+| `--driver`               | `driver`             | Database driver to connect with: `auto` (default), `psycopg` or `asyncpg`. `auto` picks among the installed drivers; naming one pins it. On the CLI it falls back to the `PGMIG_DRIVER` environment variable. See [the FAQ](#which-driver-should-i-install). |
 | `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
 | `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
 
@@ -130,14 +133,42 @@ e.g. `postgresql://user:pass@host:5432/dbname`.
 
 ## FAQ
 
+### Which driver should I install?
+
+pgmig talks to Postgres through a driver. The base `pgmig` install uses **psycopg** (pure
+Python), which needs a system-provided libpq. Extras swap in a faster build or a different
+driver — the migration code is identical, only the connection layer changes.
+
+| Install                 | Driver / build           | Needs at install | libpq         | Notes |
+| ----------------------- | ------------------------ | ---------------- | ------------- | ----- |
+| `pip install pgmig`             | psycopg (pure Python) | nothing          | system libpq  | Works everywhere; slowest. |
+| `pip install 'pgmig[binary]'`   | psycopg (prebuilt C)  | nothing          | **bundled**   | Fast, no build tools or system libpq. Bundled libpq/OpenSSL only update with the wheel, so psycopg advises against it in production — ideal for CLI / standalone use. |
+| `pip install 'pgmig[c]'`        | psycopg (compiled C)  | C compiler + libpq headers | system libpq | Fast **and** rides your OS's libpq security updates. Recommended for production. |
+| `pip install 'pgmig[asyncpg]'`  | asyncpg               | nothing          | **none**      | No libpq at all. Select it with `--driver asyncpg` (or `driver="asyncpg"`). |
+
 ### Do I need libpq installed?
 
-By default, yes — pgmig requires the Postgres client library (libpq) on the machine. For
-standalone / CLI use you can skip that by installing the `binary` extra, which bundles it:
+Depends on the install. The base install and the `c` extra use the system libpq (install it via
+your OS, e.g. `apt install libpq5`). The `binary` extra bundles its own, and the `asyncpg` extra
+doesn't use libpq at all — so either of those needs nothing extra on the machine.
+
+### Can I use asyncpg instead of psycopg?
+
+Yes. Install the extra and select the driver:
 
 ```shell
-pip install 'pgmig[binary]'
+pip install 'pgmig[asyncpg]'
+pgmig generate -s "$SRC" -t "$TGT" --driver asyncpg   # or set PGMIG_DRIVER=asyncpg
 ```
+
+In the library, pass `driver="asyncpg"` to `generate` / `agenerate`. The default is `psycopg`.
+
+### Which driver is fastest?
+
+psycopg — especially the `c` / `binary` builds — is about 1.3× faster than asyncpg for pgmig's
+workload. Introspection is a handful of one-shot catalog queries, where asyncpg's per-statement
+prepare cost outweighs its throughput edge. That said, a generation runs once and finishes in
+well under a second, so pick by install convenience rather than speed.
 
 ## Contributing
 

@@ -70,7 +70,6 @@ async def test_generate_connection_error_is_clean(driver: DbDriver) -> None:
     assert "Source - UNREACHABLE" in result.output
     assert "Target - UNREACHABLE" in result.output
     assert f"╭─ {driver.resolved} " in result.output
-    assert "│ Invalid connection string." in result.output
     assert "Traceback" not in result.output
 
 
@@ -102,10 +101,9 @@ async def test_generate_does_not_echo_an_unparsable_connection_string() -> None:
     assert result.exit_code == 1
     assert "swordfish" not in result.output
     assert "localhost" not in result.output
-    assert "Invalid connection string." in result.output
 
 
-async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture) -> None:
+async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: MockerFixture, driver: DbDriver) -> None:
     # The driver's text is quoted verbatim, wrapped to fit, with continuation lines indented
     # so a wrapped line cannot be mistaken for a new one.
     mocker.patch("pgmig._cli._error_format.shutil.get_terminal_size", return_value=os.terminal_size((60, 24)))
@@ -114,10 +112,14 @@ async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: Moc
 
     assert result.exit_code == 1
     assert "  Source - UNREACHABLE" in result.output
-    assert "    ╭─ psycopg ─────────────────────────────────────────────" in result.output
-    assert "    │ Invalid connection string. The driver's own message is" in result.output
-    assert "    │     not shown here because it quotes the connection" in result.output
-    assert "    ╰───────────────────────────────────────────────────────" in result.output
+
+    # Every box line is drawn to the same width, and a wrapped line is indented past the
+    # first so it cannot be mistaken for a new one. The text itself is the driver's.
+    lines = [line for line in result.output.splitlines() if line.startswith("    ")]
+    assert lines[0].startswith(f"    ╭─ {driver.resolved} ─")
+    assert lines[-1].startswith("    ╰─")
+    assert {len(line) for line in (lines[0], lines[-1])} == {60}
+    assert any(line.startswith("    │     ") for line in lines)
 
 
 async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(
@@ -132,7 +134,6 @@ async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(
 
     assert result.exit_code == 1
     assert f"+- {driver.resolved} " in result.output
-    assert "| Invalid connection string." in result.output
     assert "╭" not in result.output
 
 
