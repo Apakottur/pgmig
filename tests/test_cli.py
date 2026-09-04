@@ -7,6 +7,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner, Result
 
 from pgmig._cli._cli import app
+from pgmig._drivers import DbDriver
 from tests._api.generate_setup import GenerateSetup
 
 _runner = CliRunner()
@@ -59,7 +60,7 @@ async def test_generate_empty_diff_truncates_stale_output(gen_setup: GenerateSet
     assert out.read_text() == ""
 
 
-async def test_generate_connection_error_is_clean() -> None:
+async def test_generate_connection_error_is_clean(driver: DbDriver) -> None:
     # A bad connection string is an expected failure: clean message, no traceback, and the
     # driver's own text quoted in a box below it rather than run into pgmig's message.
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
@@ -68,7 +69,7 @@ async def test_generate_connection_error_is_clean() -> None:
     assert "Failed to connect to one of the databases:" in result.output
     assert "Source - UNREACHABLE" in result.output
     assert "Target - UNREACHABLE" in result.output
-    assert "╭─ psycopg " in result.output
+    assert f"╭─ {driver.resolved} " in result.output
     assert "│ Invalid connection string." in result.output
     assert "Traceback" not in result.output
 
@@ -119,7 +120,9 @@ async def test_generate_wraps_the_driver_error_to_the_terminal_width(mocker: Moc
     assert "    ╰───────────────────────────────────────────────────────" in result.output
 
 
-async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(mocker: MockerFixture) -> None:
+async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(
+    mocker: MockerFixture, driver: DbDriver
+) -> None:
     # Output redirected under a legacy code page: drawing the nicer box would raise. The
     # module's own `sys` is replaced rather than sys.stderr, which the CLI runner rebinds to
     # its capture buffer once the command is running.
@@ -128,7 +131,7 @@ async def test_generate_falls_back_to_an_ascii_box_when_stderr_cannot_encode(moc
     result = await _run_cli("generate -s not-a-dsn -t not-a-dsn")
 
     assert result.exit_code == 1
-    assert "+- psycopg " in result.output
+    assert f"+- {driver.resolved} " in result.output
     assert "| Invalid connection string." in result.output
     assert "╭" not in result.output
 
@@ -203,6 +206,18 @@ async def test_generate_flag_overrides_env_var(gen_setup: GenerateSetup) -> None
 
     assert result.exit_code == 0
     assert result.stdout == 'CREATE TABLE "public"."person" ("name" text);\n'
+
+
+async def test_generate_driver_from_env_var(gen_setup: GenerateSetup) -> None:
+    # With no --driver flag, the driver is read from PGMIG_DRIVER and validated against the
+    # supported set -- an unknown name is a usage error rather than a silently ignored value.
+    result = await _run_cli(
+        f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn}",
+        env={"PGMIG_DRIVER": "not-a-driver"},
+    )
+
+    assert result.exit_code == 2
+    assert "not-a-driver" in result.output
 
 
 async def test_generate_missing_source_mentions_env_var(gen_setup: GenerateSetup) -> None:
