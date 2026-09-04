@@ -34,9 +34,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store",
         default=None,
         choices=list(DbDriver),
-        help=(
-            f"Database driver to test against. Falls back to the PGMIG_DRIVER env var, then {DbDriver.AUTO.value!r}."
-        ),
+        help=f"Database driver to test against. Falls back to the PGMIG_DRIVER env var, then {DbDriver.AUTO}.",
     )
     parser.addoption(
         "--pg-version",
