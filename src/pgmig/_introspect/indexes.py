@@ -25,6 +25,7 @@ class _IndexRow(IntrospectionRowWithSchema):
     index_name: str
     index_def: str
     index_canonical: str
+    index_dependency_columns: list[str] | None
     index_comment: str | None
 
 
@@ -41,6 +42,7 @@ async def _load_indexes(query: IntrospectionQuery, select_target: Callable[[Sche
             name=row.index_name,
             definition=row.index_def,
             canonical=row.index_canonical,
+            dependency_columns=frozenset(row.index_dependency_columns or ()),
             comment=row.index_comment,
         )
 

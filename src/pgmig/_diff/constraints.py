@@ -7,6 +7,7 @@ from pgmig._diff._core import (
     ctx_iter_table_pairs,
     diff_child_comment_statements,
     diff_renamable,
+    without_column_drop_cascades,
 )
 from pgmig._models import Constraint
 from pgmig._sql import ident, qualified
@@ -178,7 +179,10 @@ def generate() -> Iterator[Statement]:
         if dst_table is None:
             continue
 
-        src_constraints = src_table.constraint_by_name if src_table else {}
+        # A constraint on a column dropped this run is already gone by the CONSTRAINT phase.
+        src_constraints = without_column_drop_cascades(
+            src_table.constraint_by_name if src_table else {}, src_table, dst_table
+        )
         dst_constraints = dst_table.constraint_by_name
         (drops, renames, adds, recreated, renamed_from), alters, validations = _diff_constraints(
             schema_name=schema_name,
