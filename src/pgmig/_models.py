@@ -97,7 +97,7 @@ class Index:
     # differ only by name compare equal (drives rename detection).
     canonical: str
     # Every column of the owning relation the index depends on, so a drop cascaded by a
-    # dropped column can be recognized. Covers expression and WHERE-predicate columns,
+    # removed column can be recognized. Covers expression and WHERE-predicate columns,
     # which the index key alone does not carry.
     dependency_columns: frozenset[str]
     comment: str | None
@@ -172,9 +172,13 @@ class Constraint:
     contype: str  # pg_constraint.contype (p, u, c, f, ...)
     columns: list[str]  # key columns in order (for NOT NULL coordination)
     # Every column of the owning table the constraint depends on directly, so a drop cascaded
-    # by a dropped column can be recognized. Not the same set as `columns`: a check constraint
+    # by a removed column can be recognized. Not the same set as `columns`: a check constraint
     # records the columns its expression reads, which its (empty) key does not carry.
     dependency_columns: frozenset[str]
+    # The columns reached only through the backing index (an exclusion constraint's expression
+    # or WHERE predicate). Dropping one of these does not cascade the constraint away -- it
+    # makes Postgres refuse the column drop -- so the constraint must be dropped first.
+    index_dependency_columns: frozenset[str]
     comment: str | None
     deferrable: bool  # condeferrable: DEFERRABLE
     deferred: bool  # condeferred: DEFERRABLE INITIALLY DEFERRED (implies deferrable)

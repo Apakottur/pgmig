@@ -37,6 +37,25 @@ SELECT
             AND d.refclassid = 'pg_class'::regclass
             AND d.refobjid = con.conrelid
             AND d.refobjsubid > 0) AS con_dependency_columns,
+        -- The columns the constraint reaches only through its backing index -- an exclusion
+        -- constraint's expression or WHERE predicate, the one place a constraint can name a
+        -- column without recording a dependency of its own. Dropping one of these does not
+        -- cascade: the drop maps to the constraint as a non-auto dependent and Postgres
+        -- refuses it outright, so the constraint has to be dropped before the column is.
+        (
+            SELECT
+                array_agg(DISTINCT a.attname)
+            FROM
+                pg_depend d
+                JOIN pg_attribute a ON a.attrelid = d.refobjid
+                    AND a.attnum = d.refobjsubid
+            WHERE
+                con.conindid <> 0
+                AND d.classid = 'pg_class'::regclass
+                AND d.objid = con.conindid
+                AND d.refclassid = 'pg_class'::regclass
+                AND d.refobjid = con.conrelid
+                AND d.refobjsubid > 0) AS con_index_dependency_columns,
         obj_description(con.oid, 'pg_constraint') AS con_comment
 FROM
     pg_constraint con

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._keys import RelationKey
-from pgmig._models import DbIntrospectionResult, Schema, Table, View
+from pgmig._models import Column, DbIntrospectionResult, Schema, Table, View
 from pgmig._sql import comment_on, ident, qualified
 
 if TYPE_CHECKING:
@@ -228,6 +228,8 @@ class Phase(Enum):
     EXTENSION_CREATE = auto()  # Before tables/types that may use what the extension provides.
     TYPE_CREATE = auto()  # Before tables (a column may be of the type) and its ADD VALUE alters.
     SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
+    # Before TABLE: a constraint a column removal would block rather than cascade away.
+    CONSTRAINT_DROP_EARLY = auto()
     TABLE = auto()
     SEQUENCE_OWNED_BY = auto()  # After tables: OWNED BY needs its target table/column to exist.
     INDEX = auto()
@@ -311,25 +313,55 @@ class _HasDependencyColumns(Protocol):
 _DependentT = TypeVar("_DependentT", bound=_HasDependencyColumns)
 
 
-def without_column_drop_cascades(
-    objects: Mapping[str, _DependentT], src_table: Table | None, dst_table: Table
+def is_stored_column_rebuild(src_column: Column, dst_column: Column) -> bool:
+    """
+    Whether a column present on both sides is rebuilt with DROP COLUMN + ADD COLUMN: a stored
+    generated column whose generation expression changes. Its data is derived, so the rebuild
+    is non-destructive and portable to pre-PG18, which has no in-place expression ALTER -- but
+    the column really does go away and come back, taking its dependents with it.
+    """
+    return (
+        src_column.generated == "s"
+        and dst_column.generated == "s"
+        and src_column.generation_expression != dst_column.generation_expression
+    )
+
+
+def removed_columns(src_table: Table | None, dst_table: Table) -> frozenset[str]:
+    """
+    The columns of the source table that do not survive this run's TABLE phase: dropped
+    outright, or rebuilt via DROP COLUMN + ADD COLUMN. Both take every constraint and index
+    that depends on the column with them.
+    """
+    if src_table is None:
+        return frozenset()
+    dst_columns = dst_table.column_by_name
+    return frozenset(
+        name
+        for name, src_column in src_table.column_by_name.items()
+        if name not in dst_columns or is_stored_column_rebuild(src_column, dst_columns[name])
+    )
+
+
+def without_column_removal_cascades(
+    objects: Mapping[str, _DependentT], removed: frozenset[str]
 ) -> dict[str, _DependentT]:
     """
     Remove from a source-side map of table-owned objects (constraints, indexes) every entry
-    Postgres drops for us as a side effect of this run's column drops.
+    Postgres drops for us as a side effect of this run's column removals.
 
     Dropping a column drops every constraint and index that depends on it, and both of those
     phases run after the TABLE phase that emits DROP COLUMN -- so an explicit DROP CONSTRAINT
     / DROP INDEX for one of them would hit an object that is already gone and fail. Treating
     such an object as absent from the source is right for the whole diff, not just the drop:
     one that is also absent from the target needs no statement at all, and one that the
-    target still declares under the same name is correctly re-added rather than renamed.
+    target still declares under the same name is correctly re-created -- which is what makes a
+    rebuilt column's constraints and indexes come back rather than silently disappear.
 
     This is the column-granular form of the dropped-table skip each generator already makes,
     and the mirror of the owned-sequence skip in the sequence diff.
     """
-    dropped = src_table.column_by_name.keys() - dst_table.column_by_name.keys() if src_table else set()
-    return {name: obj for name, obj in objects.items() if obj.dependency_columns.isdisjoint(dropped)}
+    return {name: obj for name, obj in objects.items() if obj.dependency_columns.isdisjoint(removed)}
 
 
 def ctx_iter_view_pairs() -> Iterator[tuple[str, str, View | None, View | None]]:
