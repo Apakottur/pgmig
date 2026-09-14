@@ -15,16 +15,7 @@ from pgmig._diff.grants import grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
-from pgmig._sql import comment_on, ident, qualified
-
-# Value bounds per integer type an identity column may use (smallint/integer/bigint only).
-# An identity sequence's default MINVALUE/MAXVALUE are derived from these and the increment
-# sign, so an explicitly-set bound can be told apart from a default one.
-_IDENTITY_TYPE_BOUNDS: dict[str, tuple[int, int]] = {
-    "smallint": (-32768, 32767),
-    "integer": (-2147483648, 2147483647),
-    "bigint": (-9223372036854775808, 9223372036854775807),
-}
+from pgmig._sql import comment_on, ident, qualified, sequence_option_clauses
 
 
 def _identity_options_clause(column: Column) -> str:
@@ -32,28 +23,17 @@ def _identity_options_clause(column: Column) -> str:
     The " (OPTION value ...)" tail for an identity column's CREATE/ADD, listing only the
     sequence options that differ from their defaults, or "" when every option is a default.
 
-    Defaults depend on the sign of the increment and on the column's integer type: an
-    ascending sequence runs 1..type_max and a descending one runs type_min..-1, and in both
-    cases the start defaults to the range's near end (MINVALUE ascending, MAXVALUE descending).
     Call only for an identity column (every identity_* field is then set).
     """
-    increment = cast("int", column.identity_increment)
-    type_min, type_max = _IDENTITY_TYPE_BOUNDS[column.type]
-    ascending = increment > 0
-    default_start = column.identity_min if ascending else column.identity_max
-    parts: list[str] = []
-    if column.identity_start != default_start:
-        parts.append(f"START WITH {column.identity_start}")
-    if increment != 1:
-        parts.append(f"INCREMENT BY {increment}")
-    if column.identity_min != (1 if ascending else type_min):
-        parts.append(f"MINVALUE {column.identity_min}")
-    if column.identity_max != (type_max if ascending else -1):
-        parts.append(f"MAXVALUE {column.identity_max}")
-    if column.identity_cache != 1:
-        parts.append(f"CACHE {column.identity_cache}")
-    if column.identity_cycle:
-        parts.append("CYCLE")
+    parts = sequence_option_clauses(
+        data_type=column.type,
+        start=cast("int", column.identity_start),
+        increment=cast("int", column.identity_increment),
+        min_value=cast("int", column.identity_min),
+        max_value=cast("int", column.identity_max),
+        cache=cast("int", column.identity_cache),
+        cycle=cast("bool", column.identity_cycle),
+    )
     return f" ({' '.join(parts)})" if parts else ""
 
 

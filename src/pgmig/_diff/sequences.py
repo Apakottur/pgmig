@@ -5,24 +5,31 @@ from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comm
 from pgmig._diff.grants import grant_statements
 from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
-from pgmig._sql import qualified
+from pgmig._sql import qualified, sequence_option_clauses
 
 
 def _sequence_tail(sequence: Sequence) -> str:
     """
-    Render the parameter tail shared by CREATE SEQUENCE.
+    The parameter tail of a CREATE SEQUENCE, with a leading space -- or "" when every
+    parameter is a default and the bare CREATE SEQUENCE already says everything.
+
+    Only the parameters that differ from their Postgres default are listed. bigint is the
+    default type, so AS is emitted for a narrower one only -- which is also what restores the
+    MINVALUE/MAXVALUE defaults that the omitted bounds rely on.
     """
-    tail = (
-        f"AS {sequence.data_type}"
-        f" INCREMENT BY {sequence.increment}"
-        f" MINVALUE {sequence.min_value}"
-        f" MAXVALUE {sequence.max_value}"
-        f" START WITH {sequence.start}"
-        f" CACHE {sequence.cache}"
+    clauses = [] if sequence.data_type == "bigint" else [f"AS {sequence.data_type}"]
+    clauses.extend(
+        sequence_option_clauses(
+            data_type=sequence.data_type,
+            start=sequence.start,
+            increment=sequence.increment,
+            min_value=sequence.min_value,
+            max_value=sequence.max_value,
+            cache=sequence.cache,
+            cycle=sequence.cycle,
+        )
     )
-    if sequence.cycle:
-        tail += " CYCLE"
-    return tail
+    return f" {' '.join(clauses)}" if clauses else ""
 
 
 def _persistence_keyword(sequence: Sequence) -> str:
@@ -103,7 +110,7 @@ def generate() -> Iterator[Statement]:
                 dst = dst_sequences[name]
                 yield Statement(
                     Phase.SEQUENCE_CREATE,
-                    f"CREATE {_persistence_keyword(dst)}SEQUENCE {qualified_name} {_sequence_tail(dst)};",
+                    f"CREATE {_persistence_keyword(dst)}SEQUENCE {qualified_name}{_sequence_tail(dst)};",
                 )
                 if dst.owned_by is not None:
                     yield Statement(

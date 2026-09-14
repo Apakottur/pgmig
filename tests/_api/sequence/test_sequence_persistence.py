@@ -5,6 +5,10 @@ from tests._api.generate_setup import GenerateSetup
 # UNLOGGED sequences require Postgres 15+; the CREATE/ALTER syntax does not parse on 14.
 _SEQ = "AS integer INCREMENT BY 1 MINVALUE 1 MAXVALUE 100 START WITH 1 CACHE 1"
 
+# The same sequence as pgmig renders it: every parameter above except the type and the
+# maximum is a Postgres default, so only those two survive.
+_SEQ_MINIMAL = "AS integer MAXVALUE 100"
+
 
 async def test_create_unlogged_sequence(gen_setup: GenerateSetup) -> None:
     """
@@ -16,7 +20,7 @@ async def test_create_unlogged_sequence(gen_setup: GenerateSetup) -> None:
     await gen_setup.assert_diff(
         src=[],
         dst=[f"CREATE UNLOGGED SEQUENCE counter {_SEQ}"],
-        diff=[f'CREATE UNLOGGED SEQUENCE "public"."counter" {_SEQ}'],
+        diff=[f'CREATE UNLOGGED SEQUENCE "public"."counter" {_SEQ_MINIMAL}'],
     )
 
 

@@ -3,13 +3,14 @@ from tests._api.generate_setup import GenerateSetup
 
 async def test_sequence_create(gen_setup: GenerateSetup) -> None:
     """
-    Sequence present in target but missing in source -> CREATE SEQUENCE.
+    Sequence present in target but missing in source -> CREATE SEQUENCE, listing only the
+    parameters that differ from their Postgres default (CACHE 1 is one, so it is dropped).
     """
     await gen_setup.assert_diff(
         src=[],
         dst=["CREATE SEQUENCE counter AS integer INCREMENT BY 2 MINVALUE 0 MAXVALUE 100 START WITH 5 CACHE 1 CYCLE"],
         diff=[
-            'CREATE SEQUENCE "public"."counter" AS integer INCREMENT BY 2 MINVALUE 0 MAXVALUE 100 START WITH 5 CACHE 1 CYCLE'
+            'CREATE SEQUENCE "public"."counter" AS integer START WITH 5 INCREMENT BY 2 MINVALUE 0 MAXVALUE 100 CYCLE'
         ],
     )
 
@@ -21,9 +22,66 @@ async def test_sequence_create_no_cycle(gen_setup: GenerateSetup) -> None:
     await gen_setup.assert_diff(
         src=[],
         dst=["CREATE SEQUENCE counter AS integer INCREMENT BY 1 MINVALUE 1 MAXVALUE 100 START WITH 1 CACHE 1"],
-        diff=[
-            'CREATE SEQUENCE "public"."counter" AS integer INCREMENT BY 1 MINVALUE 1 MAXVALUE 100 START WITH 1 CACHE 1'
-        ],
+        diff=['CREATE SEQUENCE "public"."counter" AS integer MAXVALUE 100'],
+    )
+
+
+async def test_sequence_create_all_defaults(gen_setup: GenerateSetup) -> None:
+    """
+    A sequence with no explicit parameters is created bare -- every parameter Postgres reports
+    is its own default, so none is spelled out.
+    """
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE SEQUENCE counter"],
+        diff=['CREATE SEQUENCE "public"."counter"'],
+    )
+
+
+async def test_sequence_create_narrower_type(gen_setup: GenerateSetup) -> None:
+    """
+    A non-bigint sequence keeps its AS clause and nothing else: the type is what re-derives the
+    MINVALUE/MAXVALUE defaults the omitted bounds rely on.
+    """
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE SEQUENCE counter AS smallint"],
+        diff=['CREATE SEQUENCE "public"."counter" AS smallint'],
+    )
+
+
+async def test_sequence_create_descending(gen_setup: GenerateSetup) -> None:
+    """
+    A descending sequence defaults to type_min..-1 starting at -1, so only the increment is
+    spelled out.
+    """
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE SEQUENCE counter INCREMENT BY -1"],
+        diff=['CREATE SEQUENCE "public"."counter" INCREMENT BY -1'],
+    )
+
+
+async def test_sequence_create_descending_explicit_start(gen_setup: GenerateSetup) -> None:
+    """
+    A descending sequence's default start is its MAXVALUE; a start that differs from the
+    resolved maximum is spelled out.
+    """
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE SEQUENCE counter INCREMENT BY -1 START WITH -5"],
+        diff=['CREATE SEQUENCE "public"."counter" START WITH -5 INCREMENT BY -1'],
+    )
+
+
+async def test_sequence_create_non_default_cache(gen_setup: GenerateSetup) -> None:
+    """
+    A cache other than 1 is spelled out.
+    """
+    await gen_setup.assert_diff(
+        src=[],
+        dst=["CREATE SEQUENCE counter CACHE 20"],
+        diff=['CREATE SEQUENCE "public"."counter" CACHE 20'],
     )
 
 
