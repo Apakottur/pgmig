@@ -6,17 +6,17 @@ requires = ["hatchling", "hatch-vcs"]
 dev = [
   "httpx==0.28.1",
   "mypy==2.3.1",
-  "prek==0.5.2",
+  "prek==0.5.3",
   "psycopg==3.3.5",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "pytest-mock==3.15.1",
   "pytest-sugar==1.1.1",
   "pytest==9.1.1",
-  "ruff==0.16.6",
+  "ruff==0.16.7",
   "shpyx==0.0.37",
   "tenacity==9.1.4",
-  "ty==0.0.78",
+  "ty==0.0.81",
   "typing-extensions==4.16.0",
 ]
 
@@ -24,7 +24,7 @@ dev = [
 name = "pgmig"
 dynamic = ["version"]
 description = "Generate migrations between Postgres databases"
-authors = [{name = "Yossi Rozantsev"}]
+authors = [{ name = "Yossi Rozantsev" }]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11"

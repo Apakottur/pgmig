@@ -1,4 +1,4 @@
-default_language_version = {python = "python3.14"}
+default_language_version = { python = "python3.14" }
 
 ###########
 # GENERAL #
@@ -55,7 +55,7 @@ id = "actionlint"
 ########
 [[repos]]
 repo = "https://github.com/pappasam/toml-sort"
-rev = "v0.24.4"
+rev = "v0.25.0"
 
 [[repos.hooks]]
 id = "toml-sort"
@@ -102,7 +102,7 @@ files = '\.sql$'
 ##########
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.16.6"
+rev = "v0.16.7"
 
 [[repos.hooks]]
 id = "ruff-check"
