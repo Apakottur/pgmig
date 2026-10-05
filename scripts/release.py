@@ -30,7 +30,7 @@ def main() -> None:
     if shpyx.run("git status --porcelain").stdout.strip():
         _abort("Working tree is not clean. Commit or stash your changes first.")
 
-    # Fetch and fast-forward to origin/main. The output is not interesting; shpyx raises if the pull fails.
+    # Fetch and fast-forward to origin/main.
     print("Fetching from origin...")
     shpyx.run("git pull")
 
