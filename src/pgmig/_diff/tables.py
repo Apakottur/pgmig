@@ -271,6 +271,29 @@ def _alter_columns(
     return ColumnDiff(statements, deferred_drop_not_null)
 
 
+def _set_not_null_statements(schema_name: str, table_name: str, column_name: str) -> list[str]:
+    """
+    The statements that make an existing column NOT NULL.
+
+    Plain SET NOT NULL scans the whole table under an ACCESS EXCLUSIVE lock. With
+    context.safe_not_null, a CHECK (col IS NOT NULL) is added NOT VALID (brief lock, no scan)
+    and validated (scans under SHARE UPDATE EXCLUSIVE, which does not block reads or writes);
+    SET NOT NULL then proves the column from the validated CHECK and skips its scan. The CHECK
+    is redundant afterwards, so it is dropped.
+    """
+    table = qualified(schema_name, table_name)
+    set_not_null = f"ALTER TABLE {table} ALTER COLUMN {ident(column_name)} SET NOT NULL;"
+    if not context.safe_not_null:
+        return [set_not_null]
+    check_name = ident(f"pgmig_{column_name}_not_null")
+    return [
+        f"ALTER TABLE {table} ADD CONSTRAINT {check_name} CHECK ({ident(column_name)} IS NOT NULL) NOT VALID;",
+        f"ALTER TABLE {table} VALIDATE CONSTRAINT {check_name};",
+        set_not_null,
+        f"ALTER TABLE {table} DROP CONSTRAINT {check_name};",
+    ]
+
+
 def _alter_shared_column(
     *,
     schema_name: str,
@@ -376,7 +399,7 @@ def _alter_shared_column(
             # be NOT NULL, so set it first when the source was nullable (the generic
             # NOT NULL block below is skipped for identity targets, so no double).
             if not src_column.not_null:
-                statements.append(f"{prefix} SET NOT NULL;")
+                statements.extend(_set_not_null_statements(schema_name, table_name, column_name))
             statements.append(f"{prefix} ADD {dst_column.identity_clause}{_identity_options_clause(dst_column)};")
         else:
             # Stays an identity, generation kind flips (ALWAYS <-> BY DEFAULT).
@@ -395,7 +418,7 @@ def _alter_shared_column(
             # Skip if a target primary key or the target identity already implies
             # NOT NULL for this column.
             if column_name not in pk_columns and dst_column.identity_kind is None:
-                statements.append(f"{prefix} SET NOT NULL;")
+                statements.extend(_set_not_null_statements(schema_name, table_name, column_name))
         elif column_name in src_pk_columns:
             # Covering source PK drops this run; defer past the CONSTRAINT phase.
             deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")

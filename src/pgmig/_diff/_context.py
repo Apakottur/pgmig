@@ -53,6 +53,11 @@ class _ContextData:
     # run inside a transaction block.
     index_concurrently: bool
 
+    # Whether to emit SET NOT NULL on an existing column through a NOT VALID CHECK (col IS NOT NULL) that is
+    # validated, then dropped once the column is NOT NULL. The validated CHECK lets SET NOT NULL skip its
+    # full-table scan, so the ACCESS EXCLUSIVE lock is held only briefly.
+    safe_not_null: bool
+
     # Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ... UPDATE TO
     # is emitted for them. Empty (default) ignores none.
     ignore_extension_version: Sequence[str]
@@ -85,6 +90,7 @@ class _Context:
         source: DbIntrospectionResult,
         target: DbIntrospectionResult,
         index_concurrently: bool,
+        safe_not_null: bool,
         ignore_extension_version: Sequence[str],
         include_owner: bool,
         include_grants: bool,
@@ -94,6 +100,7 @@ class _Context:
                 source=source,
                 target=target,
                 index_concurrently=index_concurrently,
+                safe_not_null=safe_not_null,
                 ignore_extension_version=ignore_extension_version,
                 include_owner=include_owner,
                 include_grants=include_grants,
@@ -115,6 +122,10 @@ class _Context:
     @property
     def index_concurrently(self) -> bool:
         return _context.get().index_concurrently
+
+    @property
+    def safe_not_null(self) -> bool:
+        return _context.get().safe_not_null
 
     @property
     def ignore_extension_version(self) -> Sequence[str]:

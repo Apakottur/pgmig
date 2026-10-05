@@ -185,6 +185,22 @@ async def test_generate_index_concurrently(gen_setup: GenerateSetup) -> None:
     assert result.stdout == "CREATE INDEX CONCURRENTLY person_name_idx ON public.person USING btree (name);\n"
 
 
+async def test_generate_safe_not_null(gen_setup: GenerateSetup) -> None:
+    # --safe-not-null emits SET NOT NULL through a validated CHECK constraint.
+    await gen_setup.src.execute("CREATE TABLE person (name text)")
+    await gen_setup.dst.execute("CREATE TABLE person (name text NOT NULL)")
+
+    result = await _run_cli(f"generate -s {gen_setup.src.dsn} -t {gen_setup.dst.dsn} --safe-not-null")
+
+    assert result.exit_code == 0
+    assert result.stdout == (
+        'ALTER TABLE "public"."person" ADD CONSTRAINT "pgmig_name_not_null" CHECK ("name" IS NOT NULL) NOT VALID;\n'
+        'ALTER TABLE "public"."person" VALIDATE CONSTRAINT "pgmig_name_not_null";\n'
+        'ALTER TABLE "public"."person" ALTER COLUMN "name" SET NOT NULL;\n'
+        'ALTER TABLE "public"."person" DROP CONSTRAINT "pgmig_name_not_null";\n'
+    )
+
+
 async def test_generate_dsn_from_env_vars(gen_setup: GenerateSetup) -> None:
     # With no --source/--target flags, the DSNs are read from PGMIG_SOURCE/PGMIG_TARGET.
     await gen_setup.dst.execute("CREATE TABLE person (name text)")

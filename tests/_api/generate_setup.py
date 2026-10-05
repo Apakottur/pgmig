@@ -49,6 +49,7 @@ class GenerateSetup:
         both: list[str] | None = None,
         apply: bool = True,
         index_concurrently: bool = False,
+        safe_not_null: bool = False,
         include_owner: bool = False,
         include_grants: bool = False,
         ignore_schemas: Sequence[str] = (),
@@ -63,6 +64,7 @@ class GenerateSetup:
             both: statements to run on both databases.
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
+            safe_not_null: Pass through to `generate` to emit SET NOT NULL via a validated CHECK.
             include_owner: Pass through to `generate` to emit ALTER ... OWNER TO statements.
             include_grants: Pass through to `generate` to emit named-role GRANT / REVOKE.
             ignore_schemas: Pass through to `generate` to exclude these schemas from the diff.
@@ -90,6 +92,7 @@ class GenerateSetup:
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
+            safe_not_null=safe_not_null,
             include_owner=include_owner,
             include_grants=include_grants,
             ignore_schemas=ignore_schemas,
@@ -107,6 +110,7 @@ class GenerateSetup:
                 source=self.src.dsn,
                 target=self.dst.dsn,
                 index_concurrently=index_concurrently,
+                safe_not_null=safe_not_null,
                 include_owner=include_owner,
                 include_grants=include_grants,
                 ignore_schemas=ignore_schemas,
