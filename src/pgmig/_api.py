@@ -13,6 +13,7 @@ async def agenerate(
     source: str,
     target: str,
     index_concurrently: bool = False,
+    safe_not_null: bool = False,
     ignore_extension_version: Sequence[str] = (),
     ignore_schemas: Sequence[str] = (),
     include_owner: bool = False,
@@ -28,6 +29,11 @@ async def agenerate(
         index_concurrently: Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
                             Using CONCURRENTLY avoids blocking index read/write operations, but takes longer to execute
                             and cannot be run inside a transaction block.
+        safe_not_null: Whether to emit SET NOT NULL on an existing column through a CHECK (col IS NOT NULL)
+                       constraint that is added NOT VALID, validated, and dropped once the column is NOT NULL.
+                       The validated CHECK lets SET NOT NULL skip its full-table scan, so the ACCESS EXCLUSIVE
+                       lock is held only briefly. Run the statements outside a transaction block, otherwise the
+                       lock taken by the first one is held throughout.
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
         ignore_schemas: Schema names to exclude from the diff entirely -- their tables and every other object,
@@ -71,6 +77,7 @@ async def agenerate(
                 source=source_result,  # ty: ignore[invalid-argument-type]
                 target=target_result,  # ty: ignore[invalid-argument-type]
                 index_concurrently=index_concurrently,
+                safe_not_null=safe_not_null,
                 ignore_extension_version=ignore_extension_version,
                 include_owner=include_owner,
                 include_grants=include_grants,
@@ -82,6 +89,7 @@ def generate(
     source: str,
     target: str,
     index_concurrently: bool = False,
+    safe_not_null: bool = False,
     ignore_extension_version: Sequence[str] = (),
     ignore_schemas: Sequence[str] = (),
     include_owner: bool = False,
@@ -97,6 +105,11 @@ def generate(
         index_concurrently: Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
                             Using CONCURRENTLY avoids blocking index read/write operations, but takes longer to execute
                             and cannot be run inside a transaction block.
+        safe_not_null: Whether to emit SET NOT NULL on an existing column through a CHECK (col IS NOT NULL)
+                       constraint that is added NOT VALID, validated, and dropped once the column is NOT NULL.
+                       The validated CHECK lets SET NOT NULL skip its full-table scan, so the ACCESS EXCLUSIVE
+                       lock is held only briefly. Run the statements outside a transaction block, otherwise the
+                       lock taken by the first one is held throughout.
         ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
                                   UPDATE TO is emitted for them. Empty (default) ignores none.
         ignore_schemas: Schema names to exclude from the diff entirely -- their tables and every other object,
@@ -127,6 +140,7 @@ def generate(
             source=source,
             target=target,
             index_concurrently=index_concurrently,
+            safe_not_null=safe_not_null,
             ignore_extension_version=ignore_extension_version,
             ignore_schemas=ignore_schemas,
             include_owner=include_owner,

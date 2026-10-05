@@ -78,6 +78,16 @@ def generate(
             "transaction block -- apply them outside BEGIN/COMMIT.",
         ),
     ] = False,
+    safe_not_null: Annotated[
+        bool,
+        typer.Option(
+            "--safe-not-null",
+            help="Emit SET NOT NULL on an existing column through a CHECK (col IS NOT NULL) constraint "
+            "that is added NOT VALID, validated, and dropped afterwards, so SET NOT NULL skips its "
+            "full-table scan under the ACCESS EXCLUSIVE lock. Apply the statements outside "
+            "BEGIN/COMMIT, otherwise the lock is held throughout.",
+        ),
+    ] = False,
     ignore_extension_version: Annotated[
         list[str] | None,
         typer.Option(
@@ -129,6 +139,7 @@ def generate(
             source=source,
             target=target,
             index_concurrently=index_concurrently,
+            safe_not_null=safe_not_null,
             ignore_extension_version=ignore_extension_version or [],
             ignore_schemas=ignore_schema or [],
             include_owner=include_owner,
