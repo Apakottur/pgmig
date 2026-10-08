@@ -3,9 +3,10 @@
 Create a new pgmig release.
 """
 
+import json
 import sys
+import urllib.request
 
-import httpx
 import shpyx
 
 _MAIN_BRANCH = "main"
@@ -43,9 +44,8 @@ def main() -> None:
     package_name = slug.split("/")[1]
 
     # Look up the latest published version on PyPI.
-    pypi_response = httpx.get(f"https://pypi.org/pypi/{package_name}/json")
-    pypi_response.raise_for_status()
-    version = pypi_response.json()["info"]["version"]
+    with urllib.request.urlopen(f"https://pypi.org/pypi/{package_name}/json") as pypi_response:
+        version = json.load(pypi_response)["info"]["version"]
     parts = version.split(".")
     if len(parts) != 3 or not all(part.isdigit() for part in parts):
         _abort(f"Cannot parse PyPI version {version!r} as 'major.minor.patch'.")

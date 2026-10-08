@@ -8,7 +8,7 @@ async def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
 
     Roles are cluster-level (shared by every database in the server), so creating one on the
     source connection makes it visible to the target too. DROP ... IF EXISTS first makes it
-    idempotent across the per-test DROP/CREATE DATABASE. The name is namespaced by the branch
+    idempotent across the per-test database reset. The name is namespaced by the branch
     key so parallel runs on other branches sharing this cluster don't race on the same role.
     """
     name = get_unique_postgres_name(base, gen_setup.unique_key)
