@@ -30,8 +30,44 @@ from pgmig._introspect import (
     views,
 )
 from pgmig._introspect._context import context
-from pgmig._introspect._core import Guard, IntrospectionQuery, IntrospectionRow, Loader, run_introspection_query
+from pgmig._introspect._core import (
+    Guard,
+    IntrospectionQuery,
+    IntrospectionRow,
+    Loader,
+    run_introspection_query,
+    send_introspection_queries,
+)
 from pgmig._models import DbIntrospectionResult
+
+# The introspection query each guard and loader runs, so that a batch of them can be sent together.
+_QUERY_BY_STEP: dict[Guard | Loader, IntrospectionQuery] = {
+    unsupported.check: IntrospectionQuery.UNSUPPORTED,
+    matview_dependencies.check: IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK,
+    invalid_indexes.check: IntrospectionQuery.INVALID_INDEXES,
+    schemas.load: IntrospectionQuery.SCHEMAS,
+    tables.load: IntrospectionQuery.TABLES,
+    indexes.load: IntrospectionQuery.INDEXES,
+    constraints.load: IntrospectionQuery.CONSTRAINTS,
+    sequences.load: IntrospectionQuery.SEQUENCES,
+    functions.load: IntrospectionQuery.FUNCTIONS,
+    enums.load: IntrospectionQuery.ENUMS,
+    enum_dependencies.load: IntrospectionQuery.ENUM_DEPENDENCIES,
+    views.load: IntrospectionQuery.VIEWS,
+    view_dependencies.load: IntrospectionQuery.VIEW_DEPENDENCIES,
+    triggers.load: IntrospectionQuery.TRIGGERS,
+    policies.load: IntrospectionQuery.POLICIES,
+    view_column_dependencies.load: IntrospectionQuery.VIEW_COLUMN_DEPENDENCIES,
+    materialized_views.load: IntrospectionQuery.MATERIALIZED_VIEWS,
+    matview_dependencies.load: IntrospectionQuery.MATVIEW_DEPENDENCIES_LOAD,
+    matview_indexes.load: IntrospectionQuery.MATVIEW_INDEXES,
+    domains.load: IntrospectionQuery.DOMAINS,
+    composite_types.load: IntrospectionQuery.COMPOSITE_TYPES,
+    composite_type_dependencies.load: IntrospectionQuery.COMPOSITE_TYPE_DEPENDENCIES,
+    range_types.load: IntrospectionQuery.RANGE_TYPES,
+    extensions.load: IntrospectionQuery.EXTENSIONS,
+    default_privileges.load: IntrospectionQuery.DEFAULT_PRIVILEGES,
+}
 
 
 class _IntrospectionPreflight(IntrospectionRow):
@@ -126,7 +162,10 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
         default_acl_by_key={},
     )
 
-    async with DbReadOnlyConnection.connect(db_conn_info=db_conn_info) as conn:
+    # Pipeline the queries to save round trips: each step below sends all its queries at once, and only then
+    # processes their results. A step's queries are only sent after the previous step passed, so that a guard
+    # still runs (and raises) before any of the queries it guards.
+    async with DbReadOnlyConnection.connect(db_conn_info=db_conn_info) as conn, conn.pipeline():
         # Run within the introspection context.
         with context.context_scope(
             conn=conn,
@@ -135,6 +174,7 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
         ):
             # Verify that the ignored schemas are isolated from the kept ones.
             if ignore_schemas:
+                await send_introspection_queries([IntrospectionQuery.SCHEMA_CONNECTIONS])
                 connections = await schema_connections.check()
                 if connections:
                     message = (
@@ -145,11 +185,14 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
                     raise PgmigUnsupportedError(message)
 
             # Run the preflight query to find out which introspection steps to run.
+            await send_introspection_queries([IntrospectionQuery.PREFLIGHT])
             preflight_result = await run_introspection_query(IntrospectionQuery.PREFLIGHT, _IntrospectionPreflight)
             preflight = preflight_result[0]
 
             # Look for any unsupported objects.
-            all_findings = [finding for guard in preflight.get_guards() for finding in await guard()]
+            guards = preflight.get_guards()
+            await send_introspection_queries([_QUERY_BY_STEP[guard] for guard in guards])
+            all_findings = [finding for guard in guards for finding in await guard()]
             if all_findings:
                 message = "pgmig cannot process this database:\n" + "\n".join(
                     f"  - {finding}" for finding in all_findings
@@ -157,7 +200,9 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
                 raise PgmigUnsupportedError(message)
 
             # Run the introspections for the classes the database actually contains.
-            for load in preflight.get_loaders():
+            loaders = preflight.get_loaders()
+            await send_introspection_queries([_QUERY_BY_STEP[load] for load in loaders])
+            for load in loaders:
                 await load()
 
     return db_introspection_result

@@ -1,10 +1,14 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from pgmig._db import DbReadOnlyConnection
+from pgmig._db import DbReadOnlyConnection, PendingIntrospectionQuery
 from pgmig._models import DbIntrospectionResult
+
+if TYPE_CHECKING:
+    from pgmig._introspect._core import IntrospectionQuery
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,9 @@ class _ContextData:
 
     # Schemas to exclude from the diff entirely.
     ignore_schemas: frozenset[str]
+
+    # Introspection queries that were sent and whose rows were not fetched yet.
+    pending_queries: "dict[IntrospectionQuery, PendingIntrospectionQuery]" = field(default_factory=dict)
 
 
 # Context of the current introspection.
@@ -63,6 +70,10 @@ class _Context:
     @property
     def ignore_schemas(self) -> frozenset[str]:
         return _context.get().ignore_schemas
+
+    @property
+    def pending_queries(self) -> "dict[IntrospectionQuery, PendingIntrospectionQuery]":
+        return _context.get().pending_queries
 
 
 context = _Context()
