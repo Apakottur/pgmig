@@ -83,10 +83,31 @@ jobs:
           PGMIG_TEST_PG_VERSION: ${{ matrix.pg-version }}
         run: pytest --showlocals -c tests/pytest.ini
 
+  lowest-deps:
+    # Install the oldest versions allowed by the dependency floors in pyproject.toml,
+    # on the oldest Python, to catch floors that are too low.
+    name: Unit Tests - Lowest Dependencies - Python 3.11
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/workflows/util/setup_python
+        with:
+          python-version: "3.11"
+          resolution: lowest-direct
+
+      - name: Smoke test the CLI
+        run: |
+          pgmig --help
+          pgmig --version
+
+      - name: Run unit tests
+        run: pytest --showlocals -c tests/pytest.ini
+
   check:
     name: Check All
     if: always()
-    needs: [linters, type-check, unit-tests]
+    needs: [linters, type-check, unit-tests, lowest-deps]
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed
