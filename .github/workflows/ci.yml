@@ -68,8 +68,12 @@ jobs:
             pg-version: "18"
           - python-version: "3.13"
             pg-version: "18"
+          # The oldest dependency versions allowed by pyproject.toml.
+          - python-version: "3.11"
+            pg-version: "18"
+            resolution: lowest-direct
 
-    name: Unit Tests - Python ${{ matrix.python-version }} - Postgres ${{ matrix.pg-version }}
+    name: Unit Tests - Python ${{ matrix.python-version }} - Postgres ${{ matrix.pg-version }} ${{ matrix.resolution }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -77,6 +81,7 @@ jobs:
       - uses: ./.github/workflows/util/setup_python
         with:
           python-version: ${{ matrix.python-version }}
+          resolution: ${{ matrix.resolution }}
 
       - name: Run unit tests
         env:
