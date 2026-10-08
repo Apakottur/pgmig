@@ -32,7 +32,7 @@ def _check(name: str, definition: str) -> Constraint:
 
 
 def _diff(src: dict[str, Constraint], dst: dict[str, Constraint]) -> tuple[RenameDiff, list[str], list[str]]:
-    return _diff_constraints(schema_name="public", table_name="t", src=src, dst=dst)
+    return _diff_constraints(schema_name="public", table_name="t", src=src, dst=dst, foreign_keys=True)
 
 
 def test_fk_enforce_to_not_enforced_becomes_alter() -> None:

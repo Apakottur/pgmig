@@ -1,21 +1,5 @@
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import get_unique_postgres_name
-
-
-async def _ensure_role(gen_setup: GenerateSetup, base: str) -> str:
-    """
-    Create a cluster-wide role for the test and return its name.
-
-    Roles are cluster-level (shared by every database in the server), so creating one on the
-    source connection makes it visible to the target too. DROP ... IF EXISTS first makes it
-    idempotent across the per-test database reset. The name is namespaced by the branch
-    key so parallel runs on other branches sharing this cluster don't race on the same role.
-    """
-    name = get_unique_postgres_name(base, gen_setup.unique_key)
-    await gen_setup.src.execute(f"DROP ROLE IF EXISTS {name}")
-    await gen_setup.src.execute(f"CREATE ROLE {name}")
-    return name
-
+from tests._api.ownership import ensure_role
 
 # --- Named-role grants: opt-in behind include_grants ---
 
@@ -25,7 +9,7 @@ async def test_table_named_grant_off_by_default(gen_setup: GenerateSetup) -> Non
     A named-role grant is role-dependent (may fail at apply on a cluster missing the role), so
     it is NOT diffed by default -- no flag, no statement.
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)"],
         dst=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
@@ -37,7 +21,7 @@ async def test_table_grant_added(gen_setup: GenerateSetup) -> None:
     """
     With include_grants, a privilege granted on the target but not the source -> GRANT.
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)"],
         dst=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
@@ -50,7 +34,7 @@ async def test_table_grant_removed(gen_setup: GenerateSetup) -> None:
     """
     With include_grants, a privilege granted on the source but not the target -> REVOKE.
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
         dst=["CREATE TABLE person (name text)"],
@@ -64,7 +48,7 @@ async def test_table_grant_option_added(gen_setup: GenerateSetup) -> None:
     With include_grants, adding WITH GRANT OPTION to an existing privilege -> GRANT ... WITH
     GRANT OPTION.
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
         dst=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role} WITH GRANT OPTION"],
@@ -78,7 +62,7 @@ async def test_table_grant_option_removed(gen_setup: GenerateSetup) -> None:
     With include_grants, removing only the grant option (privilege kept) -> REVOKE GRANT OPTION
     FOR, not a full revoke-then-grant.
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role} WITH GRANT OPTION"],
         dst=["CREATE TABLE person (name text)", f"GRANT SELECT ON person TO {role}"],
@@ -92,8 +76,8 @@ async def test_table_grant_multiple_ordered(gen_setup: GenerateSetup) -> None:
     With include_grants, multiple privileges and grantees are emitted deterministically, sorted
     by (grantee, privilege).
     """
-    role_a = await _ensure_role(gen_setup, "pgmig_grant_a")
-    role_b = await _ensure_role(gen_setup, "pgmig_grant_b")
+    role_a = await ensure_role(gen_setup, "pgmig_grant_a")
+    role_b = await ensure_role(gen_setup, "pgmig_grant_b")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)"],
         dst=[
@@ -141,7 +125,7 @@ async def test_table_public_diffed_named_skipped_by_default(gen_setup: GenerateS
     The Option B split: with no flag, a PUBLIC grant IS emitted while a named-role grant added
     alongside it is NOT.
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)"],
         dst=[
@@ -157,7 +141,7 @@ async def test_table_public_and_named_both_with_flag(gen_setup: GenerateSetup) -
     """
     With include_grants, both the PUBLIC and the named-role grant are emitted (ordered by grantee).
     """
-    role = await _ensure_role(gen_setup, "pgmig_grant_r")
+    role = await ensure_role(gen_setup, "pgmig_grant_r")
     await gen_setup.assert_diff(
         src=["CREATE TABLE person (name text)"],
         dst=[
