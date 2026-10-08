@@ -241,6 +241,9 @@ class Table:
     trigger_by_name: dict[str, Trigger] = field(default_factory=dict)
     policy_by_name: dict[str, Policy] = field(default_factory=dict)
 
+    # Memo for column_by_name; see there.
+    _column_by_name: dict[str, Column] = field(default_factory=dict, init=False, repr=False, compare=False)
+
     @property
     def is_partitioned(self) -> bool:
         """Whether this table is a partitioned parent (declared PARTITION BY ...)."""
@@ -256,11 +259,14 @@ class Table:
         """
         The table's columns indexed by name.
 
-        A plain (recomputed) property rather than a cached one: `columns` is appended to
-        row by row during introspection, so a value cached before loading finished would go
-        stale. Recomputing on each access keeps it correct at the cost of rebuilding the dict.
+        Memoized, but not a cached_property: `columns` is appended to row by row during
+        introspection (and never otherwise changed), so a value cached before loading finished
+        would go stale. The memo is rebuilt whenever its size no longer matches `columns`.
         """
-        return {column.name: column for column in self.columns}
+        if len(self._column_by_name) != len(self.columns):
+            self._column_by_name.clear()
+            self._column_by_name.update((column.name, column) for column in self.columns)
+        return self._column_by_name
 
     def get_primary_key_columns(self) -> set[str]:
         """

@@ -24,10 +24,8 @@ from pgmig._diff._core import Generator, Phase
 # statements keep this registration order (the collection loop is a stable sort). So this
 # order is load-bearing wherever two kinds share a phase and one depends on the other:
 #   enums before domains before composite_types before range_types -- a later type may use an
-#     earlier one as a field/base/subtype (all Phase.TYPE_CREATE);
-# matview indexes no longer belong here: they were split into Phase.MATVIEW_INDEX_CREATE so
-# their dependency on the matview create (Phase.VIEW_CREATE) is structural, not registration-
-# order luck. A new object kind is a new module plus one entry here.
+#     earlier one as a field/base/subtype (all Phase.TYPE_CREATE).
+# A new object kind is a new module plus one entry here.
 _GENERATORS: list[Generator] = [
     schemas.generate,
     extensions.generate,

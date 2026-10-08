@@ -94,7 +94,7 @@ def _enum_rewrite_statements(schema_name: str, name: str, dst_enum: EnumType) ->
             if domain.data_type in enum_type_names:
                 raise PgmigUnsupportedError(
                     f"Unsupported enum change for {qualified_name}: value removal/reorder requires a type "
-                    f"rewrite, but domain {qualified(schema_name, domain.name)} is defined over the enum."
+                    f"rewrite, but domain {qualified(schema.name, domain.name)} is defined over the enum."
                 )
 
     # Columns read by a view or materialized view: Postgres refuses ALTER COLUMN TYPE while a

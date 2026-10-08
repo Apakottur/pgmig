@@ -1,3 +1,4 @@
+import functools
 from collections.abc import Sequence
 
 import pytest
@@ -39,6 +40,15 @@ class GenerateSetup:
 
         # Unique key for the test session.
         self.unique_key = unique_key
+
+    def select_body(self, column: str, rel: str, from_ref: str) -> str:
+        """
+        A view/matview body `SELECT <column> FROM <from_ref>` as pg_get_viewdef renders it: PG
+        14/15 qualify the column with the reading relation name, 16+ do not. FROM is rendered as
+        given (introspection runs with an empty search_path, so user relations are schema-qualified).
+        """
+        rendered = f"{rel}.{column}" if self.pg_major in (14, 15) else column
+        return f"SELECT {rendered}\n   FROM {from_ref}"
 
     async def assert_diff(
         self,
@@ -88,7 +98,8 @@ class GenerateSetup:
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
 
         # Generate the migration SQL.
-        result = await agenerate(
+        generate = functools.partial(
+            agenerate,
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
@@ -98,6 +109,7 @@ class GenerateSetup:
             ignore_schemas=ignore_schemas,
             driver=self.driver,
         )
+        result = await generate()
 
         # Verify the result.
         assert result == expected_sql, f"\nExpected SQL:\n{expected_sql}\nGenerated SQL:\n{result}"
@@ -106,16 +118,7 @@ class GenerateSetup:
         # source should match target, so a second generate must produce nothing.
         if apply and result:
             await self.src.execute(result)
-            residual = await agenerate(
-                source=self.src.dsn,
-                target=self.dst.dsn,
-                index_concurrently=index_concurrently,
-                safe_not_null=safe_not_null,
-                include_owner=include_owner,
-                include_grants=include_grants,
-                ignore_schemas=ignore_schemas,
-                driver=self.driver,
-            )
+            residual = await generate()
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
     async def assert_unsupported(

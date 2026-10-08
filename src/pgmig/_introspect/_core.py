@@ -38,7 +38,7 @@ class IntrospectionQuery(Enum):
     PREFLIGHT = ("preflight.sql", IntrospectionQueryType.GUARD)
     UNSUPPORTED = ("unsupported.sql", IntrospectionQueryType.GUARD)
     INVALID_INDEXES = ("invalid_indexes.sql", IntrospectionQueryType.GUARD)
-    MATVIEW_DEPENDENCIES_CHECK = ("matview_dependencies.sql", IntrospectionQueryType.GUARD)
+    MATVIEW_DEPENDENCIES = ("matview_dependencies.sql", IntrospectionQueryType.GUARD)
     SCHEMA_CONNECTIONS = ("schema_connections.sql", IntrospectionQueryType.GUARD)
 
     # Loaders. Their run order is set by _engine._IntrospectionPreflight.get_loaders, not here.
@@ -52,10 +52,8 @@ class IntrospectionQuery(Enum):
     ENUMS = ("enums.sql", IntrospectionQueryType.LOAD)
     ENUM_DEPENDENCIES = ("enum_dependencies.sql", IntrospectionQueryType.LOAD)
     VIEWS = ("views.sql", IntrospectionQueryType.LOAD)
-    MATERIALIZED_VIEWS = ("materialized_views.sql", IntrospectionQueryType.LOAD)
     VIEW_DEPENDENCIES = ("view_dependencies.sql", IntrospectionQueryType.LOAD)
     VIEW_COLUMN_DEPENDENCIES = ("view_column_dependencies.sql", IntrospectionQueryType.LOAD)
-    MATVIEW_DEPENDENCIES_LOAD = ("matview_dependencies.sql", IntrospectionQueryType.LOAD)
     TRIGGERS = ("triggers.sql", IntrospectionQueryType.LOAD)
     POLICIES = ("policies.sql", IntrospectionQueryType.LOAD)
     DOMAINS = ("domains.sql", IntrospectionQueryType.LOAD)
