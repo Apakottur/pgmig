@@ -80,7 +80,7 @@ class _Commented(Protocol):
 _CommentedT = TypeVar("_CommentedT", bound=_Commented)
 
 
-def _diff_comments(
+def diff_comments(
     src: Mapping[str, _CommentedT],
     dst: Mapping[str, _CommentedT],
     *,
@@ -128,17 +128,12 @@ def diff_single_comment(
     render: Callable[[_CommentedT], str],
 ) -> list[str]:
     """
-    Single-object counterpart to _diff_comments: render a COMMENT ON for `dst_obj` when
+    Single-object counterpart to diff_comments: render a COMMENT ON for `dst_obj` when
     its comment differs from `src_obj` (an absent source object counts as no comment),
-    else nothing. Wraps the pair in a one-entry mapping and defers to _diff_comments so
-    the "absent source = None" rule lives in exactly one place, rather than being
-    hand-copied as `(src.comment if src else None) != dst.comment` per object kind.
+    else nothing.
     """
-    return _diff_comments(
-        {} if src_obj is None else {"": src_obj},
-        {"": dst_obj},
-        render=lambda _name, obj: render(obj),
-    )
+    src_comment = src_obj.comment if src_obj is not None else None
+    return [render(dst_obj)] if src_comment != dst_obj.comment else []
 
 
 def diff_comment_statements(
@@ -154,9 +149,9 @@ def diff_comment_statements(
     COMMENT ON <kind> for every target object (identified by its schema-qualified name)
     whose comment differs from source. The render shared by every schema-qualified object
     kind (types, domains, sequences, indexes, views, ...), gathered here so the per-kind
-    generators name their `kind` rather than each restating the _diff_comments call.
+    generators name their `kind` rather than each restating the diff_comments call.
     """
-    return _diff_comments(
+    return diff_comments(
         src,
         dst,
         render=lambda name, obj: comment_on(kind, qualified(schema_name, name), obj.comment),
@@ -180,7 +175,7 @@ def diff_child_comment_statements(
     (constraints, triggers) whose comment differs from source.
     """
     table = qualified(schema_name, table_name)
-    return _diff_comments(
+    return diff_comments(
         src,
         dst,
         render=lambda name, obj: comment_on(kind, f"{ident(name)} ON {table}", obj.comment),
@@ -292,11 +287,9 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
     both databases, sorted by schema then table. Either table is None when absent on
     that side.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_tables = src_schema.table_by_name if src_schema else {}
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
-        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
+    for schema_name, _src_tables, _dst_tables, pairs in ctx_iter_object_pairs(lambda schema: schema.table_by_name):
+        for table_name, src_table, dst_table in pairs:
+            yield schema_name, table_name, src_table, dst_table
 
 
 class _HasDependencyColumns(Protocol):
@@ -368,11 +361,9 @@ def ctx_iter_view_pairs() -> Iterator[tuple[str, str, View | None, View | None]]
     databases, sorted by schema then view. Either view is None when absent on that side.
     The view counterpart of ctx_iter_table_pairs, used to diff view-owned INSTEAD OF triggers.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_views = src_schema.view_by_name if src_schema else {}
-        dst_views = dst_schema.view_by_name if dst_schema else {}
-        for view_name in sorted(src_views.keys() | dst_views.keys()):
-            yield schema_name, view_name, src_views.get(view_name), dst_views.get(view_name)
+    for schema_name, _src_views, _dst_views, pairs in ctx_iter_object_pairs(lambda schema: schema.view_by_name):
+        for view_name, src_view, dst_view in pairs:
+            yield schema_name, view_name, src_view, dst_view
 
 
 def ctx_iter_object_pairs(

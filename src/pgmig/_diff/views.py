@@ -4,7 +4,7 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    ctx_iter_schema_pairs,
+    ctx_iter_object_pairs,
     diff_comment_statements,
     owner_statements,
     topological_drop_order,
@@ -63,9 +63,9 @@ def generate() -> Iterator[Statement]:
 
     # Comments, after the views they annotate exist. A recreated view re-emits its comment
     # (the drop reset it), so pass the recreated names per schema.
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_schema_views = src_schema.view_by_name if src_schema else {}
-        dst_schema_views = dst_schema.view_by_name if dst_schema else {}
+    for schema_name, src_schema_views, dst_schema_views, _pairs in ctx_iter_object_pairs(
+        lambda schema: schema.view_by_name
+    ):
         recreated_names = {key.name for key in recreate if key.schema == schema_name}
         for sql in diff_comment_statements(
             schema_name, src_schema_views, dst_schema_views, kind="VIEW", recreated=recreated_names

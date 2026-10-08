@@ -22,8 +22,8 @@ WHERE
     AND dependent.oid <> referenced.oid
     -- Only edges among managed objects belong here: an edge to a view pgmig does not model
     -- (a system view, or an extension-owned one in a user schema) is bogus state that would
-    -- mislead the ordering and recreate logic. Exclude, on each side, what views.sql /
-    -- materialized_views.sql exclude from the model:
+    -- mislead the ordering and recreate logic. Exclude, on each side, what views.sql
+    -- excludes from the model:
     --   [x] system-schema leg -- pg_catalog / information_schema (nspname)
     --   [x] namespace leg     -- object in an extension-owned schema (*_ns.oid)
     --   [x] self leg          -- the object itself is extension-owned (dependent/referenced.oid)

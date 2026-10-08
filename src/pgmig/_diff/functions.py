@@ -4,16 +4,16 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    _diff_comments,
     ctx_iter_object_pairs,
-    ctx_iter_schema_pairs,
-    owner_statements,
+    ctx_iter_table_pairs,
+    ctx_iter_view_pairs,
+    diff_comments,
     topological_drop_order,
 )
-from pgmig._diff.grants import grant_statements
+from pgmig._diff.grants import owner_and_grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import FunctionKey, RelationKey
-from pgmig._models import Function, FunctionDependent, Table
+from pgmig._models import Function, FunctionDependent
 from pgmig._sql import comment_on, ident, qualified
 
 
@@ -34,21 +34,8 @@ def _recreate_message(schema_name: str, function: Function, reason: str) -> str:
     )
 
 
-# Dependent kind -> (Table dict attribute holding it, the model attribute compared to decide
-# "unchanged" and rendered into the recreate). Membership also gates the supported kinds.
-_DEPENDENT_DICT = {"default": "column_by_name", "constraint": "constraint_by_name", "index": "index_by_name"}
-_DEPENDENT_SIGNATURE = {"default": "default", "constraint": "definition", "index": "definition"}
-
-
-def _target_signature(dependent: FunctionDependent, dst_table: Table | None) -> str | None:
-    """
-    The target-side value the dependent is compared and re-created against (a column's default
-    expression, or a constraint/index definition), or None when the dependent's table or the
-    dependent itself is absent in the target (dropped -> refuse, handled by the caller).
-    """
-    objects = {} if dst_table is None else getattr(dst_table, _DEPENDENT_DICT[dependent.kind])
-    obj = objects.get(dependent.name)
-    return None if obj is None else getattr(obj, _DEPENDENT_SIGNATURE[dependent.kind])
+# Dependent kinds a return-type-change recreate can drop and re-add around the routine.
+_SUPPORTED_DEPENDENT_KINDS = frozenset({"default", "constraint", "index"})
 
 
 def _dependent_recreate_statements(
@@ -64,10 +51,13 @@ def _dependent_recreate_statements(
     generator in a phase that would bind to the wrong routine (or, for a routine dependent,
     would need recursion the one-level bound rules out).
     """
-    if dependent.kind not in _DEPENDENT_DICT:
+    if dependent.kind not in _SUPPORTED_DEPENDENT_KINDS:
         raise PgmigUnsupportedError(_recreate_message(schema_name, function, f"a {dependent.kind} depends on it"))
 
     # The source always holds the dependent (it was introspected from the source routine).
+    # Each branch also reads the target-side value the dependent is compared against (a column's
+    # default expression, or a constraint/index definition): None when the dependent's table or
+    # the dependent itself is absent in the target.
     src_table = context.source.schema_by_name[dependent.schema].table_by_name[dependent.table]
     dst_table = context.target.schema_by_name[dependent.schema].table_by_name.get(dependent.table)
     table = qualified(dependent.schema, dependent.table)
@@ -75,10 +65,14 @@ def _dependent_recreate_statements(
     if dependent.kind == "default":
         prefix = f"ALTER TABLE {table} ALTER COLUMN {ident(dependent.name)}"
         source_value = src_table.column_by_name[dependent.name].default
+        dst_column = None if dst_table is None else dst_table.column_by_name.get(dependent.name)
+        target_value = None if dst_column is None else dst_column.default
         drop = Statement(Phase.TABLE, f"{prefix} DROP DEFAULT;")
         recreate = Statement(Phase.FUNCTION_DEPENDENT_RECREATE, f"{prefix} SET DEFAULT {source_value};")
     elif dependent.kind == "constraint":
         source_value = src_table.constraint_by_name[dependent.name].definition
+        dst_constraint = None if dst_table is None else dst_table.constraint_by_name.get(dependent.name)
+        target_value = None if dst_constraint is None else dst_constraint.definition
         drop = Statement(Phase.CONSTRAINT, f"ALTER TABLE {table} DROP CONSTRAINT {ident(dependent.name)};")
         recreate = Statement(
             Phase.FUNCTION_DEPENDENT_RECREATE,
@@ -86,12 +80,14 @@ def _dependent_recreate_statements(
         )
     else:  # index
         source_value = src_table.index_by_name[dependent.name].definition
+        dst_index = None if dst_table is None else dst_table.index_by_name.get(dependent.name)
+        target_value = None if dst_index is None else dst_index.definition
         drop = Statement(Phase.INDEX, f"DROP INDEX {qualified(dependent.schema, dependent.name)};")
         recreate = Statement(Phase.FUNCTION_DEPENDENT_RECREATE, f"{source_value};")
 
     # Unchanged only: the target must carry the same dependent verbatim (else it is dropped or
     # changed by its own generator, and re-creating the source version would not converge).
-    if _target_signature(dependent, dst_table) != source_value:
+    if target_value != source_value:
         raise PgmigUnsupportedError(
             _recreate_message(schema_name, function, f"its dependent {dependent.kind} {dependent.name} also changed")
         )
@@ -142,28 +138,22 @@ def _dropped_relations() -> set[RelationKey]:
     Every table, view, and materialized view present in the source but absent in the target
     -- the relations this migration drops.
     """
-    dropped: set[RelationKey] = set()
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        if src_schema is None:
-            continue
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
-        dst_views = dst_schema.view_by_name if dst_schema else {}
-        dst_matviews = dst_schema.materialized_view_by_name if dst_schema else {}
-        dropped.update(RelationKey(schema_name, name) for name in src_schema.table_by_name if name not in dst_tables)
-        dropped.update(RelationKey(schema_name, name) for name in src_schema.view_by_name if name not in dst_views)
-        dropped.update(
-            RelationKey(schema_name, name) for name in src_schema.materialized_view_by_name if name not in dst_matviews
-        )
+    dropped = {RelationKey(schema, name) for schema, name, _src, dst in ctx_iter_table_pairs() if dst is None}
+    dropped.update(RelationKey(schema, name) for schema, name, _src, dst in ctx_iter_view_pairs() if dst is None)
+    for schema_name, _src_matviews, _dst_matviews, pairs in ctx_iter_object_pairs(
+        lambda schema: schema.materialized_view_by_name
+    ):
+        dropped.update(RelationKey(schema_name, name) for name, _src, dst in pairs if dst is None)
     return dropped
 
 
-def _topological_drop_order(late: dict[FunctionKey, tuple[str, Function]]) -> list[FunctionKey]:
+def _topological_drop_order(late: dict[FunctionKey, Function]) -> list[FunctionKey]:
     """
     Order the late-drop set so a routine is dropped before the routines it depends on.
     Edges are each routine's forward function dependencies; `topological_drop_order` reverses
     the dependency-first sort and drops those outside the late set.
     """
-    edges = {key: set(value[1].depends_on_functions) for key, value in late.items()}
+    edges = {key: set(function.depends_on_functions) for key, function in late.items()}
     return topological_drop_order(set(late), edges)
 
 
@@ -174,7 +164,7 @@ def _function_comment_statements(
     Emit COMMENT ON FUNCTION / PROCEDURE (by kind) for target routines whose comment
     differs from source.
     """
-    return _diff_comments(
+    return diff_comments(
         src,
         dst,
         render=lambda _signature, func: comment_on(
@@ -198,7 +188,7 @@ def generate() -> Iterator[Statement]:
     on).
     """
     dropped_relations = _dropped_relations()
-    late_drops: dict[FunctionKey, tuple[str, Function]] = {}
+    late_drops: dict[FunctionKey, Function] = {}
 
     for schema_name, src_functions, dst_functions, pairs in ctx_iter_object_pairs(
         lambda schema: schema.function_by_signature
@@ -215,7 +205,7 @@ def generate() -> Iterator[Statement]:
             elif dst_func is None:
                 if src_func.has_dependents:
                     _check_not_circular(schema_name, src_func, dropped_relations)
-                    late_drops[FunctionKey(schema=schema_name, signature=signature)] = (schema_name, src_func)
+                    late_drops[FunctionKey(schema=schema_name, signature=signature)] = src_func
                 else:
                     yield Statement(Phase.FUNCTION_DROP, _drop_statement(schema_name, src_func))
             # Present in both: re-create if the definition changed.
@@ -231,31 +221,19 @@ def generate() -> Iterator[Statement]:
                     recreated.add(signature)
                 yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
 
-            # Reconcile ownership for a routine present on both sides that was not
+            # Reconcile ownership and the ACL for a routine present on both sides that was not
             # dropped-and-recreated: CREATE OR REPLACE preserves the owner, while a return-type
             # recreate leaves the new routine runner-owned and reconciles on a later run.
-            if src_func is not None and dst_func is not None and signature not in recreated:
-                signature_target = f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})"
-                for sql in owner_statements(
+            # GRANT/REVOKE EXECUTE ON FUNCTION|PROCEDURE follows prokind, and the routine is
+            # addressed by its signature; it runs in the GRANT phase, after every create.
+            if dst_func is not None and signature not in recreated:
+                yield from owner_and_grant_statements(
                     dst_func.drop_keyword,
-                    signature_target,
-                    src_func.owner,
-                    dst_func.owner,
-                ):
-                    yield Statement(Phase.FUNCTION_CREATE, sql)
-                # Reconcile the ACL, after the routine exists. GRANT/REVOKE EXECUTE ON
-                # FUNCTION|PROCEDURE follows prokind, and the routine is addressed by its
-                # signature. Runs in the GRANT phase, after every create.
-                for sql in grant_statements(
-                    dst_func.drop_keyword,
-                    signature_target,
-                    src_func.grants,
-                    dst_func.grants,
-                    src_func.owner,
-                    dst_func.owner,
-                    include_named_roles=context.include_grants,
-                ):
-                    yield Statement(Phase.GRANT, sql)
+                    f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})",
+                    src_func,
+                    dst_func,
+                    phase=Phase.FUNCTION_CREATE,
+                )
 
         # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
         # the routines they annotate have been created above.
@@ -265,5 +243,4 @@ def generate() -> Iterator[Statement]:
     # Late drops across all schemas, ordered so a routine is dropped before the routines it
     # depends on. Their dependents (column defaults, indexes, constraints) are already gone.
     for key in _topological_drop_order(late_drops):
-        schema_name, function = late_drops[key]
-        yield Statement(Phase.FUNCTION_DROP_LATE, _drop_statement(schema_name, function))
+        yield Statement(Phase.FUNCTION_DROP_LATE, _drop_statement(key.schema, late_drops[key]))

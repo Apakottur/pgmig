@@ -60,7 +60,6 @@ class IntrospectionQuery(Enum):
     ENUMS = auto()
     ENUM_DEPENDENCIES = auto()
     VIEWS = auto()
-    MATERIALIZED_VIEWS = auto()
     VIEW_DEPENDENCIES = auto()
     VIEW_COLUMN_DEPENDENCIES = auto()
     TRIGGERS = auto()
@@ -105,8 +104,6 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             return IntrospectionQueryConfig(file_name="enum_dependencies.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.VIEWS:
             return IntrospectionQueryConfig(file_name="views.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.MATERIALIZED_VIEWS:
-            return IntrospectionQueryConfig(file_name="materialized_views.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.VIEW_DEPENDENCIES:
             return IntrospectionQueryConfig(file_name="view_dependencies.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.VIEW_COLUMN_DEPENDENCIES:
