@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Self, TypeVar
 
 import psycopg
-from psycopg.rows import class_row
+from psycopg.rows import DictRow, dict_row
 from pydantic import BaseModel
 
 from pgmig._drivers import DbDriver
@@ -84,6 +84,22 @@ class DbConnection:
         return []
 
 
+class PendingIntrospectionQuery:
+    """
+    An introspection query that was sent and whose rows were not fetched yet.
+    """
+
+    def __init__(self, cur: psycopg.AsyncCursor[DictRow]) -> None:
+        self._cur = cur
+
+    async def fetch(self, response_model: type[_RowT]) -> list[_RowT]:
+        """
+        Fetch the query rows, parsing each row into the given model.
+        """
+        async with self._cur as cur:
+            return [response_model(**row) for row in await cur.fetchall()]
+
+
 class DbReadOnlyConnection(DbConnection):
     """
     DB connection API for read-only operations.
@@ -109,10 +125,18 @@ class DbReadOnlyConnection(DbConnection):
             async with conn.driver_conn.transaction():
                 yield conn
 
-    async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
+    @asynccontextmanager
+    async def pipeline(self) -> AsyncIterator[None]:
         """
-        Run an introspection query and parse each row into the given model.
+        Pipeline context: the enclosed queries are sent without waiting for the results of the previous ones.
         """
-        async with self.driver_conn.cursor(row_factory=class_row(response_model)) as cur:
-            await cur.execute(query)  # ty: ignore[no-matching-overload]
-            return await cur.fetchall()
+        async with self.driver_conn.pipeline():
+            yield
+
+    async def send_introspection_query(self, query: str) -> PendingIntrospectionQuery:
+        """
+        Send an introspection query, without waiting for its results (when within a pipeline).
+        """
+        cur = self.driver_conn.cursor(row_factory=dict_row)
+        await cur.execute(query)  # ty: ignore[no-matching-overload]
+        return PendingIntrospectionQuery(cur)

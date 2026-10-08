@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from enum import Enum, auto
 from functools import lru_cache
 from pathlib import Path
@@ -182,18 +183,26 @@ class Guard(Protocol):
 _RowT = TypeVar("_RowT", bound=IntrospectionRow)
 
 
+async def send_introspection_queries(queries: Sequence[IntrospectionQuery]) -> None:
+    """
+    Send the given introspection queries, to be later run with run_introspection_query.
+    The queries are sent together, so that a pipelined connection waits for all their results at once.
+    """
+    for query in queries:
+        sql = _read_query(get_introspection_query_config(query).file_name)
+        context.pending_queries[query] = await context.conn.send_introspection_query(sql)
+
+
 async def run_introspection_query(query: IntrospectionQuery, model: type[_RowT]) -> list[_RowT]:
     """
-    Run the given introspection query, parsing each row into the given model.
+    Run the given introspection query (already sent with send_introspection_queries), parsing each row into the
+    given model.
     """
     # Get the query config.
     config = get_introspection_query_config(query)
 
-    # Get the query SQL.
-    sql = _read_query(config.file_name)
-
-    # Run the query.
-    rows = await context.conn.introspect(sql, model)
+    # Fetch the query rows.
+    rows = await context.pending_queries.pop(query).fetch(model)
 
     # Filter out rows in ignored schemas.
     ignored_schemas = context.ignore_schemas
