@@ -497,35 +497,6 @@ def _partition_depth(key: RelationKey, table_map: dict[RelationKey, Table]) -> i
     return depth
 
 
-def _partition_key_changed(src_table: Table, dst_table: Table) -> bool:
-    """
-    Whether a table's declarative partitioning key or strategy differs between the two sides
-    (including a plain table gaining or losing PARTITION BY). Postgres has no in-place ALTER
-    for this, so the table diff recreates the whole subtree destructively (see `generate`).
-    """
-    return (src_table.is_partitioned or dst_table.is_partitioned) and (
-        src_table.partition_strategy != dst_table.partition_strategy
-        or src_table.partition_key != dst_table.partition_key
-    )
-
-
-def _source_subtree(root: RelationKey, src_map: dict[RelationKey, Table]) -> set[RelationKey]:
-    """
-    Every source table in the partition subtree rooted at `root` (inclusive): the root plus
-    all of its partitions, sub-partitions, and so on, walking `partition_parent` links.
-    """
-    subtree = {root}
-    # Fixed-point loop: a table joins once its parent is in the subtree. Bounded by len(src_map).
-    added = True
-    while added:
-        added = False
-        for key, table in src_map.items():
-            if key not in subtree and table.partition_parent in subtree:
-                subtree.add(key)
-                added = True
-    return subtree
-
-
 def _membership_statements(schema_name: str, table_name: str, src_table: Table, dst_table: Table) -> list[str]:
     """
     Statements reconciling a table's partition membership across the diff: ATTACH a
@@ -573,38 +544,23 @@ def generate() -> Iterator[Statement]:
     # (its partitions cascade away, DELETING THEIR DATA) and re-CREATE the parent and every
     # target partition from scratch. This is intentionally destructive; a future safety-level
     # flag may gate or refuse it (see the recreate note below). To recreate through the existing
-    # create paths, the affected source tables are removed from the source model, so tables,
-    # indexes, constraints, triggers and comments are all re-emitted as if newly created (their
-    # old copies vanish with the cascading DROP); an explicit DROP of each subtree root is
-    # emitted first. A root nested inside another recreated subtree is not dropped explicitly --
-    # its ancestor's DROP already cascades to it.
+    # create paths, the affected source tables (context.repartitioned_tables) are skipped by
+    # ctx_iter_table_pairs, so tables, indexes, constraints, triggers and comments are all
+    # re-emitted as if newly created (their old copies vanish with the cascading DROP); an
+    # explicit DROP of each subtree root is emitted first. A root nested inside another
+    # recreated subtree is not dropped explicitly -- its ancestor's DROP already cascades to it.
     #
     # NOTE: this recreate deletes data and, if another table's foreign key references the
     # subtree, its plain DROP TABLE fails loudly at apply rather than silently cascading. A
     # planned safety-level flag may later refuse or gate this path; when it lands, revisit this.
     recreate_drops: list[str] = []
-    recreate_roots = [
-        RelationKey(schema_name, table_name)
-        for schema_name, table_name, src_table, dst_table in pairs
-        if src_table is not None and dst_table is not None and _partition_key_changed(src_table, dst_table)
-    ]
-    if recreate_roots:
-        removed: set[RelationKey] = set()
-        for root in recreate_roots:
-            removed |= _source_subtree(root, src_map)
-        # Explicit DROP for each subtree top -- a removed table whose parent is not itself
-        # removed; a nested table (its parent is also removed) cascades from that DROP.
-        for key in sorted(removed, key=lambda relation: (relation.schema, relation.name)):
-            parent = src_map[key].partition_parent
-            if parent is None or parent not in removed:
-                recreate_drops.append(f"DROP TABLE {qualified(key.schema, key.name)};")
-        # Remove the whole source subtree so every generator treats these as create-from-scratch.
-        for key in removed:
-            del context.source.schema_by_name[key.schema].table_by_name[key.name]
-        # Rebuild pairs/maps from the mutated source.
-        pairs = list(ctx_iter_table_pairs())
-        src_map = {RelationKey(schema, name): src for schema, name, src, _dst in pairs if src is not None}
-        dst_map = {RelationKey(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
+    removed = context.repartitioned_tables
+    # Explicit DROP for each subtree top -- a removed table whose parent is not itself
+    # removed; a nested table (its parent is also removed) cascades from that DROP.
+    for key in sorted(removed, key=lambda relation: (relation.schema, relation.name)):
+        parent = context.source.schema_by_name[key.schema].table_by_name[key.name].partition_parent
+        if parent is None or parent not in removed:
+            recreate_drops.append(f"DROP TABLE {qualified(key.schema, key.name)};")
 
     creates: list[tuple[str, str, Table]] = []
     alters: list[tuple[str, str, Table, Table]] = []
