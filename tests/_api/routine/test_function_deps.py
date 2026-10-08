@@ -267,3 +267,22 @@ async def test_function_return_type_change_with_routine_dependent_raises(gen_set
         ],
         match=r"Recreating",
     )
+
+
+async def test_function_return_type_change_with_repartitioned_dependent_raises(gen_setup: GenerateSetup) -> None:
+    """
+    Return-type change where the dependent's table is repartitioned this run: the table is
+    dropped and recreated from scratch (its default re-emitted with it), so there is no
+    surviving dependent to drop and re-add around the routine -- refuse.
+    """
+    await gen_setup.assert_unsupported(
+        src=[
+            "CREATE FUNCTION f() RETURNS integer LANGUAGE sql AS $$SELECT 1$$",
+            "CREATE TABLE t (x bigint DEFAULT f()) PARTITION BY RANGE (x)",
+        ],
+        dst=[
+            "CREATE FUNCTION f() RETURNS bigint LANGUAGE sql AS $$SELECT 1$$",
+            "CREATE TABLE t (x bigint DEFAULT f()) PARTITION BY HASH (x)",
+        ],
+        match=r"Recreating",
+    )

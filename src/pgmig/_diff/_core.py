@@ -292,10 +292,20 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
     """
     Yield (schema_name, table_name, source_table, target_table) for every table across
     both databases, sorted by schema then table. Either table is None when absent on
-    that side.
+    that side. A repartitioned source table (see context.repartitioned_tables) counts as
+    absent, so every generator re-emits it as newly created.
     """
+    repartitioned = context.repartitioned_tables
     for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_tables = src_schema.table_by_name if src_schema else {}
+        src_tables = (
+            {
+                name: table
+                for name, table in src_schema.table_by_name.items()
+                if RelationKey(schema_name, name) not in repartitioned
+            }
+            if src_schema
+            else {}
+        )
         dst_tables = dst_schema.table_by_name if dst_schema else {}
         for table_name in sorted(src_tables.keys() | dst_tables.keys()):
             yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)

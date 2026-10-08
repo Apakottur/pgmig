@@ -66,6 +66,12 @@ def _dependent_recreate_statements(
     """
     if dependent.kind not in _DEPENDENT_DICT:
         raise PgmigUnsupportedError(_recreate_message(schema_name, function, f"a {dependent.kind} depends on it"))
+    # A repartitioned table is dropped and recreated from scratch (dependent included), so
+    # there is no surviving dependent to drop and re-add around the routine.
+    if RelationKey(dependent.schema, dependent.table) in context.repartitioned_tables:
+        raise PgmigUnsupportedError(
+            _recreate_message(schema_name, function, f"the table of its dependent {dependent.kind} is repartitioned")
+        )
 
     # The source always holds the dependent (it was introspected from the source routine).
     src_table = context.source.schema_by_name[dependent.schema].table_by_name[dependent.table]

@@ -4,11 +4,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
 
+from pgmig._diff._repartition import get_repartitioned_tables
 from pgmig._keys import ColumnKey, RelationKey
 from pgmig._models import DbIntrospectionResult
 
 
-def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[RelationKey]:
+def _get_retyped_column_readers(
+    source: DbIntrospectionResult, target: DbIntrospectionResult, repartitioned: set[RelationKey]
+) -> set[RelationKey]:
     """
     Views/matviews that read (in the source) a table column whose type changes between source
     and target. Such a reader must be dropped and recreated around the ALTER COLUMN ... TYPE:
@@ -24,12 +27,17 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
     Source-side identity (a column read by a source view exists in the source). A serial change
     keeps the integer `type`, so it does not surface here; that is intentional -- a serial change
     is unsupported and raised by the table diff before applying.
+
+    A repartitioned table (dropped and recreated from scratch, see
+    _ContextData.repartitioned_tables) has no source columns to retype, so it is skipped.
     """
     retyped_columns: set[ColumnKey] = set()
     for schema_name in source.schema_by_name.keys() & target.schema_by_name.keys():
         src_tables = source.schema_by_name[schema_name].table_by_name
         dst_tables = target.schema_by_name[schema_name].table_by_name
         for table_name in src_tables.keys() & dst_tables.keys():
+            if RelationKey(schema_name, table_name) in repartitioned:
+                continue
             dst_columns = dst_tables[table_name].column_by_name
             for src_column in src_tables[table_name].columns:
                 dst_column = dst_columns.get(src_column.name)
@@ -70,8 +78,12 @@ class _ContextData:
     include_grants: bool
 
     @cached_property
+    def repartitioned_tables(self) -> set[RelationKey]:
+        return get_repartitioned_tables(self.source, self.target)
+
+    @cached_property
     def retyped_column_readers(self) -> set[RelationKey]:
-        return _get_retyped_column_readers(self.source, self.target)
+        return _get_retyped_column_readers(self.source, self.target, self.repartitioned_tables)
 
 
 # Context of the current diff generation.
@@ -138,6 +150,10 @@ class _Context:
     @property
     def include_grants(self) -> bool:
         return _context.get().include_grants
+
+    @property
+    def repartitioned_tables(self) -> set[RelationKey]:
+        return _context.get().repartitioned_tables
 
     @property
     def retyped_column_readers(self) -> set[RelationKey]:
