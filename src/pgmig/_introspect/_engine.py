@@ -14,7 +14,6 @@ from pgmig._introspect import (
     functions,
     indexes,
     invalid_indexes,
-    materialized_views,
     matview_dependencies,
     matview_indexes,
     policies,
@@ -84,8 +83,11 @@ class _IntrospectionPreflight(IntrospectionRow):
             # Enum-on-column edges: only meaningful when there are also tables to depend on it.
             if self.has_tables:
                 loaders.append(enum_dependencies.load)
+        # One query loads both views and matviews, so it runs when either kind is present.
+        if self.has_views or self.has_matviews:
+            loaders.append(views.load)
         if self.has_views:
-            loaders += [views.load, view_dependencies.load]
+            loaders.append(view_dependencies.load)
         # Triggers load after both tables and views: an INSTEAD OF trigger's owner is a view,
         # and the loader routes each trigger onto its table or view, so both must exist first.
         if self.has_triggers:
@@ -96,7 +98,7 @@ class _IntrospectionPreflight(IntrospectionRow):
         if self.has_views or self.has_matviews:
             loaders.append(view_column_dependencies.load)
         if self.has_matviews:
-            loaders += [materialized_views.load, matview_dependencies.load, matview_indexes.load]
+            loaders += [matview_dependencies.load, matview_indexes.load]
         if self.has_domains:
             loaders.append(domains.load)
         if self.has_composite_types:

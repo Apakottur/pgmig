@@ -1,7 +1,8 @@
--- Views (user views only; extension-owned ones are excluded).
--- Mirror of materialized_views.sql; the two differ only in the relkind ('v' here, 'm' there). Keep in sync.
+-- Views and materialized views (user ones only; extension-owned ones are excluded).
+-- relkind tells the loader which schema mapping a row belongs to ('v' view, 'm' matview).
 SELECT
     n.nspname AS schema_name,
+    c.relkind,
     c.relname AS view_name,
     pg_get_viewdef(c.oid) AS view_definition,
     obj_description(c.oid, 'pg_class') AS view_comment,
@@ -11,15 +12,15 @@ FROM
     pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE
-    c.relkind = 'v'
+    c.relkind IN ('v', 'm')
     AND n.nspname NOT LIKE 'pg_%'
     AND n.nspname <> 'information_schema'
     -- Extension-ownership exclusion checklist (see the sibling queries: every query must
     -- carry all applicable legs or the loader KeyErrors on an object left in the model
     -- whose owner was dropped):
-    --   [x] namespace leg  -- view in an extension-owned schema (n.oid)
-    --   [x] self leg       -- the view itself is extension-owned (c.oid)
-    --   [ ] owning-table leg -- n/a, a view is not attached to a table
+    --   [x] namespace leg  -- (mat)view in an extension-owned schema (n.oid)
+    --   [x] self leg       -- the (mat)view itself is extension-owned (c.oid)
+    --   [ ] owning-table leg -- n/a, a (mat)view is not attached to a table
     AND NOT EXISTS (
         SELECT
             1

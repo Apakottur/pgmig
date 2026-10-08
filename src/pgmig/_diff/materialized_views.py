@@ -9,6 +9,7 @@ from pgmig._diff._core import (
     diff_comment_statements,
     owner_statements,
     recreated_matview_keys,
+    topological_drop_order,
     topological_sort,
 )
 from pgmig._keys import RelationKey
@@ -38,9 +39,9 @@ def generate() -> Iterator[Statement]:
     drop_only = src_matviews.keys() - dst_matviews.keys()
     create_only = dst_matviews.keys() - src_matviews.keys()
 
-    # Drops: dependent-first, so reverse the source graph's dependency-first order.
+    # Drops: dependent-first over the source graph.
     drops = drop_only | recreate
-    for key in reversed(topological_sort(drops, source.matview_dependencies)):
+    for key in topological_drop_order(drops, source.matview_dependencies):
         yield Statement(Phase.MATVIEW_DROP, f"DROP MATERIALIZED VIEW {qualified(key.schema, key.name)};")
 
     # Creates: dependency-first over the target graph.
