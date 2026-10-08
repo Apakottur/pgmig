@@ -1,7 +1,7 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import GrantRow, IntrospectionQuery, IntrospectionRow, grants, run_introspection_query
 from pgmig._keys import DefaultAclKey
-from pgmig._models import DefaultAcl, Grant
+from pgmig._models import DefaultAcl
 
 # pg_default_acl.defaclobjtype -> the plural GRANT keyword. 'n' (SCHEMAS) is PG15+; a PG14
 # cluster simply has no such rows, so the mapping is version-independent here.
@@ -14,23 +14,13 @@ _OBJECT_TYPE_KEYWORD = {
 }
 
 
-class _GrantRow(IntrospectionRow):
-    grantee: str
-    privilege: str
-    grantable: bool
-
-
 class _DefaultAclRow(IntrospectionRow):
     role: str
     # None is a cluster-wide rule (not scoped to any schema); such a rule is never ignored.
     schema_name: str | None
     object_type: str  # defaclobjtype: 'r' / 'S' / 'f' / 'T' / 'n'
-    grants: list[_GrantRow]
-    baseline_grants: list[_GrantRow]
-
-
-def _grants(rows: list[_GrantRow]) -> frozenset[Grant]:
-    return frozenset(Grant(grantee=row.grantee, privilege=row.privilege, grantable=row.grantable) for row in rows)
+    grants: list[GrantRow]
+    baseline_grants: list[GrantRow]
 
 
 async def load() -> None:
@@ -48,6 +38,6 @@ async def load() -> None:
             role=row.role,
             schema=row.schema_name,
             object_type=_OBJECT_TYPE_KEYWORD[row.object_type],
-            grants=_grants(row.grants),
-            baseline=_grants(row.baseline_grants),
+            grants=grants(row.grants),
+            baseline=grants(row.baseline_grants),
         )

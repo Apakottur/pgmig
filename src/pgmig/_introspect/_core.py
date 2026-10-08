@@ -6,6 +6,7 @@ from typing import Protocol, TypeVar
 from pydantic import BaseModel, ConfigDict
 
 from pgmig._introspect._context import context
+from pgmig._models import Grant
 
 # Static introspection queries dir.
 _QUERIES_DIR = Path(__file__).parent / "queries"
@@ -89,6 +90,23 @@ class IntrospectionRowWithSchema(IntrospectionRow):
     """
 
     schema_name: str
+
+
+class GrantRow(IntrospectionRow):
+    """
+    One effective privilege of an object's ACL (jsonb object built by the queries).
+    """
+
+    grantee: str
+    privilege: str
+    grantable: bool
+
+
+def grants(rows: list[GrantRow]) -> frozenset[Grant]:
+    """
+    Convert parsed ACL rows into the model's grant set.
+    """
+    return frozenset(Grant(grantee=row.grantee, privilege=row.privilege, grantable=row.grantable) for row in rows)
 
 
 class Loader(Protocol):

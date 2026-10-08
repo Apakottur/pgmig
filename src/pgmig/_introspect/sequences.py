@@ -1,18 +1,13 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import (
+    GrantRow,
     IntrospectionQuery,
-    IntrospectionRow,
     IntrospectionRowWithSchema,
+    grants,
     run_introspection_query,
 )
 from pgmig._keys import ColumnKey
-from pgmig._models import Grant, Sequence
-
-
-class _GrantRow(IntrospectionRow):
-    grantee: str
-    privilege: str
-    grantable: bool
+from pgmig._models import Sequence
 
 
 class _SequenceRow(IntrospectionRowWithSchema):
@@ -27,7 +22,7 @@ class _SequenceRow(IntrospectionRowWithSchema):
     seq_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
     seq_comment: str | None
     seq_owner: str
-    seq_grants: list[_GrantRow]
+    seq_grants: list[GrantRow]
     owned_schema: str | None
     owned_table: str | None
     owned_column: str | None
@@ -56,10 +51,7 @@ async def load() -> None:
                 cycle=seq_row.seq_cycle,
                 comment=seq_row.seq_comment,
                 owner=seq_row.seq_owner,
-                grants=frozenset(
-                    Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
-                    for grant in seq_row.seq_grants
-                ),
+                grants=grants(seq_row.seq_grants),
                 owned_by=owned_by,
                 unlogged=seq_row.seq_persistence == "u",
             )
