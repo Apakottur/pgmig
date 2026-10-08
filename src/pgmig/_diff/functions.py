@@ -4,13 +4,13 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    _diff_comments,
     ctx_iter_object_pairs,
-    ctx_iter_schema_pairs,
-    owner_statements,
+    ctx_iter_table_pairs,
+    ctx_iter_view_pairs,
+    diff_comments,
     topological_drop_order,
 )
-from pgmig._diff.grants import grant_statements
+from pgmig._diff.grants import owner_and_grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import FunctionKey, RelationKey
 from pgmig._models import Function, FunctionDependent
@@ -138,18 +138,12 @@ def _dropped_relations() -> set[RelationKey]:
     Every table, view, and materialized view present in the source but absent in the target
     -- the relations this migration drops.
     """
-    dropped: set[RelationKey] = set()
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        if src_schema is None:
-            continue
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
-        dst_views = dst_schema.view_by_name if dst_schema else {}
-        dst_matviews = dst_schema.materialized_view_by_name if dst_schema else {}
-        dropped.update(RelationKey(schema_name, name) for name in src_schema.table_by_name if name not in dst_tables)
-        dropped.update(RelationKey(schema_name, name) for name in src_schema.view_by_name if name not in dst_views)
-        dropped.update(
-            RelationKey(schema_name, name) for name in src_schema.materialized_view_by_name if name not in dst_matviews
-        )
+    dropped = {RelationKey(schema, name) for schema, name, _src, dst in ctx_iter_table_pairs() if dst is None}
+    dropped.update(RelationKey(schema, name) for schema, name, _src, dst in ctx_iter_view_pairs() if dst is None)
+    for schema_name, _src_matviews, _dst_matviews, pairs in ctx_iter_object_pairs(
+        lambda schema: schema.materialized_view_by_name
+    ):
+        dropped.update(RelationKey(schema_name, name) for name, _src, dst in pairs if dst is None)
     return dropped
 
 
@@ -170,7 +164,7 @@ def _function_comment_statements(
     Emit COMMENT ON FUNCTION / PROCEDURE (by kind) for target routines whose comment
     differs from source.
     """
-    return _diff_comments(
+    return diff_comments(
         src,
         dst,
         render=lambda _signature, func: comment_on(
@@ -227,31 +221,19 @@ def generate() -> Iterator[Statement]:
                     recreated.add(signature)
                 yield Statement(Phase.FUNCTION_CREATE, f"{dst_func.definition};")
 
-            # Reconcile ownership for a routine present on both sides that was not
+            # Reconcile ownership and the ACL for a routine present on both sides that was not
             # dropped-and-recreated: CREATE OR REPLACE preserves the owner, while a return-type
             # recreate leaves the new routine runner-owned and reconciles on a later run.
-            if src_func is not None and dst_func is not None and signature not in recreated:
-                signature_target = f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})"
-                for sql in owner_statements(
+            # GRANT/REVOKE EXECUTE ON FUNCTION|PROCEDURE follows prokind, and the routine is
+            # addressed by its signature; it runs in the GRANT phase, after every create.
+            if dst_func is not None and signature not in recreated:
+                yield from owner_and_grant_statements(
                     dst_func.drop_keyword,
-                    signature_target,
-                    src_func.owner,
-                    dst_func.owner,
-                ):
-                    yield Statement(Phase.FUNCTION_CREATE, sql)
-                # Reconcile the ACL, after the routine exists. GRANT/REVOKE EXECUTE ON
-                # FUNCTION|PROCEDURE follows prokind, and the routine is addressed by its
-                # signature. Runs in the GRANT phase, after every create.
-                for sql in grant_statements(
-                    dst_func.drop_keyword,
-                    signature_target,
-                    src_func.grants,
-                    dst_func.grants,
-                    src_func.owner,
-                    dst_func.owner,
-                    include_named_roles=context.include_grants,
-                ):
-                    yield Statement(Phase.GRANT, sql)
+                    f"{qualified(schema_name, dst_func.name)}({dst_func.identity_arguments})",
+                    src_func,
+                    dst_func,
+                    phase=Phase.FUNCTION_CREATE,
+                )
 
         # Sync comments for target routines (COMMENT ON FUNCTION / PROCEDURE by kind), after
         # the routines they annotate have been created above.
