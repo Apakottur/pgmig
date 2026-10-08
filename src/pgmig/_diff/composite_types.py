@@ -4,13 +4,13 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    collect_relations,
     ctx_iter_object_pairs,
     diff_comment_statements,
     owner_statements,
     topological_drop_order,
     topological_sort,
 )
+from pgmig._diff._relations import collect_relations
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import CompositeTypeKey
 from pgmig._models import CompositeType

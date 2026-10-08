@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 
+from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     RenameDiff,
@@ -8,7 +9,6 @@ from pgmig._diff._core import (
     ctx_iter_view_pairs,
     diff_child_comment_statements,
     diff_renamable,
-    recreated_view_keys,
 )
 from pgmig._keys import RelationKey
 from pgmig._models import Trigger
@@ -137,7 +137,7 @@ def generate() -> Iterator[Statement]:
     # be treated as absent: every target trigger is re-created after VIEW_CREATE (landing the
     # default enable state, which the state fixup then corrects), and no DROP TRIGGER is emitted
     # against the view that no longer exists.
-    recreate = recreated_view_keys()
+    recreate = context.recreated_view_keys
     for schema_name, view_name, src_view, dst_view in ctx_iter_view_pairs():
         # View dropped: its triggers are dropped with it.
         if dst_view is None:
