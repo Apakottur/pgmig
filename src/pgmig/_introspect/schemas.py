@@ -33,13 +33,4 @@ async def load() -> None:
                 Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
                 for grant in schema_row.schema_grants
             ),
-            table_by_name={},
-            sequence_by_name={},
-            function_by_signature={},
-            enum_by_name={},
-            view_by_name={},
-            materialized_view_by_name={},
-            domain_by_name={},
-            composite_type_by_name={},
-            range_type_by_name={},
         )

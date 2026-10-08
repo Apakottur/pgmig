@@ -115,16 +115,7 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
     Returns the full introspection result.
     """
     # Initialize the introspection result.
-    db_introspection_result = DbIntrospectionResult(
-        schema_by_name={},
-        extension_by_name={},
-        view_dependencies={},
-        matview_dependencies={},
-        view_column_dependencies={},
-        composite_type_dependencies={},
-        enum_column_dependencies={},
-        default_acl_by_key={},
-    )
+    db_introspection_result = DbIntrospectionResult()
 
     async with DbReadOnlyConnection.connect(db_conn_info=db_conn_info) as conn:
         # Run within the introspection context.

@@ -84,11 +84,6 @@ async def load() -> None:
                 partition_key=table_row.partition_key,
                 partition_bound=table_row.partition_bound,
                 partition_parent=partition_parent,
-                index_by_name={},
-                constraint_by_name={},
-                foreign_key_by_name={},
-                trigger_by_name={},
-                policy_by_name={},
             )
             schema.table_by_name[table_row.table_name] = table
         # A zero-column table's phantom row (all column fields NULL) creates the table

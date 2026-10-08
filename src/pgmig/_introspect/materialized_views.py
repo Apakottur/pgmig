@@ -13,6 +13,6 @@ async def load() -> None:
         # A matview's reloptions are storage params (fillfactor, autovacuum_*), not the
         # view-only security/check options; they are not part of the model, so drop them.
         lambda name, definition, comment, _options, owner: MaterializedView(
-            name=name, definition=definition, comment=comment, owner=owner, index_by_name={}
+            name=name, definition=definition, comment=comment, owner=owner
         ),
     )

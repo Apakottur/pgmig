@@ -49,6 +49,6 @@ async def load() -> None:
         # trigger_by_name starts empty; the trigger loader (which runs after views) routes each
         # INSTEAD OF trigger row onto its view.
         lambda name, definition, comment, options, owner: View(
-            name=name, definition=definition, comment=comment, options=options, owner=owner, trigger_by_name={}
+            name=name, definition=definition, comment=comment, options=options, owner=owner
         ),
     )
