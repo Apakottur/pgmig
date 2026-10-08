@@ -5,13 +5,12 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    _diff_comments,
     ctx_iter_table_pairs,
+    diff_comments,
     diff_single_comment,
     is_stored_column_rebuild,
-    owner_statements,
 )
-from pgmig._diff.grants import grant_statements
+from pgmig._diff.grants import owner_and_grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
@@ -70,40 +69,6 @@ class ColumnDiff(NamedTuple):
 
     statements: list[str]
     deferred_drop_not_null: list[str]
-
-
-def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
-    """
-    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different owner
-    than the target. Delegates to the shared owner_statements (see it for the created-object
-    and --include-owner semantics).
-    """
-    return owner_statements(
-        "TABLE",
-        qualified(schema_name, dst_table.name),
-        None if src_table is None else src_table.owner,
-        dst_table.owner,
-    )
-
-
-def _table_grant_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
-    """
-    Emit GRANT/REVOKE to reconcile a table's ACL to the target's. Only called for a table
-    present on both sides (the alter path); a newly created table has no grants reconciled here
-    and, like owner, converges on a later run once it exists on both sides.
-
-    PUBLIC grants are always reconciled; named-role grants only under --include-grants (see
-    grant_statements).
-    """
-    return grant_statements(
-        "TABLE",
-        qualified(schema_name, dst_table.name),
-        src_table.grants,
-        dst_table.grants,
-        src_table.owner,
-        dst_table.owner,
-        include_named_roles=context.include_grants,
-    )
 
 
 def _parenthesize_generation(expression: str) -> str:
@@ -509,7 +474,7 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     src_columns = src_table.column_by_name if src_table else {}
     dst_columns = dst_table.column_by_name
 
-    return _diff_comments(
+    return diff_comments(
         src_columns,
         dst_columns,
         render=lambda name, column: comment_on("COLUMN", qualified(schema_name, dst_table.name, name), column.comment),
@@ -695,14 +660,17 @@ def generate() -> Iterator[Statement]:
                 src_pk_columns=src_table.get_primary_key_columns(),
             )
             rendered += column_statements
-        rendered += _table_owner_statements(schema_name, src_table, dst_table)
-        rendered += _table_comment_statements(schema_name, src_table, dst_table)
-        rendered += _column_comment_statements(schema_name, src_table, dst_table)
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
-        # ACL reconciliation is phased after every object exists (GRANT/REVOKE targets).
-        for sql in _table_grant_statements(schema_name, src_table, dst_table):
-            yield Statement(Phase.GRANT, sql)
+        # Ownership, then ACL reconciliation phased after every object exists (GRANT/REVOKE
+        # targets). A table created this run converges on a later run, once on both sides.
+        yield from owner_and_grant_statements(
+            "TABLE", qualified(schema_name, dst_table.name), src_table, dst_table, phase=Phase.TABLE
+        )
+        comments = _table_comment_statements(schema_name, src_table, dst_table)
+        comments += _column_comment_statements(schema_name, src_table, dst_table)
+        for sql in comments:
+            yield Statement(Phase.TABLE, sql)
         # DROP NOT NULL for a column whose covering primary key drops this run must run
         # after the CONSTRAINT-phase DROP CONSTRAINT.
         for sql in deferred_drop_not_null:

@@ -3,19 +3,14 @@ from typing import cast
 
 from pgmig._diff._context import context
 from pgmig._diff._core import Phase, Statement
-from pgmig._diff.grants import _render_grantee
+from pgmig._diff.grants import grant_statements
 from pgmig._keys import DefaultAclKey
 from pgmig._models import DefaultAcl, Grant
 from pgmig._sql import ident
 
 
 def _reconcile(
-    key: DefaultAclKey,
-    object_type: str,
-    src_grants: frozenset[Grant],
-    dst_grants: frozenset[Grant],
-    *,
-    include_named_roles: bool,
+    key: DefaultAclKey, object_type: str, src_grants: frozenset[Grant], dst_grants: frozenset[Grant]
 ) -> list[str]:
     """
     Reconcile one default-privilege rule's effective ACL from source to target, emitting
@@ -24,35 +19,13 @@ def _reconcile(
     The defaclrole's own self-grants are excluded (they are the role's implicit baseline and
     are identical on both sides), mirroring the owner-self-grant exclusion in object grants.
     PUBLIC grantees are always reconciled; named-role grantees only under --include-grants --
-    matching grant_statements. Note the statement always names FOR ROLE <role>, which must
+    both via grant_statements. Note the statement always names FOR ROLE <role>, which must
     exist on the target at apply time.
     """
     prefix = f"ALTER DEFAULT PRIVILEGES FOR ROLE {ident(key.role)}"
     if key.schema is not None:
         prefix += f" IN SCHEMA {ident(key.schema)}"
-
-    src_by_key = {(g.grantee, g.privilege): g for g in src_grants if g.grantee != key.role}
-    dst_by_key = {(g.grantee, g.privilege): g for g in dst_grants if g.grantee != key.role}
-
-    revokes: list[str] = []
-    grants: list[str] = []
-    for grantee, privilege in sorted(src_by_key.keys() | dst_by_key.keys()):
-        if grantee != "PUBLIC" and not include_named_roles:
-            continue
-        src = src_by_key.get((grantee, privilege))
-        dst = dst_by_key.get((grantee, privilege))
-        target = f"{privilege} ON {object_type}"
-        who = _render_grantee(grantee)
-        if dst is None:
-            revokes.append(f"{prefix} REVOKE {target} FROM {who};")
-        elif src is None:
-            option = " WITH GRANT OPTION" if dst.grantable else ""
-            grants.append(f"{prefix} GRANT {target} TO {who}{option};")
-        elif src.grantable and not dst.grantable:
-            revokes.append(f"{prefix} REVOKE GRANT OPTION FOR {target} FROM {who};")
-        elif dst.grantable and not src.grantable:
-            grants.append(f"{prefix} GRANT {target} TO {who} WITH GRANT OPTION;")
-    return revokes + grants
+    return grant_statements(object_type, src_grants, dst_grants, key.role, key.role, prefix=f"{prefix} ")
 
 
 def generate() -> Iterator[Statement]:
@@ -82,11 +55,5 @@ def generate() -> Iterator[Statement]:
         present = cast("DefaultAcl", src_rule if src_rule is not None else dst_rule)
         src_grants = src_rule.grants if src_rule is not None else present.baseline
         dst_grants = dst_rule.grants if dst_rule is not None else present.baseline
-        for sql in _reconcile(
-            key,
-            present.object_type,
-            src_grants,
-            dst_grants,
-            include_named_roles=context.include_grants,
-        ):
+        for sql in _reconcile(key, present.object_type, src_grants, dst_grants):
             yield Statement(Phase.GRANT, sql)
