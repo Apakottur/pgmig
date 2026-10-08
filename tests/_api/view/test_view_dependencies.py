@@ -1,18 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def _view_body(gen_setup: GenerateSetup, table: str, from_ref: str) -> str:
-    """
-    Get the view body, depending on the Postgres major version.
-    """
-    match gen_setup.pg_major:
-        case 14 | 15:
-            column = f"{table}.x"
-        case _:
-            column = "x"
-    return f"SELECT {column}\n   FROM {from_ref}"
-
-
 async def test_view_on_view_create_ordering(gen_setup: GenerateSetup) -> None:
     """
     A view that reads another view is created after the view it reads.
@@ -22,7 +10,7 @@ async def test_view_on_view_create_ordering(gen_setup: GenerateSetup) -> None:
         dst=["CREATE VIEW base AS SELECT 1 AS x", "CREATE VIEW derived AS SELECT x FROM base"],
         diff=[
             'CREATE VIEW "public"."base" AS SELECT 1 AS x',
-            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "base", "public.base")}',
+            f'CREATE VIEW "public"."derived" AS {gen_setup.select_body("x", "base", "public.base")}',
         ],
     )
 
@@ -55,7 +43,7 @@ async def test_view_on_view_definition_change_cascades(gen_setup: GenerateSetup)
             'DROP VIEW "public"."derived"',
             'DROP VIEW "public"."base"',
             'CREATE VIEW "public"."base" AS SELECT 2 AS x',
-            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "base", "public.base")}',
+            f'CREATE VIEW "public"."derived" AS {gen_setup.select_body("x", "base", "public.base")}',
         ],
     )
 
@@ -78,8 +66,8 @@ async def test_view_on_view_transitive_cascade(gen_setup: GenerateSetup) -> None
             'DROP VIEW "public"."b"',
             'DROP VIEW "public"."a"',
             'CREATE VIEW "public"."a" AS SELECT 2 AS x',
-            f'CREATE VIEW "public"."b" AS {_view_body(gen_setup, "a", "public.a")}',
-            f'CREATE VIEW "public"."c" AS {_view_body(gen_setup, "b", "public.b")}',
+            f'CREATE VIEW "public"."b" AS {gen_setup.select_body("x", "a", "public.a")}',
+            f'CREATE VIEW "public"."c" AS {gen_setup.select_body("x", "b", "public.b")}',
         ],
     )
 
@@ -101,7 +89,7 @@ async def test_view_on_view_cross_schema(gen_setup: GenerateSetup) -> None:
             'CREATE SCHEMA "a"',
             'CREATE SCHEMA "b"',
             'CREATE VIEW "a"."base" AS SELECT 1 AS x',
-            f'CREATE VIEW "b"."derived" AS {_view_body(gen_setup, "base", "a.base")}',
+            f'CREATE VIEW "b"."derived" AS {gen_setup.select_body("x", "base", "a.base")}',
         ],
     )
 
