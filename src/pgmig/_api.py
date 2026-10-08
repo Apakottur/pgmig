@@ -21,7 +21,30 @@ async def agenerate(
     driver: DbDriver = DbDriver.AUTO,
 ) -> str:
     """
-    Asynchronous equivalent of [`generate`][pgmig.generate], which documents the arguments.
+    Generate the migration SQL between the given source and target databases.
+
+    Args:
+        source: The source database DSN.
+        target: The target database DSN.
+        index_concurrently: Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
+                            Using CONCURRENTLY avoids blocking index read/write operations, but takes longer to execute
+                            and cannot be run inside a transaction block.
+        safe_not_null: Whether to emit SET NOT NULL on an existing column through a CHECK (col IS NOT NULL)
+                       constraint that is added NOT VALID, validated, and dropped once the column is NOT NULL.
+                       The validated CHECK lets SET NOT NULL skip its full-table scan, so the ACCESS EXCLUSIVE
+                       lock is held only briefly. Run the statements outside a transaction block, otherwise the
+                       lock taken by the first one is held throughout.
+        ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
+                                  UPDATE TO is emitted for them. Empty (default) ignores none.
+        ignore_schemas: Schema names to exclude from the diff entirely -- their tables and every other object,
+                        and the create/drop of the schema itself, are ignored. Empty (default) ignores none.
+        include_owner: Emit ALTER ... OWNER TO statements to reconcile ownership. Off by default: ownership
+                       references cluster-level roles that routinely differ across environments, so it is not
+                       part of the default convergence.
+        include_grants: Also emit named-role GRANT / REVOKE. PUBLIC grants are always diffed;
+                        named-role grants (role-dependent, may fail at apply) are opt-in.
+        driver: The database driver to connect with. AUTO (default) lets pgmig pick among the
+                supported drivers; naming one pins it.
     """
     # Introspect both databases concurrently. Collect all failures instead of raising them.
     source_result, target_result = await asyncio.gather(
@@ -71,30 +94,7 @@ def generate(
     driver: DbDriver = DbDriver.AUTO,
 ) -> str:
     """
-    Generate the migration SQL between the given source and target databases.
-
-    Args:
-        source: The source database DSN.
-        target: The target database DSN.
-        index_concurrently: Whether to emit CREATE/DROP INDEX (including CREATE UNIQUE INDEX) with CONCURRENTLY.
-                            Using CONCURRENTLY avoids blocking index read/write operations, but takes longer to execute
-                            and cannot be run inside a transaction block.
-        safe_not_null: Whether to emit SET NOT NULL on an existing column through a CHECK (col IS NOT NULL)
-                       constraint that is added NOT VALID, validated, and dropped once the column is NOT NULL.
-                       The validated CHECK lets SET NOT NULL skip its full-table scan, so the ACCESS EXCLUSIVE
-                       lock is held only briefly. Run the statements outside a transaction block, otherwise the
-                       lock taken by the first one is held throughout.
-        ignore_extension_version: Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ...
-                                  UPDATE TO is emitted for them. Empty (default) ignores none.
-        ignore_schemas: Schema names to exclude from the diff entirely -- their tables and every other object,
-                        and the create/drop of the schema itself, are ignored. Empty (default) ignores none.
-        include_owner: Emit ALTER ... OWNER TO statements to reconcile ownership. Off by default: ownership
-                       references cluster-level roles that routinely differ across environments, so it is not
-                       part of the default convergence.
-        include_grants: Also emit named-role GRANT / REVOKE. PUBLIC grants are always diffed;
-                        named-role grants (role-dependent, may fail at apply) are opt-in.
-        driver: The database driver to connect with. AUTO (default) lets pgmig pick among the
-                supported drivers; naming one pins it.
+    Synchronous equivalent of [`agenerate`][pgmig.agenerate], which documents the arguments.
 
     Raises:
         PgmigApiError: If called from within a running event loop. This synchronous wrapper
