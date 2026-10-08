@@ -12,6 +12,9 @@ class DbDriver(StrEnum):
     # https://github.com/psycopg/psycopg
     PSYCOPG = "psycopg"
 
+    # https://github.com/MagicStack/asyncpg
+    ASYNCPG = "asyncpg"
+
     @property
     def resolved(self) -> "DbDriver":
         match self:
