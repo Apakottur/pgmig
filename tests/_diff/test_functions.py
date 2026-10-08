@@ -31,5 +31,5 @@ def test_drop_order_ignores_deps_outside_late_set() -> None:
     # top depends on a routine that is not itself dropped late: that edge is ignored, so
     # top has no in-set dependency and comes out on its own.
     outside = FunctionKey("public", "outside()")
-    late = {TOP: ("public", _func("top", {outside}))}
+    late = {TOP: _func("top", {outside})}
     assert _topological_drop_order(late) == [TOP]

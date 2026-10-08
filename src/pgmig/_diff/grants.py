@@ -1,5 +1,8 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from typing import Protocol
 
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, owner_statements
 from pgmig._models import Grant
 from pgmig._sql import ident
 
@@ -10,14 +13,13 @@ def _render_grantee(grantee: str) -> str:
 
 
 def grant_statements(
-    kind: str,
-    qualified_name: str,
+    target: str,
     src_grants: Iterable[Grant],
     dst_grants: Iterable[Grant],
     src_owner: str,
     dst_owner: str,
     *,
-    include_named_roles: bool,
+    prefix: str = "",
 ) -> list[str]:
     """
     Reconcile an object's ACL from source to target.
@@ -33,11 +35,14 @@ def grant_statements(
 
     PUBLIC grants are always diffed -- PUBLIC exists on every cluster, so they are portable and
     apply-safe, and catching missing/extra PUBLIC access (e.g. a missing REVOKE ... FROM PUBLIC)
-    is security-relevant. Named-role grants are diffed only when `include_named_roles` is set:
-    they reference cluster-level roles that diverge across environments and fail at apply when the
-    role is absent on the target, so they are opt-in (the --include-grants flag), mirroring owner.
+    is security-relevant. Named-role grants are diffed only under --include-grants: they
+    reference cluster-level roles that diverge across environments and fail at apply when the
+    role is absent on the target, so they are opt-in, mirroring owner.
 
-    `kind` is the GRANT/REVOKE object keyword ("TABLE", "SEQUENCE", "SCHEMA", "FUNCTION").
+    `target` is what follows `<privilege> ON` -- the object keyword and name ("TABLE s.t",
+    "SEQUENCE s.q", "SCHEMA s", "FUNCTION s.f(int)") or, for a default-privilege rule, the
+    plural object type ("TABLES"). `prefix` is prepended verbatim to every statement (the
+    "ALTER DEFAULT PRIVILEGES ... " clause of a default-privilege rule).
     Statements are ordered revokes-then-grants, each by (grantee, privilege), for determinism.
     """
     src_by_key = {(g.grantee, g.privilege): g for g in src_grants if g.grantee != src_owner}
@@ -47,19 +52,54 @@ def grant_statements(
     grants: list[str] = []
     for grantee, privilege in sorted(src_by_key.keys() | dst_by_key.keys()):
         # PUBLIC is always reconciled; named roles only when opted in.
-        if grantee != "PUBLIC" and not include_named_roles:
+        if grantee != "PUBLIC" and not context.include_grants:
             continue
         src = src_by_key.get((grantee, privilege))
         dst = dst_by_key.get((grantee, privilege))
-        target = f"{privilege} ON {kind} {qualified_name}"
+        on = f"{privilege} ON {target}"
         who = _render_grantee(grantee)
         if dst is None:
-            revokes.append(f"REVOKE {target} FROM {who};")
+            revokes.append(f"{prefix}REVOKE {on} FROM {who};")
         elif src is None:
             option = " WITH GRANT OPTION" if dst.grantable else ""
-            grants.append(f"GRANT {target} TO {who}{option};")
+            grants.append(f"{prefix}GRANT {on} TO {who}{option};")
         elif src.grantable and not dst.grantable:
-            revokes.append(f"REVOKE GRANT OPTION FOR {target} FROM {who};")
+            revokes.append(f"{prefix}REVOKE GRANT OPTION FOR {on} FROM {who};")
         elif dst.grantable and not src.grantable:
-            grants.append(f"GRANT {target} TO {who} WITH GRANT OPTION;")
+            grants.append(f"{prefix}GRANT {on} TO {who} WITH GRANT OPTION;")
     return revokes + grants
+
+
+class _Owned(Protocol):
+    """
+    Any object carrying an owner and an effective ACL. Declared as read-only properties so
+    plain (frozen) dataclass attributes satisfy it.
+    """
+
+    @property
+    def owner(self) -> str: ...
+
+    @property
+    def grants(self) -> frozenset[Grant]: ...
+
+
+def owner_and_grant_statements(
+    kind: str, qualified_name: str, src_obj: _Owned | None, dst_obj: _Owned, *, phase: Phase
+) -> Iterator[Statement]:
+    """
+    Reconcile an object's owner (ALTER <kind> ... OWNER TO, in `phase`) and its ACL
+    (GRANT/REVOKE, in the GRANT phase, after every object exists) from source to target.
+
+    Only an object present on both sides is reconciled: `src_obj` is None for one created this
+    run, which -- owned by the migration runner and carrying its default ACL -- converges on a
+    later run, once it exists on both sides. `kind` is both the ALTER and the GRANT object
+    keyword (TABLE, SEQUENCE, SCHEMA, FUNCTION, PROCEDURE).
+    """
+    if src_obj is None:
+        return
+    for sql in owner_statements(kind, qualified_name, src_obj.owner, dst_obj.owner):
+        yield Statement(phase, sql)
+    for sql in grant_statements(
+        f"{kind} {qualified_name}", src_obj.grants, dst_obj.grants, src_obj.owner, dst_obj.owner
+    ):
+        yield Statement(Phase.GRANT, sql)
