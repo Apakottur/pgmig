@@ -572,19 +572,13 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
     src_parent = src_table.partition_parent
     dst_parent = dst_table.partition_parent
     if src_parent is not None and dst_parent is not None:
-        if src_parent != dst_parent:
-            # Re-parent: detach from the old parent, attach to the new one.
+        if src_parent != dst_parent or src_table.partition_bound != dst_table.partition_bound:
+            # Re-parent, or a bound change on the same parent: detach from the old parent and
+            # attach to the new one. A bound has no in-place ALTER, but DETACH then re-ATTACH at
+            # the new bound is non-destructive (the table and its rows survive; Postgres
+            # validates the rows against the new bound on ATTACH, same as any ATTACH).
             return [
                 _detach_partition(schema_name, table_name, src_parent),
-                _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
-            ]
-        if src_table.partition_bound != dst_table.partition_bound:
-            # Bound change on the same parent: no in-place ALTER exists, but DETACH then
-            # re-ATTACH at the new bound is non-destructive (the table and its rows
-            # survive; Postgres validates the rows against the new bound on ATTACH, same
-            # as any ATTACH).
-            return [
-                _detach_partition(schema_name, table_name, dst_parent),
                 _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
             ]
         return []

@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from pgmig._diff._core import (
     Phase,
@@ -23,29 +23,41 @@ _NOT_VALID_SUFFIX = " NOT VALID"
 _NOT_ENFORCED_SUFFIX = " NOT ENFORCED"
 
 
-def _extract_validations(
-    prefix: str, src: dict[str, Constraint], dst: dict[str, Constraint]
+def _extract(
+    prefix: str,
+    src: dict[str, Constraint],
+    dst: dict[str, Constraint],
+    render: Callable[[str, str, Constraint, Constraint], str | None],
 ) -> tuple[dict[str, Constraint], dict[str, Constraint], list[str]]:
     """
-    Pull out same-name constraints that only transition NOT VALID -> valid.
-
-    pg_get_constraintdef bakes NOT VALID into the definition, so validating a constraint
-    changes its definition string and the generic diff would drop and re-add it -- a full
-    re-check under a stronger lock. Instead emit the cheap `VALIDATE CONSTRAINT` and remove
-    the pair from the maps so the generic diff leaves it alone. The reverse (valid ->
-    NOT VALID) has no ALTER form, so it is left to fall through to drop-and-re-add.
+    Pull out the same-name constraint pairs `render` turns into an in-place ALTER, removing each
+    from (copies of) the maps so the generic diff leaves it alone. `render` returns None for a
+    pair it does not handle.
     """
     src = dict(src)
     dst = dict(dst)
-    validations: list[str] = []
+    alters: list[str] = []
     for name in sorted(src.keys() & dst.keys()):
-        src_def = src[name].definition
-        dst_def = dst[name].definition
-        if src_def.endswith(_NOT_VALID_SUFFIX) and src_def[: -len(_NOT_VALID_SUFFIX)] == dst_def:
-            validations.append(f"{prefix} VALIDATE CONSTRAINT {ident(name)};")
+        sql = render(prefix, name, src[name], dst[name])
+        if sql is not None:
+            alters.append(sql)
             del src[name]
             del dst[name]
-    return src, dst, validations
+    return src, dst, alters
+
+
+def _validation(prefix: str, name: str, src: Constraint, dst: Constraint) -> str | None:
+    """
+    A `VALIDATE CONSTRAINT` for a constraint that only transitions NOT VALID -> valid.
+
+    pg_get_constraintdef bakes NOT VALID into the definition, so validating a constraint
+    changes its definition string and the generic diff would drop and re-add it -- a full
+    re-check under a stronger lock. The reverse (valid -> NOT VALID) has no ALTER form, so it
+    is left to fall through to drop-and-re-add.
+    """
+    if src.definition.endswith(_NOT_VALID_SUFFIX) and src.definition[: -len(_NOT_VALID_SUFFIX)] == dst.definition:
+        return f"{prefix} VALIDATE CONSTRAINT {ident(name)};"
+    return None
 
 
 def _base_definition(constraint: Constraint) -> str:
@@ -72,34 +84,19 @@ def _deferrability_clause(constraint: Constraint) -> str:
     return "DEFERRABLE INITIALLY DEFERRED" if constraint.deferred else "DEFERRABLE INITIALLY IMMEDIATE"
 
 
-def _extract_deferrability_alters(
-    prefix: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> tuple[dict[str, Constraint], dict[str, Constraint], list[str]]:
+def _deferrability_alter(prefix: str, name: str, src: Constraint, dst: Constraint) -> str | None:
     """
-    Pull out same-name foreign keys that differ only in their deferrability.
+    An in-place ALTER CONSTRAINT for a foreign key that differs only in its deferrability.
 
     The DEFERRABLE / INITIALLY DEFERRED clause rides in the pg_get_constraintdef definition, so
-    the generic diff would drop and re-add such a constraint -- and for unique/primary-key
-    constraints that rebuilds the backing index. Foreign keys instead take an in-place
-    ALTER TABLE ... ALTER CONSTRAINT (the only kind Postgres lets change deferrability in place
-    on the supported versions, 14-18); the pair is removed so the generic diff leaves it alone.
-    Every other kind (unique, primary key, check, exclusion) is left to fall through to
-    drop-and-re-add.
+    the generic diff would drop and re-add such a constraint. Foreign keys are the only kind
+    Postgres lets change deferrability in place on the supported versions (14-18); every other
+    kind (unique, primary key, check, exclusion -- where the recreate rebuilds the backing
+    index) never reaches here and falls through to drop-and-re-add.
     """
-    src = dict(src)
-    dst = dict(dst)
-    alters: list[str] = []
-    for name in sorted(src.keys() & dst.keys()):
-        src_con, dst_con = src[name], dst[name]
-        if (
-            dst_con.is_foreign_key
-            and src_con.definition != dst_con.definition
-            and _base_definition(src_con) == _base_definition(dst_con)
-        ):
-            alters.append(f"{prefix} ALTER CONSTRAINT {ident(name)} {_deferrability_clause(dst_con)};")
-            del src[name]
-            del dst[name]
-    return src, dst, alters
+    if src.definition != dst.definition and _base_definition(src) == _base_definition(dst):
+        return f"{prefix} ALTER CONSTRAINT {ident(name)} {_deferrability_clause(dst)};"
+    return None
 
 
 def _enforcement_canonical(definition: str) -> str:
@@ -109,37 +106,29 @@ def _enforcement_canonical(definition: str) -> str:
     return definition
 
 
-def _extract_enforcement_alters(
-    prefix: str, src: dict[str, Constraint], dst: dict[str, Constraint]
-) -> tuple[dict[str, Constraint], dict[str, Constraint], list[str]]:
+def _enforcement_alter(prefix: str, name: str, src: Constraint, dst: Constraint) -> str | None:
     """
-    Pull out same-name foreign keys whose definitions are equal modulo the NOT ENFORCED
-    suffix -- an enforced-state-only change (Postgres 18+).
+    An in-place `ALTER CONSTRAINT ... [NOT] ENFORCED` for a foreign key whose definitions are
+    equal modulo the NOT ENFORCED suffix -- an enforced-state-only change (Postgres 18+).
 
-    Emit the in-place `ALTER CONSTRAINT ... [NOT] ENFORCED` and remove the pair so the generic
-    diff leaves it alone, instead of a drop + re-add. Only foreign keys reach this path:
-    Postgres rejects altering a check constraint's enforceability in place, so a check falls
-    through to the drop + re-add.
+    Only foreign keys reach here: Postgres rejects altering a check constraint's enforceability
+    in place, so a check falls through to the drop + re-add.
     """
-    src = dict(src)
-    dst = dict(dst)
-    alters: list[str] = []
-    for name in sorted(src.keys() & dst.keys()):
-        src_con, dst_con = src[name], dst[name]
-        if (
-            dst_con.is_foreign_key
-            and src_con.definition != dst_con.definition
-            and _enforcement_canonical(src_con.definition) == _enforcement_canonical(dst_con.definition)
-        ):
-            state = "NOT ENFORCED" if dst_con.definition.endswith(_NOT_ENFORCED_SUFFIX) else "ENFORCED"
-            alters.append(f"{prefix} ALTER CONSTRAINT {ident(name)} {state};")
-            del src[name]
-            del dst[name]
-    return src, dst, alters
+    if src.definition != dst.definition and _enforcement_canonical(src.definition) == _enforcement_canonical(
+        dst.definition
+    ):
+        state = "NOT ENFORCED" if dst.definition.endswith(_NOT_ENFORCED_SUFFIX) else "ENFORCED"
+        return f"{prefix} ALTER CONSTRAINT {ident(name)} {state};"
+    return None
 
 
 def _diff_constraints(
-    *, schema_name: str, table_name: str, src: dict[str, Constraint], dst: dict[str, Constraint]
+    *,
+    schema_name: str,
+    table_name: str,
+    src: dict[str, Constraint],
+    dst: dict[str, Constraint],
+    foreign_keys: bool,
 ) -> tuple[RenameDiff, list[str], list[str]]:
     """
     Diff one table's constraints (of a single kind) into a RenameDiff plus two lists of in-place
@@ -153,12 +142,16 @@ def _diff_constraints(
     unique/primary keys) or re-checking every row under a stronger lock (validation). Each matched
     pair is pulled out; the remainder falls through to the ordinary diff. Reverse or unsupported
     transitions (valid -> NOT VALID, and deferrability/enforceability on non-foreign-key kinds)
-    have no in-place ALTER form and fall through.
+    have no in-place ALTER form and fall through; `foreign_keys` says whether the maps hold
+    foreign keys, so the ALTER CONSTRAINT extraction only runs where it can apply.
     """
     prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
-    src, dst, validations = _extract_validations(prefix, src, dst)
-    src, dst, deferrability_alters = _extract_deferrability_alters(prefix, src, dst)
-    src, dst, enforcement_alters = _extract_enforcement_alters(prefix, src, dst)
+    src, dst, validations = _extract(prefix, src, dst, _validation)
+    alters: list[str] = []
+    if foreign_keys:
+        src, dst, deferrability_alters = _extract(prefix, src, dst, _deferrability_alter)
+        src, dst, enforcement_alters = _extract(prefix, src, dst, _enforcement_alter)
+        alters = [*deferrability_alters, *enforcement_alters]
     diff = diff_renamable(
         src,
         dst,
@@ -167,7 +160,7 @@ def _diff_constraints(
         render_rename=lambda old, new: f"{prefix} RENAME CONSTRAINT {ident(old)} TO {ident(new)};",
         render_create=lambda name, constraint: f"{prefix} ADD CONSTRAINT {ident(name)} {constraint.definition};",
     )
-    return diff, [*deferrability_alters, *enforcement_alters], validations
+    return diff, alters, validations
 
 
 def _blocks_column_removal(constraint: Constraint, removed: frozenset[str]) -> bool:
@@ -208,11 +201,12 @@ def generate() -> Iterator[Statement]:
             {name: con for name, con in all_src_constraints.items() if name not in blocking}, removed
         )
         dst_constraints = dst_table.constraint_by_name
-        (drops, renames, adds, recreated, renamed_from), alters, validations = _diff_constraints(
+        (drops, renames, adds, recreated, renamed_from), _alters, validations = _diff_constraints(
             schema_name=schema_name,
             table_name=table_name,
             src=src_constraints,
             dst=dst_constraints,
+            foreign_keys=False,
         )
         comments = diff_child_comment_statements(
             schema_name,
@@ -223,11 +217,10 @@ def generate() -> Iterator[Statement]:
             recreated=recreated,
             renamed_from=renamed_from,
         )
-        # `alters` (in-place deferrability / enforceability ALTER CONSTRAINT) is always empty here:
-        # no non-foreign-key constraint kind supports either change in place, so those fall through
-        # to the drop + re-add above. Kept in the sequence for the uniform signature.
+        # No non-foreign-key constraint kind supports an in-place deferrability / enforceability
+        # change, so those fall through to the drop + re-add above.
         # Drops first (frees names), then renames, then adds, then validations, then comments.
-        for sql in (*drops, *renames, *adds, *alters, *validations, *comments):
+        for sql in (*drops, *renames, *adds, *validations, *comments):
             yield Statement(Phase.CONSTRAINT, sql)
 
 
@@ -248,6 +241,7 @@ def generate_foreign_keys() -> Iterator[Statement]:
             table_name=table_name,
             src=src_fks,
             dst=dst_fks,
+            foreign_keys=True,
         )
         for sql in drops:
             yield Statement(Phase.FOREIGN_KEY_DROP, sql)
