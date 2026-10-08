@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, recreated_matview_keys
+from pgmig._diff._context import context
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs
 from pgmig._diff.indexes import diff_index_statements
 from pgmig._keys import RelationKey
 from pgmig._models import Index
@@ -19,7 +20,7 @@ def generate() -> Iterator[Statement]:
     """
     # Matviews the matview diff drops and recreates; the same helper the matview diff consumes,
     # so both agree on which matviews are recreated.
-    recreated_keys = recreated_matview_keys()
+    recreated_keys = context.recreated_matview_keys
     for schema_name, _src_views, _dst_views, pairs in ctx_iter_object_pairs(
         lambda schema: schema.materialized_view_by_name
     ):

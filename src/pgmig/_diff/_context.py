@@ -4,6 +4,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
 
+from pgmig._diff._relations import recreated_matview_keys, recreated_view_keys
 from pgmig._diff._repartition import get_repartitioned_tables
 from pgmig._keys import ColumnKey, RelationKey
 from pgmig._models import DbIntrospectionResult
@@ -20,9 +21,8 @@ def _get_retyped_column_readers(
     path never catches it. Only the source view-on-column edges catch it.
 
     Computed lazily on first access and cached for the diff scope (see
-    _ContextData.retyped_column_readers), shared by the view diff, the matview diff, and the
-    matview-index differ, so the O(tables x columns) scan runs at most once -- and never at all
-    for a diff with no views.
+    _ContextData.retyped_column_readers), shared by the view and matview recreate sets, so the
+    O(tables x columns) scan runs at most once -- and never at all for a diff with no views.
 
     Source-side identity (a column read by a source view exists in the source). A serial change
     keeps the integer `type`, so it does not surface here; that is intentional -- a serial change
@@ -84,6 +84,14 @@ class _ContextData:
     @cached_property
     def retyped_column_readers(self) -> set[RelationKey]:
         return _get_retyped_column_readers(self.source, self.target, self.repartitioned_tables)
+
+    @cached_property
+    def recreated_view_keys(self) -> set[RelationKey]:
+        return recreated_view_keys(self.source, self.target, self.retyped_column_readers)
+
+    @cached_property
+    def recreated_matview_keys(self) -> set[RelationKey]:
+        return recreated_matview_keys(self.source, self.target, self.retyped_column_readers, self.recreated_view_keys)
 
 
 # Context of the current diff generation.
@@ -156,8 +164,12 @@ class _Context:
         return _context.get().repartitioned_tables
 
     @property
-    def retyped_column_readers(self) -> set[RelationKey]:
-        return _context.get().retyped_column_readers
+    def recreated_view_keys(self) -> set[RelationKey]:
+        return _context.get().recreated_view_keys
+
+    @property
+    def recreated_matview_keys(self) -> set[RelationKey]:
+        return _context.get().recreated_matview_keys
 
 
 context = _Context()

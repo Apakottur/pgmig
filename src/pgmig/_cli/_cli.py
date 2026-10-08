@@ -8,7 +8,7 @@ import typer
 from pgmig._api import generate as generate_migration
 from pgmig._cli._error_format import format_error
 from pgmig._drivers import DbDriver
-from pgmig._errors import _PgmigError
+from pgmig._errors import PgmigError
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -146,7 +146,7 @@ def generate(
             include_grants=include_grants,
             driver=driver,
         )
-    except _PgmigError as error:
+    except PgmigError as error:
         # Expected error - print message without traceback.
         typer.echo(format_error(error), err=True)
         raise typer.Exit(code=1) from error

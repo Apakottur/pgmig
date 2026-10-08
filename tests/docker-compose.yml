@@ -6,10 +6,10 @@ services:
     # conftest sets this from the --pg-version pytest option before `compose up`.
     image: postgres:${PGMIG_TEST_PG_VERSION:-18}-alpine
     # This Postgres instance only ever holds ephemeral test data: the databases are
-    # dropped and recreated per test and the whole container is disposable. So we
-    # trade crash-durability for speed - DROP/CREATE DATABASE otherwise force
-    # fsync/checkpoints and dominate the test runtime. None of these are safe for
-    # real data.
+    # created once per session and wiped before each test, and the whole container
+    # is disposable. So we trade crash-durability for speed - the per-test DDL churn
+    # otherwise forces fsync/checkpoints and dominates the test runtime. None of
+    # these are safe for real data.
     #
     #   fsync=off               Don't force writes to physical disk. A crash can
     #                           corrupt the cluster - fine, it's throwaway.
