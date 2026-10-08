@@ -6,6 +6,11 @@ on:
 
   workflow_dispatch:
 
+# A new push to a PR supersedes its in-flight run; manual runs are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   linters:
     name: Linters
@@ -43,7 +48,7 @@ jobs:
         run: mypy --config-file linters/mypy.toml .
 
       - name: Run ty
-        run: ty check --project . --config-file linters/ty.toml
+        run: ty check --project . --config-file linters/ty.toml --python-version ${{ matrix.python-version }}
 
   unit-tests:
     strategy:
