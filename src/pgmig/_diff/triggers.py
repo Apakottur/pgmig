@@ -3,7 +3,6 @@ from collections.abc import Iterator
 from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
-    RenameDiff,
     Statement,
     ctx_iter_table_pairs,
     ctx_iter_view_pairs,
@@ -60,29 +59,6 @@ def _diff_trigger_states(
     return statements
 
 
-def _diff_triggers(
-    *,
-    schema_name: str,
-    table_name: str,
-    src: dict[str, Trigger],
-    dst: dict[str, Trigger],
-) -> RenameDiff:
-    """
-    Diff one relation's triggers into a RenameDiff, using each trigger's name-independent
-    canonical form as the rename key. The relation is a table or a view (INSTEAD OF triggers);
-    the rendered DROP/ALTER/CREATE TRIGGER ... ON <relation> is identical for both.
-    """
-    table = qualified(schema_name, table_name)
-    return diff_renamable(
-        src,
-        dst,
-        key=lambda trigger: trigger.canonical,
-        render_drop=lambda name: f"DROP TRIGGER {ident(name)} ON {table};",
-        render_rename=lambda old, new: f"ALTER TRIGGER {ident(old)} ON {table} RENAME TO {ident(new)};",
-        render_create=lambda _name, trigger: f"{trigger.definition};",
-    )
-
-
 def _emit_relation_triggers(
     schema_name: str, relation_name: str, src: dict[str, Trigger], dst: dict[str, Trigger]
 ) -> Iterator[Statement]:
@@ -90,8 +66,16 @@ def _emit_relation_triggers(
     Diff and emit one relation's triggers: drops in TRIGGER_DROP, then renames + creates +
     comments + enable-state fixups in TRIGGER_CREATE. Shared by the table and view walks.
     """
-    drops, renames, creates, recreated, renamed_from = _diff_triggers(
-        schema_name=schema_name, table_name=relation_name, src=src, dst=dst
+    # The rename key is each trigger's name-independent canonical form. The rendered
+    # DROP/ALTER/CREATE TRIGGER ... ON <relation> is identical for a table and a view.
+    relation = qualified(schema_name, relation_name)
+    drops, renames, creates, recreated, renamed_from = diff_renamable(
+        src,
+        dst,
+        key=lambda trigger: trigger.canonical,
+        render_drop=lambda name: f"DROP TRIGGER {ident(name)} ON {relation};",
+        render_rename=lambda old, new: f"ALTER TRIGGER {ident(old)} ON {relation} RENAME TO {ident(new)};",
+        render_create=lambda _name, trigger: f"{trigger.definition};",
     )
     for sql in drops:
         yield Statement(Phase.TRIGGER_DROP, sql)
@@ -109,7 +93,7 @@ def _emit_relation_triggers(
     # State fixups ride after the creates: a recreate lands the default state, so a
     # non-default target needs a following ALTER TABLE ... TRIGGER to converge.
     states = _diff_trigger_states(
-        table=qualified(schema_name, relation_name),
+        table=relation,
         src=src,
         dst=dst,
         recreated=recreated,

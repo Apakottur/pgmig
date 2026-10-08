@@ -28,7 +28,7 @@ from pgmig._introspect import (
     view_dependencies,
     views,
 )
-from pgmig._introspect._context import context
+from pgmig._introspect._context import ContextData, context_scope
 from pgmig._introspect._core import Guard, IntrospectionQuery, IntrospectionRow, Loader, run_introspection_query
 from pgmig._models import DbIntrospectionResult
 
@@ -117,23 +117,16 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
     Returns the full introspection result.
     """
     # Initialize the introspection result.
-    db_introspection_result = DbIntrospectionResult(
-        schema_by_name={},
-        extension_by_name={},
-        view_dependencies={},
-        matview_dependencies={},
-        view_column_dependencies={},
-        composite_type_dependencies={},
-        enum_column_dependencies={},
-        default_acl_by_key={},
-    )
+    db_introspection_result = DbIntrospectionResult()
 
     async with DbReadOnlyConnection.connect(db_conn_info=db_conn_info) as conn:
         # Run within the introspection context.
-        with context.context_scope(
-            conn=conn,
-            db_introspection_result=db_introspection_result,
-            ignore_schemas=frozenset(ignore_schemas),
+        with context_scope(
+            ContextData(
+                conn=conn,
+                db_introspection_result=db_introspection_result,
+                ignore_schemas=frozenset(ignore_schemas),
+            )
         ):
             # Verify that the ignored schemas are isolated from the kept ones.
             if ignore_schemas:

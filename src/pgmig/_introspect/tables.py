@@ -1,25 +1,20 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import (
+    GrantRow,
     IntrospectionQuery,
-    IntrospectionRow,
     IntrospectionRowWithSchema,
+    grants,
     run_introspection_query,
 )
 from pgmig._keys import RelationKey
-from pgmig._models import Column, Grant, Table
-
-
-class _GrantRow(IntrospectionRow):
-    grantee: str
-    privilege: str
-    grantable: bool
+from pgmig._models import Column, Table
 
 
 class _TableRow(IntrospectionRowWithSchema):
     table_name: str
     table_comment: str | None
     table_owner: str
-    table_grants: list[_GrantRow]
+    table_grants: list[GrantRow]
     table_persistence: str  # pg_class.relpersistence: 'p' (permanent) or 'u' (unlogged)
     table_row_security: bool  # pg_class.relrowsecurity: ENABLE ROW LEVEL SECURITY
     table_force_row_security: bool  # pg_class.relforcerowsecurity: FORCE ROW LEVEL SECURITY
@@ -71,10 +66,7 @@ async def load() -> None:
                 columns=[],
                 comment=table_row.table_comment,
                 owner=table_row.table_owner,
-                grants=frozenset(
-                    Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
-                    for grant in table_row.table_grants
-                ),
+                grants=grants(table_row.table_grants),
                 unlogged=table_row.table_persistence == "u",
                 row_security=table_row.table_row_security,
                 force_row_security=table_row.table_force_row_security,
@@ -84,11 +76,6 @@ async def load() -> None:
                 partition_key=table_row.partition_key,
                 partition_bound=table_row.partition_bound,
                 partition_parent=partition_parent,
-                index_by_name={},
-                constraint_by_name={},
-                foreign_key_by_name={},
-                trigger_by_name={},
-                policy_by_name={},
             )
             schema.table_by_name[table_row.table_name] = table
         # A zero-column table's phantom row (all column fields NULL) creates the table

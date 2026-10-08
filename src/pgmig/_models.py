@@ -235,11 +235,11 @@ class Table:
     partition_parent: RelationKey | None
 
     # Relations.
-    index_by_name: dict[str, Index]
-    constraint_by_name: dict[str, Constraint]
-    foreign_key_by_name: dict[str, Constraint]
-    trigger_by_name: dict[str, Trigger]
-    policy_by_name: dict[str, Policy]
+    index_by_name: dict[str, Index] = field(default_factory=dict)
+    constraint_by_name: dict[str, Constraint] = field(default_factory=dict)
+    foreign_key_by_name: dict[str, Constraint] = field(default_factory=dict)
+    trigger_by_name: dict[str, Trigger] = field(default_factory=dict)
+    policy_by_name: dict[str, Policy] = field(default_factory=dict)
 
     # Memo for column_by_name; see there.
     _column_by_name: dict[str, Column] = field(default_factory=dict, init=False, repr=False, compare=False)
@@ -385,7 +385,7 @@ class View:
     owner: str  # role that owns the view (pg_get_userbyid(relowner))
     # INSTEAD OF triggers owned by this view (the only trigger kind a view can carry). Mirrors
     # Table.trigger_by_name so the trigger diff walks views the same way it walks tables.
-    trigger_by_name: dict[str, Trigger]
+    trigger_by_name: dict[str, Trigger] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -398,7 +398,7 @@ class MaterializedView:
     definition: str  # pg_get_viewdef output: the SELECT the matview wraps (no trailing semicolon)
     comment: str | None
     owner: str  # role that owns the matview (pg_get_userbyid(relowner))
-    index_by_name: dict[str, Index]
+    index_by_name: dict[str, Index] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -469,15 +469,15 @@ class Schema:
     comment: str | None
     owner: str  # role that owns the schema (pg_get_userbyid(nspowner))
     grants: frozenset[Grant]  # effective ACL (nspacl expanded via acldefault('n', owner))
-    table_by_name: dict[str, Table]
-    sequence_by_name: dict[str, Sequence]
-    function_by_signature: dict[str, Function]
-    enum_by_name: dict[str, EnumType]
-    view_by_name: dict[str, View]
-    materialized_view_by_name: dict[str, MaterializedView]
-    domain_by_name: dict[str, Domain]
-    composite_type_by_name: dict[str, CompositeType]
-    range_type_by_name: dict[str, RangeType]
+    table_by_name: dict[str, Table] = field(default_factory=dict)
+    sequence_by_name: dict[str, Sequence] = field(default_factory=dict)
+    function_by_signature: dict[str, Function] = field(default_factory=dict)
+    enum_by_name: dict[str, EnumType] = field(default_factory=dict)
+    view_by_name: dict[str, View] = field(default_factory=dict)
+    materialized_view_by_name: dict[str, MaterializedView] = field(default_factory=dict)
+    domain_by_name: dict[str, Domain] = field(default_factory=dict)
+    composite_type_by_name: dict[str, CompositeType] = field(default_factory=dict)
+    range_type_by_name: dict[str, RangeType] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -540,24 +540,24 @@ class DbIntrospectionResult:
     Full result of a database introspection.
     """
 
-    schema_by_name: dict[str, Schema]
-    extension_by_name: dict[str, Extension]
+    schema_by_name: dict[str, Schema] = field(default_factory=dict)
+    extension_by_name: dict[str, Extension] = field(default_factory=dict)
 
     # Mapping from a view to the set of views it depends on.
-    view_dependencies: dict[RelationKey, set[RelationKey]]
+    view_dependencies: dict[RelationKey, set[RelationKey]] = field(default_factory=dict)
 
     # Mapping from a materialized view to the set of views/matviews it reads from.
-    matview_dependencies: dict[RelationKey, set[RelationKey]]
+    matview_dependencies: dict[RelationKey, set[RelationKey]] = field(default_factory=dict)
 
     # Mapping from a view to the set of table columns it reads.
-    view_column_dependencies: dict[RelationKey, set[ColumnKey]]
+    view_column_dependencies: dict[RelationKey, set[ColumnKey]] = field(default_factory=dict)
 
     # Mapping from a composite type to the set of composite types it depends on.
-    composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]]
+    composite_type_dependencies: dict[CompositeTypeKey, set[CompositeTypeKey]] = field(default_factory=dict)
 
     # Mapping from an enum type to the table columns typed by it (directly or as an array).
-    enum_column_dependencies: dict[EnumKey, list[EnumColumnDependency]]
+    enum_column_dependencies: dict[EnumKey, list[EnumColumnDependency]] = field(default_factory=dict)
 
     # ALTER DEFAULT PRIVILEGES rules (pg_default_acl), keyed by (role, schema-or-None,
     # object_type) so the diff can pair a source rule with its target counterpart.
-    default_acl_by_key: dict["DefaultAclKey", DefaultAcl]
+    default_acl_by_key: dict["DefaultAclKey", DefaultAcl] = field(default_factory=dict)

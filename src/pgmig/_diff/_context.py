@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
+from typing import cast
 
 from pgmig._diff._relations import recreated_matview_keys, recreated_view_keys
 from pgmig._keys import ColumnKey, RelationKey
@@ -18,7 +19,7 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
     path never catches it. Only the source view-on-column edges catch it.
 
     Computed lazily on first access and cached for the diff scope (see
-    _ContextData.retyped_column_readers), shared by the view and matview recreate sets, so the
+    ContextData.retyped_column_readers), shared by the view and matview recreate sets, so the
     O(tables x columns) scan runs at most once -- and never at all for a diff with no views.
 
     Source-side identity (a column read by a source view exists in the source). A serial change
@@ -39,7 +40,7 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
 
 
 @dataclass(frozen=True)
-class _ContextData:
+class ContextData:
     """
     Context data for the current diff generation.
     """
@@ -83,77 +84,29 @@ class _ContextData:
 
 
 # Context of the current diff generation.
-_context: ContextVar[_ContextData] = ContextVar("pgmig_context")
+_context: ContextVar[ContextData] = ContextVar("pgmig_context")
 
 
-class _Context:
+@contextmanager
+def context_scope(data: ContextData) -> Iterator[None]:
     """
-    Singleton class for the diff context.
+    Run the enclosed diff generation with the given context data.
+    """
+    token = _context.set(data)
+    try:
+        yield
+    finally:
+        _context.reset(token)
+
+
+class _ContextProxy:
+    """
+    Forwards attribute reads to the context data of the current diff scope.
     """
 
-    @contextmanager
-    def context_scope(
-        self,
-        *,
-        source: DbIntrospectionResult,
-        target: DbIntrospectionResult,
-        index_concurrently: bool,
-        safe_not_null: bool,
-        ignore_extension_version: Sequence[str],
-        include_owner: bool,
-        include_grants: bool,
-    ) -> Iterator[None]:
-        token = _context.set(
-            _ContextData(
-                source=source,
-                target=target,
-                index_concurrently=index_concurrently,
-                safe_not_null=safe_not_null,
-                ignore_extension_version=ignore_extension_version,
-                include_owner=include_owner,
-                include_grants=include_grants,
-            )
-        )
-        try:
-            yield
-        finally:
-            _context.reset(token)
-
-    @property
-    def source(self) -> DbIntrospectionResult:
-        return _context.get().source
-
-    @property
-    def target(self) -> DbIntrospectionResult:
-        return _context.get().target
-
-    @property
-    def index_concurrently(self) -> bool:
-        return _context.get().index_concurrently
-
-    @property
-    def safe_not_null(self) -> bool:
-        return _context.get().safe_not_null
-
-    @property
-    def ignore_extension_version(self) -> Sequence[str]:
-        return _context.get().ignore_extension_version
-
-    @property
-    def include_owner(self) -> bool:
-        return _context.get().include_owner
-
-    @property
-    def include_grants(self) -> bool:
-        return _context.get().include_grants
-
-    @property
-    def recreated_view_keys(self) -> set[RelationKey]:
-        return _context.get().recreated_view_keys
-
-    @property
-    def recreated_matview_keys(self) -> set[RelationKey]:
-        return _context.get().recreated_matview_keys
+    def __getattr__(self, name: str) -> object:
+        return getattr(_context.get(), name)
 
 
-context = _Context()
+# Typed as the data it forwards to, so attribute reads stay type-checked.
+context = cast("ContextData", _ContextProxy())
