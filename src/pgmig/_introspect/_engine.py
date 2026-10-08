@@ -96,7 +96,7 @@ class _IntrospectionPreflight(IntrospectionRow):
         if self.has_views or self.has_matviews:
             loaders.append(view_column_dependencies.load)
         if self.has_matviews:
-            loaders += [materialized_views.load, matview_dependencies.load, matview_indexes.load]
+            loaders += [materialized_views.load, matview_indexes.load]
         if self.has_domains:
             loaders.append(domains.load)
         if self.has_composite_types:

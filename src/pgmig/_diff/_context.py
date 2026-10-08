@@ -73,6 +73,21 @@ class _ContextData:
     def retyped_column_readers(self) -> set[RelationKey]:
         return _get_retyped_column_readers(self.source, self.target)
 
+    # The recreate sets are computed in _core (which imports this module, hence the local imports)
+    # and cached here for the diff scope: several differs read each one, and each computation
+    # flattens every view or matview on both sides.
+    @cached_property
+    def recreated_view_keys(self) -> set[RelationKey]:
+        from pgmig._diff._core import recreated_view_keys  # noqa: PLC0415
+
+        return recreated_view_keys()
+
+    @cached_property
+    def recreated_matview_keys(self) -> set[RelationKey]:
+        from pgmig._diff._core import recreated_matview_keys  # noqa: PLC0415
+
+        return recreated_matview_keys()
+
 
 # Context of the current diff generation.
 _context: ContextVar[_ContextData] = ContextVar("pgmig_context")
@@ -142,6 +157,14 @@ class _Context:
     @property
     def retyped_column_readers(self) -> set[RelationKey]:
         return _context.get().retyped_column_readers
+
+    @property
+    def recreated_view_keys(self) -> set[RelationKey]:
+        return _context.get().recreated_view_keys
+
+    @property
+    def recreated_matview_keys(self) -> set[RelationKey]:
+        return _context.get().recreated_matview_keys
 
 
 context = _Context()

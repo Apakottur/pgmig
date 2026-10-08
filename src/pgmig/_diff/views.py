@@ -8,7 +8,6 @@ from pgmig._diff._core import (
     ctx_iter_schema_pairs,
     diff_comment_statements,
     owner_statements,
-    recreated_view_keys,
     topological_drop_order,
     topological_sort,
 )
@@ -30,7 +29,7 @@ def generate() -> Iterator[Statement]:
     src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
     dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
 
-    recreate = recreated_view_keys()
+    recreate = context.recreated_view_keys
     drop_only = src_views.keys() - dst_views.keys()
     create_only = dst_views.keys() - src_views.keys()
 

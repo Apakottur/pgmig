@@ -8,7 +8,6 @@ from pgmig._diff._core import (
     ctx_iter_schema_pairs,
     diff_comment_statements,
     owner_statements,
-    recreated_matview_keys,
     topological_sort,
 )
 from pgmig._keys import RelationKey
@@ -34,7 +33,7 @@ def generate() -> Iterator[Statement]:
     src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
     dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name, RelationKey)
 
-    recreate = recreated_matview_keys()
+    recreate = context.recreated_matview_keys
     drop_only = src_matviews.keys() - dst_matviews.keys()
     create_only = dst_matviews.keys() - src_matviews.keys()
 

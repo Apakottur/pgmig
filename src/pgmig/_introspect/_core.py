@@ -46,7 +46,7 @@ class IntrospectionQuery(Enum):
     PREFLIGHT = auto()
     UNSUPPORTED = auto()
     INVALID_INDEXES = auto()
-    MATVIEW_DEPENDENCIES_CHECK = auto()
+    MATVIEW_DEPENDENCIES = auto()
     SCHEMA_CONNECTIONS = auto()
 
     # Loaders, in dependency-significant order.
@@ -63,7 +63,6 @@ class IntrospectionQuery(Enum):
     MATERIALIZED_VIEWS = auto()
     VIEW_DEPENDENCIES = auto()
     VIEW_COLUMN_DEPENDENCIES = auto()
-    MATVIEW_DEPENDENCIES_LOAD = auto()
     TRIGGERS = auto()
     POLICIES = auto()
     DOMAINS = auto()
@@ -82,7 +81,7 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             return IntrospectionQueryConfig(file_name="unsupported.sql", kind=IntrospectionQueryType.GUARD)
         case IntrospectionQuery.INVALID_INDEXES:
             return IntrospectionQueryConfig(file_name="invalid_indexes.sql", kind=IntrospectionQueryType.GUARD)
-        case IntrospectionQuery.MATVIEW_DEPENDENCIES_CHECK:
+        case IntrospectionQuery.MATVIEW_DEPENDENCIES:
             return IntrospectionQueryConfig(file_name="matview_dependencies.sql", kind=IntrospectionQueryType.GUARD)
         case IntrospectionQuery.SCHEMA_CONNECTIONS:
             return IntrospectionQueryConfig(file_name="schema_connections.sql", kind=IntrospectionQueryType.GUARD)
@@ -112,8 +111,6 @@ def get_introspection_query_config(query: IntrospectionQuery) -> IntrospectionQu
             return IntrospectionQueryConfig(file_name="view_dependencies.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.VIEW_COLUMN_DEPENDENCIES:
             return IntrospectionQueryConfig(file_name="view_column_dependencies.sql", kind=IntrospectionQueryType.LOAD)
-        case IntrospectionQuery.MATVIEW_DEPENDENCIES_LOAD:
-            return IntrospectionQueryConfig(file_name="matview_dependencies.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.TRIGGERS:
             return IntrospectionQueryConfig(file_name="triggers.sql", kind=IntrospectionQueryType.LOAD)
         case IntrospectionQuery.POLICIES:

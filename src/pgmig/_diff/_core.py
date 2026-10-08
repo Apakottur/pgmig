@@ -444,7 +444,8 @@ def recreated_view_keys() -> set[RelationKey]:
     (Postgres refuses to drop a view another view still reads).
 
     Shared by the view diff and the matview recreate cascade: a matview reading a recreated view
-    must itself be recreated.
+    must itself be recreated. Read it through context.recreated_view_keys, which caches it for the
+    diff scope.
     """
     source, target = context.source, context.target
     src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
@@ -470,7 +471,8 @@ def recreated_matview_keys() -> set[RelationKey]:
     The single source of truth for the recreate decision, consumed by both the matview diff
     (which drops and recreates) and the matview-index differ (a recreated matview loses its
     indexes, so every target index is created fresh). A matview present on only one side is a
-    plain create or drop, not a recreate, and is absent here.
+    plain create or drop, not a recreate, and is absent here. Read it through
+    context.recreated_matview_keys, which caches it for the diff scope.
     """
     source, target = context.source, context.target
     src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
@@ -478,7 +480,7 @@ def recreated_matview_keys() -> set[RelationKey]:
     both = src_matviews.keys() & dst_matviews.keys()
 
     column_readers = context.retyped_column_readers
-    recreated_views = recreated_view_keys()
+    recreated_views = context.recreated_view_keys
     edges = source.matview_dependencies
 
     # Seed: changed definition, retyped-column reader, or a matview reading a recreated plain view
