@@ -2,7 +2,7 @@ import shutil
 import sys
 import textwrap
 
-from pgmig._errors import PgmigDbConnectionError, PgmigDbDriverError, _PgmigError
+from pgmig._errors import PgmigDbConnectionError, PgmigDbDriverError, PgmigError
 
 # Layout of the box that sets verbatim third-party output apart from pgmig's own message.
 _BOX_INDENT = "  "
@@ -65,7 +65,7 @@ def _format_db_connection_error(error: PgmigDbConnectionError) -> str:
     )
 
 
-def format_error(error: _PgmigError) -> str:
+def format_error(error: PgmigError) -> str:
     """
     Format an error to be displayed to the user.
     """
