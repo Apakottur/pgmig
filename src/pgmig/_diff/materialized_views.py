@@ -4,12 +4,12 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    collect_relations,
     ctx_iter_schema_pairs,
     diff_comment_statements,
     owner_statements,
     topological_sort,
 )
+from pgmig._diff._relations import collect_relations
 from pgmig._keys import RelationKey
 from pgmig._sql import qualified
 
