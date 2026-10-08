@@ -24,7 +24,6 @@ runs:
         RESOLUTION: ${{ inputs.resolution }}
       run: |
           if [ -n "$RESOLUTION" ]; then
-            # Re-resolve instead of installing the lockfile.
             uv sync --resolution "$RESOLUTION"
           else
             uv sync --frozen

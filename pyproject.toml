@@ -44,11 +44,7 @@ classifiers = [
 dependencies = [
   #
   "psycopg>=3.3.5",
-  # The oldest pydantic with pydantic-core wheels for each Python.
-  "pydantic>=2.0.2; python_version < '3.13'",
-  "pydantic>=2.8; python_version == '3.13'",
-  "pydantic>=2.12; python_version >= '3.14'",
-  # Older typer releases don't cap click and break on click 8.2+.
+  "pydantic>=2.12",
   "typer>=0.15.4",
 ]
 

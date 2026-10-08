@@ -555,9 +555,7 @@ dev = [
 requires-dist = [
     { name = "psycopg", specifier = ">=3.3.5" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'binary'", specifier = ">=3.3.5" },
-    { name = "pydantic", marker = "python_full_version < '3.13'", specifier = ">=2.0.2" },
-    { name = "pydantic", marker = "python_full_version == '3.13.*'", specifier = ">=2.8" },
-    { name = "pydantic", marker = "python_full_version >= '3.14'", specifier = ">=2.12" },
+    { name = "pydantic", specifier = ">=2.12" },
     { name = "typer", specifier = ">=0.15.4" },
 ]
 provides-extras = ["binary"]
