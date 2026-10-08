@@ -536,7 +536,6 @@ dev = [
     { name = "httpx" },
     { name = "mypy" },
     { name = "prek" },
-    { name = "psycopg" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -546,7 +545,6 @@ dev = [
     { name = "shpyx" },
     { name = "tenacity" },
     { name = "ty" },
-    { name = "typing-extensions" },
 ]
 
 [package.metadata]
@@ -563,7 +561,6 @@ dev = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "prek", specifier = "==0.5.5" },
-    { name = "psycopg", specifier = "==3.3.6" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
@@ -573,7 +570,6 @@ dev = [
     { name = "shpyx", specifier = "==0.0.38" },
     { name = "tenacity", specifier = "==9.1.4" },
     { name = "ty", specifier = "==0.0.84" },
-    { name = "typing-extensions", specifier = "==4.16.0" },
 ]
 
 [[package]]

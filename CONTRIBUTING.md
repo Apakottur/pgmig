@@ -22,26 +22,27 @@ The tests spin up a Postgres instance with Docker, so a running Docker daemon is
 Run the linters with `prek`:
 
 ```shell
-prek run -a
+uv run prek run -a
 ```
 
 Run the unit tests with `pytest`:
 
 ```shell
-pytest -c tests/pytest.ini tests
+uv run pytest -c tests/pytest.ini tests
 ```
 
 Run the type checks with `mypy` and `ty` (both run in CI):
 
 ```shell
-mypy --config-file linters/mypy.toml src tests
-ty check --config-file linters/ty.toml src tests
+uv run mypy --config-file linters/mypy.toml .
+uv run ty check --project . --config-file linters/ty.toml
 ```
 
 ## Releasing
 
-To release a new version, run the interactive script:
+To release a new version, run the interactive script (it requires the [`gh`](https://cli.github.com/) CLI,
+authenticated against the repository):
 
 ```shell
-./scripts/release.py
+uv run scripts/release.py
 ```
