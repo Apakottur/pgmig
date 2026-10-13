@@ -30,7 +30,6 @@ async def load() -> None:
                 definition=definition,
                 comment=row.view_comment,
                 owner=row.view_owner,
-                index_by_name={},
             )
         else:
             # reloptions come back in creation order; sort so comparison is order-independent.
@@ -42,5 +41,4 @@ async def load() -> None:
                 comment=row.view_comment,
                 options=tuple(sorted(row.view_options or [])),
                 owner=row.view_owner,
-                trigger_by_name={},
             )
