@@ -241,14 +241,14 @@ def _set_not_null_statements(schema_name: str, table_name: str, column_name: str
     The statements that make an existing column NOT NULL.
 
     Plain SET NOT NULL scans the whole table under an ACCESS EXCLUSIVE lock. With
-    context.safe_not_null, a CHECK (col IS NOT NULL) is added NOT VALID (brief lock, no scan)
+    context().safe_not_null, a CHECK (col IS NOT NULL) is added NOT VALID (brief lock, no scan)
     and validated (scans under SHARE UPDATE EXCLUSIVE, which does not block reads or writes);
     SET NOT NULL then proves the column from the validated CHECK and skips its scan. The CHECK
     is redundant afterwards, so it is dropped.
     """
     table = qualified(schema_name, table_name)
     set_not_null = f"ALTER TABLE {table} ALTER COLUMN {ident(column_name)} SET NOT NULL;"
-    if not context.safe_not_null:
+    if not context().safe_not_null:
         return [set_not_null]
     check_name = ident(f"pgmig_{column_name}_not_null")
     return [
@@ -544,7 +544,7 @@ def generate() -> Iterator[Statement]:
     # (its partitions cascade away, DELETING THEIR DATA) and re-CREATE the parent and every
     # target partition from scratch. This is intentionally destructive; a future safety-level
     # flag may gate or refuse it (see the recreate note below). To recreate through the existing
-    # create paths, the affected source tables (context.repartitioned_tables) are skipped by
+    # create paths, the affected source tables (context().repartitioned_tables) are skipped by
     # ctx_iter_table_pairs, so tables, indexes, constraints, triggers and comments are all
     # re-emitted as if newly created (their old copies vanish with the cascading DROP); an
     # explicit DROP of each subtree root is emitted first. A root nested inside another
@@ -554,11 +554,11 @@ def generate() -> Iterator[Statement]:
     # subtree, its plain DROP TABLE fails loudly at apply rather than silently cascading. A
     # planned safety-level flag may later refuse or gate this path; when it lands, revisit this.
     recreate_drops: list[str] = []
-    removed = context.repartitioned_tables
+    removed = context().repartitioned_tables
     # Explicit DROP for each subtree top -- a removed table whose parent is not itself
     # removed; a nested table (its parent is also removed) cascades from that DROP.
     for key in sorted(removed, key=lambda relation: (relation.schema, relation.name)):
-        parent = context.source.schema_by_name[key.schema].table_by_name[key.name].partition_parent
+        parent = context().source.schema_by_name[key.schema].table_by_name[key.name].partition_parent
         if parent is None or parent not in removed:
             recreate_drops.append(f"DROP TABLE {qualified(key.schema, key.name)};")
 
