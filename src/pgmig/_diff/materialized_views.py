@@ -30,11 +30,11 @@ def generate() -> Iterator[Statement]:
     recreated. recreated_matview_keys is the single source of truth for that decision, shared
     with the matview-index differ so both agree on which matviews are recreated.
     """
-    source, target = context.source, context.target
+    source, target = context().source, context().target
     src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
     dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name, RelationKey)
 
-    recreate = context.recreated_matview_keys
+    recreate = context().recreated_matview_keys
     drop_only = src_matviews.keys() - dst_matviews.keys()
     create_only = dst_matviews.keys() - src_matviews.keys()
 

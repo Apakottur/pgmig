@@ -81,7 +81,7 @@ def _owning_column_survives(owned_by: ColumnKey) -> bool:
     drops the sequence, so an explicit DROP SEQUENCE would fail "sequence does not exist";
     only emit one when the column survives.
     """
-    schema = context.target.schema_by_name.get(owned_by.schema)
+    schema = context().target.schema_by_name.get(owned_by.schema)
     table = schema.table_by_name.get(owned_by.table) if schema else None
     return table is not None and owned_by.column in table.column_by_name
 

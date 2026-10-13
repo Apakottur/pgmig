@@ -52,7 +52,7 @@ def grant_statements(
     grants: list[str] = []
     for grantee, privilege in sorted(src_by_key.keys() | dst_by_key.keys()):
         # PUBLIC is always reconciled; named roles only when opted in.
-        if grantee != "PUBLIC" and not context.include_grants:
+        if grantee != "PUBLIC" and not context().include_grants:
             continue
         src = src_by_key.get((grantee, privilege))
         dst = dst_by_key.get((grantee, privilege))

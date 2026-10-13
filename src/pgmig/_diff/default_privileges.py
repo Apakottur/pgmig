@@ -42,8 +42,8 @@ def generate() -> Iterator[Statement]:
     every other object; default-privilege rules affect only future objects, so they have no
     other ordering dependency.
     """
-    src_map = context.source.default_acl_by_key
-    dst_map = context.target.default_acl_by_key
+    src_map = context().source.default_acl_by_key
+    dst_map = context().target.default_acl_by_key
 
     # None-safe sort: a global rule (schema None) sorts before any schema-scoped one.
     for key in sorted(src_map.keys() | dst_map.keys(), key=lambda k: (k.role, k.schema or "", k.object_type)):

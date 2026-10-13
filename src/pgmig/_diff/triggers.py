@@ -121,7 +121,7 @@ def generate() -> Iterator[Statement]:
     # be treated as absent: every target trigger is re-created after VIEW_CREATE (landing the
     # default enable state, which the state fixup then corrects), and no DROP TRIGGER is emitted
     # against the view that no longer exists.
-    recreate = context.recreated_view_keys
+    recreate = context().recreated_view_keys
     for schema_name, view_name, src_view, dst_view in ctx_iter_view_pairs():
         # View dropped: its triggers are dropped with it.
         if dst_view is None:
