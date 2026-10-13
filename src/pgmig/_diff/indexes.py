@@ -3,7 +3,6 @@ from collections.abc import Iterator
 from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
-    RenameDiff,
     Statement,
     ctx_iter_table_pairs,
     diff_comment_statements,
@@ -27,37 +26,23 @@ def _render_create_index(definition: str, *, concurrently: bool) -> str:
     return f"{definition};"
 
 
-def _diff_indexes(
-    *,
-    schema_name: str,
-    src: dict[str, Index],
-    dst: dict[str, Index],
-    concurrently: bool,
-) -> RenameDiff:
-    """
-    Diff one table's standalone indexes into a RenameDiff, using each index's
-    name-independent canonical form as the rename key. Drops and creates carry
-    CONCURRENTLY when requested; a rename is ALTER INDEX and cannot be concurrent.
-    """
-    drop_keyword = "DROP INDEX CONCURRENTLY" if concurrently else "DROP INDEX"
-    return diff_renamable(
-        src,
-        dst,
-        key=lambda index: index.canonical,
-        render_drop=lambda name: f"{drop_keyword} {qualified(schema_name, name)};",
-        render_rename=lambda old, new: f"ALTER INDEX {qualified(schema_name, old)} RENAME TO {ident(new)};",
-        render_create=lambda _name, index: _render_create_index(index.definition, concurrently=concurrently),
-    )
-
-
 def diff_index_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
     """
     Diff one relation's indexes into ordered migration SQL: drops first (frees names),
     then renames, then creates, then comment syncs. Honors context.index_concurrently.
     Shared by the table and materialized-view index generators.
     """
-    drops, renames, creates, recreated, renamed_from = _diff_indexes(
-        schema_name=schema_name, src=src, dst=dst, concurrently=context.index_concurrently
+    # The rename key is each index's name-independent canonical form. Drops and creates carry
+    # CONCURRENTLY when requested; a rename is ALTER INDEX and cannot be concurrent.
+    concurrently = context.index_concurrently
+    drop_keyword = "DROP INDEX CONCURRENTLY" if concurrently else "DROP INDEX"
+    drops, renames, creates, recreated, renamed_from = diff_renamable(
+        src,
+        dst,
+        key=lambda index: index.canonical,
+        render_drop=lambda name: f"{drop_keyword} {qualified(schema_name, name)};",
+        render_rename=lambda old, new: f"ALTER INDEX {qualified(schema_name, old)} RENAME TO {ident(new)};",
+        render_create=lambda _name, index: _render_create_index(index.definition, concurrently=concurrently),
     )
 
     comments = diff_comment_statements(
