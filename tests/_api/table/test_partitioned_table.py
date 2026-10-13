@@ -1,3 +1,7 @@
+import copy
+
+from pgmig._diff._engine import get_diff
+from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
 
 
@@ -296,9 +300,9 @@ async def test_partitioned_table_subpartition_key_change_recreates(gen_setup: Ge
 
 async def test_partitioned_table_recreate_preserves_primary_key(gen_setup: GenerateSetup) -> None:
     """
-    A recreated parent's own objects (here a primary key) are re-emitted from scratch: the
-    recreate removes the parent from the source model so every generator treats it as newly
-    created, so the constraint diff re-adds the PK in the CONSTRAINT phase and the migration
+    A recreated parent's own objects (here a primary key) are re-emitted from scratch: every
+    generator skips the repartitioned source parent and treats it as newly created, so the
+    constraint diff re-adds the PK in the CONSTRAINT phase and the migration
     converges even though the PK is unchanged.
     """
     await gen_setup.assert_diff(
@@ -387,3 +391,30 @@ async def test_partitioned_table_reparent_and_bound_change(gen_setup: GenerateSe
             'ALTER TABLE "public"."p2" ATTACH PARTITION "public"."part" FOR VALUES FROM (1) TO (200)',
         ],
     )
+
+
+async def test_partitioned_table_recreate_leaves_source_unchanged(gen_setup: GenerateSetup) -> None:
+    """
+    A partition key change recreates the subtree as if newly created, without mutating the
+    caller's source introspection result: every generator skips the repartitioned tables instead.
+    """
+    await gen_setup.src.execute("CREATE TABLE events (id integer NOT NULL) PARTITION BY RANGE (id)")
+    await gen_setup.src.execute("CREATE TABLE events_1 PARTITION OF events FOR VALUES FROM (1) TO (100)")
+    await gen_setup.dst.execute("CREATE TABLE events (id integer NOT NULL) PARTITION BY HASH (id)")
+    source = await introspect_db(db_conn_info=gen_setup.src.db_conn_info)
+    target = await introspect_db(db_conn_info=gen_setup.dst.db_conn_info)
+    source_before, target_before = copy.deepcopy(source), copy.deepcopy(target)
+
+    diff = get_diff(
+        source=source,
+        target=target,
+        index_concurrently=False,
+        safe_not_null=False,
+        ignore_extension_version=(),
+        include_owner=False,
+        include_grants=False,
+    )
+
+    assert 'DROP TABLE "public"."events";' in diff
+    assert source == source_before
+    assert target == target_before
