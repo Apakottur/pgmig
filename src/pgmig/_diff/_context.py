@@ -21,7 +21,7 @@ def _get_retyped_column_readers(
     path never catches it. Only the source view-on-column edges catch it.
 
     Computed lazily on first access and cached for the diff scope (see
-    _ContextData.retyped_column_readers), shared by the view and matview recreate sets, so the
+    ContextData.retyped_column_readers), shared by the view and matview recreate sets, so the
     O(tables x columns) scan runs at most once -- and never at all for a diff with no views.
 
     Source-side identity (a column read by a source view exists in the source). A serial change
@@ -29,7 +29,7 @@ def _get_retyped_column_readers(
     is unsupported and raised by the table diff before applying.
 
     A repartitioned table (dropped and recreated from scratch, see
-    _ContextData.repartitioned_tables) has no source columns to retype, so it is skipped.
+    ContextData.repartitioned_tables) has no source columns to retype, so it is skipped.
     """
     retyped_columns: set[ColumnKey] = set()
     for schema_name in source.schema_by_name.keys() & target.schema_by_name.keys():
@@ -47,7 +47,7 @@ def _get_retyped_column_readers(
 
 
 @dataclass(frozen=True)
-class _ContextData:
+class ContextData:
     """
     Context data for the current diff generation.
     """
@@ -95,7 +95,7 @@ class _ContextData:
 
 
 # Context of the current diff generation.
-_context: ContextVar[_ContextData] = ContextVar("pgmig_context")
+_context: ContextVar[ContextData] = ContextVar("pgmig_context")
 
 
 class _Context:
@@ -104,28 +104,8 @@ class _Context:
     """
 
     @contextmanager
-    def context_scope(
-        self,
-        *,
-        source: DbIntrospectionResult,
-        target: DbIntrospectionResult,
-        index_concurrently: bool,
-        safe_not_null: bool,
-        ignore_extension_version: Sequence[str],
-        include_owner: bool,
-        include_grants: bool,
-    ) -> Iterator[None]:
-        token = _context.set(
-            _ContextData(
-                source=source,
-                target=target,
-                index_concurrently=index_concurrently,
-                safe_not_null=safe_not_null,
-                ignore_extension_version=ignore_extension_version,
-                include_owner=include_owner,
-                include_grants=include_grants,
-            )
-        )
+    def context_scope(self, data: ContextData) -> Iterator[None]:
+        token = _context.set(data)
         try:
             yield
         finally:

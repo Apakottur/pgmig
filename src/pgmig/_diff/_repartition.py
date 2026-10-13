@@ -39,7 +39,7 @@ def get_repartitioned_tables(source: DbIntrospectionResult, target: DbIntrospect
     changes, plus all of its source partitions (they cascade away with the parent's DROP).
 
     Computed lazily on first access and cached for the diff scope (see
-    _ContextData.repartitioned_tables). Every generator treats these source tables as absent
+    ContextData.repartitioned_tables). Every generator treats these source tables as absent
     (ctx_iter_table_pairs skips them), so their tables, indexes, constraints, triggers and
     policies are re-emitted as newly created -- without mutating the source model.
     """

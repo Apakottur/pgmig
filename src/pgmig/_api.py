@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 
 from pgmig._db import DbConnInfo
+from pgmig._diff._context import ContextData
 from pgmig._diff._engine import get_diff
 from pgmig._drivers import DbDriver
 from pgmig._errors import PgmigApiError, PgmigDbConnectionError, PgmigDbDriverError
@@ -71,13 +72,15 @@ async def agenerate(
 
     # No errors - generate migration SQL.
     return get_diff(
-        source=source_result,
-        target=target_result,
-        index_concurrently=index_concurrently,
-        safe_not_null=safe_not_null,
-        ignore_extension_version=ignore_extension_version,
-        include_owner=include_owner,
-        include_grants=include_grants,
+        ContextData(
+            source=source_result,
+            target=target_result,
+            index_concurrently=index_concurrently,
+            safe_not_null=safe_not_null,
+            ignore_extension_version=ignore_extension_version,
+            include_owner=include_owner,
+            include_grants=include_grants,
+        )
     )
 
 

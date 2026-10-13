@@ -1,5 +1,6 @@
 import copy
 
+from pgmig._diff._context import ContextData
 from pgmig._diff._engine import get_diff
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
@@ -406,13 +407,15 @@ async def test_partitioned_table_recreate_leaves_source_unchanged(gen_setup: Gen
     source_before, target_before = copy.deepcopy(source), copy.deepcopy(target)
 
     diff = get_diff(
-        source=source,
-        target=target,
-        index_concurrently=False,
-        safe_not_null=False,
-        ignore_extension_version=(),
-        include_owner=False,
-        include_grants=False,
+        ContextData(
+            source=source,
+            target=target,
+            index_concurrently=False,
+            safe_not_null=False,
+            ignore_extension_version=(),
+            include_owner=False,
+            include_grants=False,
+        )
     )
 
     assert 'DROP TABLE "public"."events";' in diff
