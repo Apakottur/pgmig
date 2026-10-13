@@ -39,7 +39,7 @@ async def load() -> None:
         owned_by: ColumnKey | None = None
         if seq_row.owned_schema is not None and seq_row.owned_table is not None and seq_row.owned_column is not None:
             owned_by = ColumnKey(seq_row.owned_schema, seq_row.owned_table, seq_row.owned_column)
-        context.db_introspection_result.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = (
+        context().db_introspection_result.schema_by_name[seq_row.schema_name].sequence_by_name[seq_row.seq_name] = (
             Sequence(
                 name=seq_row.seq_name,
                 data_type=seq_row.seq_type,

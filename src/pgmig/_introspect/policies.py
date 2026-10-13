@@ -20,7 +20,7 @@ async def load() -> None:
     are loaded so the owner lookup resolves.
     """
     for row in await run_introspection_query(IntrospectionQuery.POLICIES, _PolicyRow):
-        table = context.db_introspection_result.schema_by_name[row.schema_name].table_by_name[row.table_name]
+        table = context().db_introspection_result.schema_by_name[row.schema_name].table_by_name[row.table_name]
         table.policy_by_name[row.policy_name] = Policy(
             name=row.policy_name,
             command=row.policy_command,

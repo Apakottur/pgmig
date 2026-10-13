@@ -37,7 +37,7 @@ async def _load_indexes(query: IntrospectionQuery, select_target: Callable[[Sche
     mapping that owns the index.
     """
     for row in await run_introspection_query(query, _IndexRow):
-        relation = select_target(context.db_introspection_result.schema_by_name[row.schema_name])[row.relation_name]
+        relation = select_target(context().db_introspection_result.schema_by_name[row.schema_name])[row.relation_name]
         relation.index_by_name[row.index_name] = Index(
             name=row.index_name,
             definition=row.index_def,
