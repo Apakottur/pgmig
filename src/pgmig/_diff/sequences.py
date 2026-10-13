@@ -32,14 +32,6 @@ def _sequence_tail(sequence: Sequence) -> str:
     return f" {' '.join(clauses)}" if clauses else ""
 
 
-def _persistence_keyword(sequence: Sequence) -> str:
-    """
-    The "UNLOGGED " keyword (with trailing space) inserted between CREATE and SEQUENCE for an
-    unlogged sequence, or "" for a logged one. UNLOGGED sequences are PG15+.
-    """
-    return "UNLOGGED " if sequence.unlogged else ""
-
-
 def _alter_statements(schema_name: str, name: str, src_seq: Sequence, dst_seq: Sequence) -> list[str]:
     """
     The ALTER SEQUENCE statements for a sequence present on both sides: the option changes
@@ -108,9 +100,11 @@ def generate() -> Iterator[Statement]:
             # Present in target only: create it, then assign its OWNED BY after tables exist.
             if src_seq is None:
                 dst = dst_sequences[name]
+                # UNLOGGED sequences are PG15+.
+                persistence = "UNLOGGED " if dst.unlogged else ""
                 yield Statement(
                     Phase.SEQUENCE_CREATE,
-                    f"CREATE {_persistence_keyword(dst)}SEQUENCE {qualified_name}{_sequence_tail(dst)};",
+                    f"CREATE {persistence}SEQUENCE {qualified_name}{_sequence_tail(dst)};",
                 )
                 if dst.owned_by is not None:
                     yield Statement(
