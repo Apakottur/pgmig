@@ -199,7 +199,7 @@ def owner_statements(kind: str, qualified_name: str, src_owner: str | None, dst_
 
     Ownership reconciliation is off by default; it runs only with --include-owner.
     """
-    if not context().include_owner or src_owner is None or src_owner == dst_owner:
+    if not context.include_owner or src_owner is None or src_owner == dst_owner:
         return []
     return [f"ALTER {kind} {qualified_name} OWNER TO {ident(dst_owner)};"]
 
@@ -274,11 +274,11 @@ def ctx_iter_schema_pairs() -> Iterator[tuple[str, Schema | None, Schema | None]
     Yield (schema_name, source_schema, target_schema) for every schema across both
     databases, sorted by name. Either schema is None when absent on that side.
     """
-    for schema_name in sorted(context().source.schema_by_name.keys() | context().target.schema_by_name.keys()):
+    for schema_name in sorted(context.source.schema_by_name.keys() | context.target.schema_by_name.keys()):
         yield (
             schema_name,
-            context().source.schema_by_name.get(schema_name),
-            context().target.schema_by_name.get(schema_name),
+            context.source.schema_by_name.get(schema_name),
+            context.target.schema_by_name.get(schema_name),
         )
 
 
@@ -286,10 +286,10 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
     """
     Yield (schema_name, table_name, source_table, target_table) for every table across
     both databases, sorted by schema then table. Either table is None when absent on
-    that side. A repartitioned source table (see context().repartitioned_tables) counts as
+    that side. A repartitioned source table (see context.repartitioned_tables) counts as
     absent, so every generator re-emits it as newly created.
     """
-    repartitioned = context().repartitioned_tables
+    repartitioned = context.repartitioned_tables
     for schema_name, _src_tables, _dst_tables, pairs in ctx_iter_object_pairs(lambda schema: schema.table_by_name):
         for table_name, src_table, dst_table in pairs:
             if RelationKey(schema_name, table_name) not in repartitioned:

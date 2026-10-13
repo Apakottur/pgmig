@@ -98,20 +98,58 @@ class ContextData:
 _context: ContextVar[ContextData] = ContextVar("pgmig_context")
 
 
-@contextmanager
-def context_scope(data: ContextData) -> Iterator[None]:
+class _Context:
     """
-    Run the enclosed diff generation with the given context data.
+    Singleton class for the diff context.
     """
-    token = _context.set(data)
-    try:
-        yield
-    finally:
-        _context.reset(token)
+
+    @contextmanager
+    def context_scope(self, data: ContextData) -> Iterator[None]:
+        token = _context.set(data)
+        try:
+            yield
+        finally:
+            _context.reset(token)
+
+    @property
+    def source(self) -> DbIntrospectionResult:
+        return _context.get().source
+
+    @property
+    def target(self) -> DbIntrospectionResult:
+        return _context.get().target
+
+    @property
+    def index_concurrently(self) -> bool:
+        return _context.get().index_concurrently
+
+    @property
+    def safe_not_null(self) -> bool:
+        return _context.get().safe_not_null
+
+    @property
+    def ignore_extension_version(self) -> Sequence[str]:
+        return _context.get().ignore_extension_version
+
+    @property
+    def include_owner(self) -> bool:
+        return _context.get().include_owner
+
+    @property
+    def include_grants(self) -> bool:
+        return _context.get().include_grants
+
+    @property
+    def repartitioned_tables(self) -> set[RelationKey]:
+        return _context.get().repartitioned_tables
+
+    @property
+    def recreated_view_keys(self) -> set[RelationKey]:
+        return _context.get().recreated_view_keys
+
+    @property
+    def recreated_matview_keys(self) -> set[RelationKey]:
+        return _context.get().recreated_matview_keys
 
 
-def context() -> ContextData:
-    """
-    The context data of the current diff scope.
-    """
-    return _context.get()
+context = _Context()

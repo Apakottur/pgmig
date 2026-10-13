@@ -36,11 +36,11 @@ async def check() -> list[str]:
             # schema_name), so run_introspection_query does not drop them; skip an edge touching an
             # ignored schema so no ignored matview enters the dependency map. A connected schema is
             # refused up front, so a surviving ignored edge has both endpoints in the ignored schema.
-            if row.dependent_schema in context().ignore_schemas or row.referenced_schema in context().ignore_schemas:
+            if row.dependent_schema in context.ignore_schemas or row.referenced_schema in context.ignore_schemas:
                 continue
             dependent_key = RelationKey(row.dependent_schema, row.dependent_view)
             referenced_key = RelationKey(row.referenced_schema, row.referenced_view)
-            context().db_introspection_result.matview_dependencies.setdefault(dependent_key, set()).add(referenced_key)
+            context.db_introspection_result.matview_dependencies.setdefault(dependent_key, set()).add(referenced_key)
             continue
         dependent = qualified(row.dependent_schema, row.dependent_view)
         referenced = qualified(row.referenced_schema, row.referenced_view)

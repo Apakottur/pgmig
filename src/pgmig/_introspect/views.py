@@ -18,7 +18,7 @@ async def load() -> None:
     rows share one query; the relkind routes each onto the schema's view or matview mapping.
     """
     for row in await run_introspection_query(IntrospectionQuery.VIEWS, _ViewRow):
-        schema = context().db_introspection_result.schema_by_name[row.schema_name]
+        schema = context.db_introspection_result.schema_by_name[row.schema_name]
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
         definition = row.view_definition.strip().rstrip(";").strip()

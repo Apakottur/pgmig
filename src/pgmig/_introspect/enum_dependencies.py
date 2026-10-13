@@ -24,7 +24,7 @@ async def load() -> None:
     """
     for row in await run_introspection_query(IntrospectionQuery.ENUM_DEPENDENCIES, _EnumDependencyRow):
         key = EnumKey(row.enum_schema, row.enum_name)
-        context().db_introspection_result.enum_column_dependencies.setdefault(key, []).append(
+        context.db_introspection_result.enum_column_dependencies.setdefault(key, []).append(
             EnumColumnDependency(
                 schema=row.table_schema,
                 table=row.table_name,

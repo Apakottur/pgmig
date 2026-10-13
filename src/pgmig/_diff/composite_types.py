@@ -72,7 +72,7 @@ def generate() -> Iterator[Statement]:
     before, the type it references. Creates are topologically ordered dependencies-first over
     the target graph; drops are ordered dependents-first (the reverse) over the source graph.
     """
-    source, target = context().source, context().target
+    source, target = context.source, context.target
     src_types = collect_relations(source, lambda schema: schema.composite_type_by_name, CompositeTypeKey)
     dst_types = collect_relations(target, lambda schema: schema.composite_type_by_name, CompositeTypeKey)
 

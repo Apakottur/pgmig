@@ -55,7 +55,7 @@ def _dependent_recreate_statements(
         raise PgmigUnsupportedError(_recreate_message(schema_name, function, f"a {dependent.kind} depends on it"))
     # A repartitioned table is dropped and recreated from scratch (dependent included), so
     # there is no surviving dependent to drop and re-add around the routine.
-    if RelationKey(dependent.schema, dependent.table) in context().repartitioned_tables:
+    if RelationKey(dependent.schema, dependent.table) in context.repartitioned_tables:
         raise PgmigUnsupportedError(
             _recreate_message(schema_name, function, f"the table of its dependent {dependent.kind} is repartitioned")
         )
@@ -64,8 +64,8 @@ def _dependent_recreate_statements(
     # Each branch also reads the target-side value the dependent is compared against (a column's
     # default expression, or a constraint/index definition): None when the dependent's table or
     # the dependent itself is absent in the target.
-    src_table = context().source.schema_by_name[dependent.schema].table_by_name[dependent.table]
-    dst_table = context().target.schema_by_name[dependent.schema].table_by_name.get(dependent.table)
+    src_table = context.source.schema_by_name[dependent.schema].table_by_name[dependent.table]
+    dst_table = context.target.schema_by_name[dependent.schema].table_by_name.get(dependent.table)
     table = qualified(dependent.schema, dependent.table)
 
     if dependent.kind == "default":

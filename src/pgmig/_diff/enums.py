@@ -83,13 +83,13 @@ def _enum_rewrite_statements(schema_name: str, name: str, dst_enum: EnumType) ->
     """
     qualified_name = qualified(schema_name, name)
     tmp_qualified = qualified(schema_name, name + _REWRITE_TMP_SUFFIX)
-    dependencies = context().source.enum_column_dependencies.get(EnumKey(schema_name, name), [])
+    dependencies = context.source.enum_column_dependencies.get(EnumKey(schema_name, name), [])
 
     # A domain whose base type is this enum would break on the recreate and its columns are
     # invisible to the column-dependency join. The enum renders schema-qualified via
     # format_type (introspection runs with a restricted search_path), matching data_type.
     enum_type_names = {f"{schema_name}.{name}", f"{schema_name}.{name}[]"}
-    for schema in context().source.schema_by_name.values():
+    for schema in context.source.schema_by_name.values():
         for domain in schema.domain_by_name.values():
             if domain.data_type in enum_type_names:
                 raise PgmigUnsupportedError(
@@ -101,7 +101,7 @@ def _enum_rewrite_statements(schema_name: str, name: str, dst_enum: EnumType) ->
     # (mat)view reads the column, and the retyped-reader recreate path does not fire because the
     # column's type name is unchanged (only the enum's values changed).
     read_columns: set[ColumnKey] = set()
-    for columns in context().source.view_column_dependencies.values():
+    for columns in context.source.view_column_dependencies.values():
         read_columns |= columns
 
     for dep in dependencies:
@@ -133,7 +133,7 @@ def _enum_rewrite_statements(schema_name: str, name: str, dst_enum: EnumType) ->
     # Retype each dependent column through text. A default is dropped first and re-added after,
     # since it references the old type and would not survive the type change cleanly.
     for dep in dependencies:
-        column = context().source.schema_by_name[dep.schema].table_by_name[dep.table].column_by_name[dep.column]
+        column = context.source.schema_by_name[dep.schema].table_by_name[dep.table].column_by_name[dep.column]
         prefix = f"ALTER TABLE {qualified(dep.schema, dep.table)} ALTER COLUMN {ident(dep.column)}"
         if column.default is not None:
             yield Statement(Phase.TABLE, f"{prefix} DROP DEFAULT;")

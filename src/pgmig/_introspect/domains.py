@@ -18,7 +18,7 @@ async def load() -> None:
     Domain types (user domains only; extension-owned ones are excluded).
     """
     for domain_row in await run_introspection_query(IntrospectionQuery.DOMAINS, _DomainRow):
-        context().db_introspection_result.schema_by_name[domain_row.schema_name].domain_by_name[
+        context.db_introspection_result.schema_by_name[domain_row.schema_name].domain_by_name[
             domain_row.domain_name
         ] = Domain(
             name=domain_row.domain_name,

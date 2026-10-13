@@ -17,7 +17,7 @@ from pgmig._diff import (
     triggers,
     views,
 )
-from pgmig._diff._context import ContextData, context_scope
+from pgmig._diff._context import ContextData, context
 from pgmig._diff._core import Generator, Phase
 
 # Cross-phase ordering is decided by each statement's phase, but WITHIN a single phase
@@ -56,7 +56,7 @@ def get_diff(data: ContextData) -> str:
     statements_by_phase: dict[Phase, list[str]] = {phase: [] for phase in Phase}
 
     # Run within the diff context.
-    with context_scope(data):
+    with context.context_scope(data):
         # Collect all statements by phase.
         for generate in _GENERATORS:
             for statement in generate():

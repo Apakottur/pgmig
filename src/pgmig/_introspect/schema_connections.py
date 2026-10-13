@@ -22,7 +22,7 @@ async def check() -> list[str]:
     connection to a kept schema, so it is allowed; only an edge with exactly one ignored endpoint
     crosses the boundary.
     """
-    ignore = context().ignore_schemas
+    ignore = context.ignore_schemas
     findings: set[str] = set()
     for row in await run_introspection_query(IntrospectionQuery.SCHEMA_CONNECTIONS, _ConnectionRow):
         if (row.obj_schema in ignore) != (row.ref_schema in ignore):

@@ -18,7 +18,7 @@ async def load() -> None:
     Range types (user range types only; extension-owned ones are excluded).
     """
     for row in await run_introspection_query(IntrospectionQuery.RANGE_TYPES, _RangeTypeRow):
-        context().db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = RangeType(
+        context.db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = RangeType(
             name=row.type_name,
             subtype=row.subtype,
             subtype_opclass=row.subtype_opclass,

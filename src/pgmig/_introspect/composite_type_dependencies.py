@@ -22,4 +22,4 @@ async def load() -> None:
     ):
         dependent = CompositeTypeKey(row.dependent_schema, row.dependent_type)
         referenced = CompositeTypeKey(row.referenced_schema, row.referenced_type)
-        context().db_introspection_result.composite_type_dependencies.setdefault(dependent, set()).add(referenced)
+        context.db_introspection_result.composite_type_dependencies.setdefault(dependent, set()).add(referenced)

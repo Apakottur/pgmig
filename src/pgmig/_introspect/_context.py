@@ -8,7 +8,7 @@ from pgmig._models import DbIntrospectionResult
 
 
 @dataclass(frozen=True)
-class ContextData:
+class _ContextData:
     """
     Context data for the current introspection.
     """
@@ -24,23 +24,45 @@ class ContextData:
 
 
 # Context of the current introspection.
-_context: ContextVar[ContextData] = ContextVar("pgmig_introspection_context")
+_context: ContextVar[_ContextData] = ContextVar("pgmig_introspection_context")
 
 
-@contextmanager
-def context_scope(data: ContextData) -> Iterator[None]:
+class _Context:
     """
-    Run the enclosed introspection with the given context data.
+    Singleton class for the introspection context.
     """
-    token = _context.set(data)
-    try:
-        yield
-    finally:
-        _context.reset(token)
+
+    @contextmanager
+    def context_scope(
+        self,
+        *,
+        conn: DbReadOnlyConnection,
+        db_introspection_result: DbIntrospectionResult,
+        ignore_schemas: frozenset[str],
+    ) -> Iterator[None]:
+        token = _context.set(
+            _ContextData(
+                conn=conn,
+                db_introspection_result=db_introspection_result,
+                ignore_schemas=ignore_schemas,
+            )
+        )
+        try:
+            yield
+        finally:
+            _context.reset(token)
+
+    @property
+    def conn(self) -> DbReadOnlyConnection:
+        return _context.get().conn
+
+    @property
+    def db_introspection_result(self) -> DbIntrospectionResult:
+        return _context.get().db_introspection_result
+
+    @property
+    def ignore_schemas(self) -> frozenset[str]:
+        return _context.get().ignore_schemas
 
 
-def context() -> ContextData:
-    """
-    The context data of the current introspection.
-    """
-    return _context.get()
+context = _Context()
