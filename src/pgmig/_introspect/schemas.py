@@ -1,18 +1,23 @@
 from pgmig._introspect._context import context
 from pgmig._introspect._core import (
-    GrantRow,
     IntrospectionQuery,
+    IntrospectionRow,
     IntrospectionRowWithSchema,
-    grants,
     run_introspection_query,
 )
-from pgmig._models import Schema
+from pgmig._models import Grant, Schema
+
+
+class _GrantRow(IntrospectionRow):
+    grantee: str
+    privilege: str
+    grantable: bool
 
 
 class _SchemaRow(IntrospectionRowWithSchema):
     schema_comment: str | None
     schema_owner: str
-    schema_grants: list[GrantRow]
+    schema_grants: list[_GrantRow]
 
 
 async def load() -> None:
@@ -24,5 +29,17 @@ async def load() -> None:
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,
             owner=schema_row.schema_owner,
-            grants=grants(schema_row.schema_grants),
+            grants=frozenset(
+                Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
+                for grant in schema_row.schema_grants
+            ),
+            table_by_name={},
+            sequence_by_name={},
+            function_by_signature={},
+            enum_by_name={},
+            view_by_name={},
+            materialized_view_by_name={},
+            domain_by_name={},
+            composite_type_by_name={},
+            range_type_by_name={},
         )

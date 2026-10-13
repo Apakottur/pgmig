@@ -153,6 +153,16 @@ def _dropped_relations() -> set[RelationKey]:
     return dropped
 
 
+def _topological_drop_order(late: dict[FunctionKey, Function]) -> list[FunctionKey]:
+    """
+    Order the late-drop set so a routine is dropped before the routines it depends on.
+    Edges are each routine's forward function dependencies; `topological_drop_order` reverses
+    the dependency-first sort and drops those outside the late set.
+    """
+    edges = {key: set(function.depends_on_functions) for key, function in late.items()}
+    return topological_drop_order(set(late), edges)
+
+
 def _function_comment_statements(
     schema_name: str, src: dict[str, Function], dst: dict[str, Function], recreated: set[str]
 ) -> list[str]:
@@ -238,7 +248,5 @@ def generate() -> Iterator[Statement]:
 
     # Late drops across all schemas, ordered so a routine is dropped before the routines it
     # depends on. Their dependents (column defaults, indexes, constraints) are already gone.
-    # Edges are each routine's forward function dependencies; those outside the late set are ignored.
-    edges = {key: set(function.depends_on_functions) for key, function in late_drops.items()}
-    for key in topological_drop_order(set(late_drops), edges):
+    for key in _topological_drop_order(late_drops):
         yield Statement(Phase.FUNCTION_DROP_LATE, _drop_statement(key.schema, late_drops[key]))
