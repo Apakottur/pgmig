@@ -5,6 +5,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
+from pgmig._keys import RelationKey
 from pgmig._models import Column, Schema, Table, View
 from pgmig._sql import comment_on, ident, qualified
 
@@ -285,11 +286,17 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
     """
     Yield (schema_name, table_name, source_table, target_table) for every table across
     both databases, sorted by schema then table. Either table is None when absent on
-    that side.
+    that side. A repartitioned source table (see context.repartitioned_tables) counts as
+    absent, so every generator re-emits it as newly created.
     """
+    repartitioned = context.repartitioned_tables
     for schema_name, _src_tables, _dst_tables, pairs in ctx_iter_object_pairs(lambda schema: schema.table_by_name):
         for table_name, src_table, dst_table in pairs:
-            yield schema_name, table_name, src_table, dst_table
+            if RelationKey(schema_name, table_name) not in repartitioned:
+                yield schema_name, table_name, src_table, dst_table
+            elif dst_table is not None:
+                yield schema_name, table_name, None, dst_table
+            # Else gone from the target: it cascades away with its repartitioned ancestor's DROP.
 
 
 class _HasDependencyColumns(Protocol):

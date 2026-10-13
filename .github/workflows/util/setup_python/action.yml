@@ -5,6 +5,9 @@ inputs:
   python-version:
     description: Python version to install.
     default: "3.14"
+  resolution:
+    description: uv resolution strategy (e.g. lowest-direct). Empty installs the locked versions.
+    default: ""
 
 runs:
   using: "composite"
@@ -17,8 +20,14 @@ runs:
 
     - name: Install Python dependencies
       shell: bash
+      env:
+        RESOLUTION: ${{ inputs.resolution }}
       run: |
-          uv sync --frozen
+          if [ -n "$RESOLUTION" ]; then
+            uv sync --resolution "$RESOLUTION"
+          else
+            uv sync --frozen
+          fi
 
     # Put the project virtual environment on PATH for subsequent steps, so tools can be
     # invoked directly (e.g. `pytest`). Uses $GITHUB_PATH, which is applied
