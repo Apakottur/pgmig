@@ -15,7 +15,7 @@ async def load() -> None:
     Enum types (user enums only; extension-owned ones are excluded).
     """
     for enum_row in await run_introspection_query(IntrospectionQuery.ENUMS, _EnumRow):
-        context.db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
+        context().db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
             EnumType(
                 name=enum_row.enum_name,
                 values=enum_row.enum_values,

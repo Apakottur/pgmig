@@ -139,10 +139,10 @@ async def run_introspection_query(query: IntrospectionQuery, model: type[_RowT])
     sql = _read_query(query.file_name)
 
     # Run the query.
-    rows = await context.conn.introspect(sql, model)
+    rows = await context().conn.introspect(sql, model)
 
     # Filter out rows in ignored schemas.
-    ignored_schemas = context.ignore_schemas
+    ignored_schemas = context().ignore_schemas
     if query.kind is IntrospectionQueryType.LOAD:
         filtered_rows = []
         for row in rows:

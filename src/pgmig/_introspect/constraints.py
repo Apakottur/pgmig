@@ -33,7 +33,7 @@ async def load() -> None:
             deferrable=con_row.con_deferrable,
             deferred=con_row.con_deferred,
         )
-        table = context.db_introspection_result.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
+        table = context().db_introspection_result.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
         if constraint.is_foreign_key:
             table.foreign_key_by_name[con_row.con_name] = constraint
         else:
