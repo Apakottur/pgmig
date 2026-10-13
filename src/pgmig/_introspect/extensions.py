@@ -14,7 +14,7 @@ async def load() -> None:
     Extensions (database-level).
     """
     for ext_row in await run_introspection_query(IntrospectionQuery.EXTENSIONS, _ExtensionRow):
-        context.db_introspection_result.extension_by_name[ext_row.name] = Extension(
+        context().db_introspection_result.extension_by_name[ext_row.name] = Extension(
             name=ext_row.name,
             version=ext_row.version,
             schema=ext_row.schema_name,

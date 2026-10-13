@@ -121,13 +121,10 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
 
     async with DbReadOnlyConnection.connect(db_conn_info=db_conn_info) as conn:
         # Run within the introspection context.
-        with context_scope(
-            ContextData(
-                conn=conn,
-                db_introspection_result=db_introspection_result,
-                ignore_schemas=frozenset(ignore_schemas),
-            )
-        ):
+        data = ContextData(
+            conn=conn, db_introspection_result=db_introspection_result, ignore_schemas=frozenset(ignore_schemas)
+        )
+        with context_scope(data):
             # Verify that the ignored schemas are isolated from the kept ones.
             if ignore_schemas:
                 connections = await schema_connections.check()

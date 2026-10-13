@@ -2,7 +2,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import cast
 
 from pgmig._db import DbReadOnlyConnection
 from pgmig._models import DbIntrospectionResult
@@ -40,14 +39,8 @@ def context_scope(data: ContextData) -> Iterator[None]:
         _context.reset(token)
 
 
-class _ContextProxy:
+def context() -> ContextData:
     """
-    Forwards attribute reads to the context data of the current introspection.
+    The context data of the current introspection.
     """
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(_context.get(), name)
-
-
-# Typed as the data it forwards to, so attribute reads stay type-checked.
-context = cast("ContextData", _ContextProxy())
+    return _context.get()

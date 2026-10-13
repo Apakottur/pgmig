@@ -3,7 +3,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
-from typing import cast
 
 from pgmig._diff._relations import recreated_matview_keys, recreated_view_keys
 from pgmig._diff._repartition import get_repartitioned_tables
@@ -111,14 +110,8 @@ def context_scope(data: ContextData) -> Iterator[None]:
         _context.reset(token)
 
 
-class _ContextProxy:
+def context() -> ContextData:
     """
-    Forwards attribute reads to the context data of the current diff scope.
+    The context data of the current diff scope.
     """
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(_context.get(), name)
-
-
-# Typed as the data it forwards to, so attribute reads stay type-checked.
-context = cast("ContextData", _ContextProxy())
+    return _context.get()

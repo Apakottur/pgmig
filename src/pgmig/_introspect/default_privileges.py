@@ -31,10 +31,10 @@ async def load() -> None:
         # schema_name is optional here (None = a cluster-wide rule), so the row is not an
         # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule
         # scoped to an ignored schema.
-        if row.schema_name in context.ignore_schemas:
+        if row.schema_name in context().ignore_schemas:
             continue
         key = DefaultAclKey(role=row.role, schema=row.schema_name, object_type=row.object_type)
-        context.db_introspection_result.default_acl_by_key[key] = DefaultAcl(
+        context().db_introspection_result.default_acl_by_key[key] = DefaultAcl(
             role=row.role,
             schema=row.schema_name,
             object_type=_OBJECT_TYPE_KEYWORD[row.object_type],

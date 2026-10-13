@@ -25,11 +25,11 @@ def generate() -> Iterator[Statement]:
     the recreate set (see recreated_view_keys) -- Postgres refuses to drop a view another view
     still reads, and the dependents must be rebuilt afterwards.
     """
-    source, target = context.source, context.target
+    source, target = context().source, context().target
     src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
     dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
 
-    recreate = context.recreated_view_keys
+    recreate = context().recreated_view_keys
     drop_only = src_views.keys() - dst_views.keys()
     create_only = dst_views.keys() - src_views.keys()
 

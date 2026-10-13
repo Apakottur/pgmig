@@ -29,12 +29,12 @@ def _render_create_index(definition: str, *, concurrently: bool) -> str:
 def diff_index_statements(schema_name: str, src: dict[str, Index], dst: dict[str, Index]) -> list[str]:
     """
     Diff one relation's indexes into ordered migration SQL: drops first (frees names),
-    then renames, then creates, then comment syncs. Honors context.index_concurrently.
+    then renames, then creates, then comment syncs. Honors context().index_concurrently.
     Shared by the table and materialized-view index generators.
     """
     # The rename key is each index's name-independent canonical form. Drops and creates carry
     # CONCURRENTLY when requested; a rename is ALTER INDEX and cannot be concurrent.
-    concurrently = context.index_concurrently
+    concurrently = context().index_concurrently
     drop_keyword = "DROP INDEX CONCURRENTLY" if concurrently else "DROP INDEX"
     drops, renames, creates, recreated, renamed_from = diff_renamable(
         src,
