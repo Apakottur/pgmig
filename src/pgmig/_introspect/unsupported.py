@@ -1,4 +1,5 @@
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import IntrospectionRow
 from pgmig._sql import qualified
 
 # Human-readable name per unsupported kind, keyed by (catalog, code). The same single-char

@@ -29,7 +29,8 @@ from pgmig._introspect import (
     views,
 )
 from pgmig._introspect._context import ContextData, context_scope
-from pgmig._introspect._core import Guard, IntrospectionQuery, IntrospectionRow, Loader, run_introspection_query
+from pgmig._introspect._core import Guard, IntrospectionQuery, Loader, run_introspection_query
+from pgmig._introspect._rows import IntrospectionRow
 from pgmig._models import DbIntrospectionResult
 
 

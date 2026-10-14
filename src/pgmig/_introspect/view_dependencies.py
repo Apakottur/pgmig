@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import IntrospectionRow
 from pgmig._keys import RelationKey
 
 
