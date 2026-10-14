@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import EnumType
 
@@ -11,16 +11,21 @@ class _EnumRow(IntrospectionRowWithSchema):
     enum_owner: str
 
 
-async def load() -> None:
+class EnumsLoader(Loader[_EnumRow]):
     """
     Enum types (user enums only; extension-owned ones are excluded).
     """
-    for enum_row in await run_introspection_query(IntrospectionQuery.ENUMS, _EnumRow):
-        context().db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
-            EnumType(
-                name=enum_row.enum_name,
-                values=enum_row.enum_values,
-                comment=enum_row.enum_comment,
-                owner=enum_row.enum_owner,
+
+    file_name = "enums.sql"
+    model = _EnumRow
+
+    def process_rows(self, rows: list[_EnumRow]) -> None:
+        for enum_row in rows:
+            context().db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
+                EnumType(
+                    name=enum_row.enum_name,
+                    values=enum_row.enum_values,
+                    comment=enum_row.enum_comment,
+                    owner=enum_row.enum_owner,
+                )
             )
-        )

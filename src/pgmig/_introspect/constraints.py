@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Constraint
 
@@ -17,25 +17,32 @@ class _ConstraintRow(IntrospectionRowWithSchema):
     con_comment: str | None
 
 
-async def load() -> None:
+class ConstraintsLoader(Loader[_ConstraintRow]):
     """
     Constraints (primary key, unique, check, and exclusion). Foreign keys are routed to their
     own bucket on the table.
     """
-    for con_row in await run_introspection_query(IntrospectionQuery.CONSTRAINTS, _ConstraintRow):
-        constraint = Constraint(
-            name=con_row.con_name,
-            definition=con_row.con_def,
-            contype=con_row.con_type,
-            columns=con_row.con_columns or [],
-            dependency_columns=frozenset(con_row.con_dependency_columns or ()),
-            index_dependency_columns=frozenset(con_row.con_index_dependency_columns or ()),
-            comment=con_row.con_comment,
-            deferrable=con_row.con_deferrable,
-            deferred=con_row.con_deferred,
-        )
-        table = context().db_introspection_result.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
-        if constraint.is_foreign_key:
-            table.foreign_key_by_name[con_row.con_name] = constraint
-        else:
-            table.constraint_by_name[con_row.con_name] = constraint
+
+    file_name = "constraints.sql"
+    model = _ConstraintRow
+
+    def process_rows(self, rows: list[_ConstraintRow]) -> None:
+        for con_row in rows:
+            constraint = Constraint(
+                name=con_row.con_name,
+                definition=con_row.con_def,
+                contype=con_row.con_type,
+                columns=con_row.con_columns or [],
+                dependency_columns=frozenset(con_row.con_dependency_columns or ()),
+                index_dependency_columns=frozenset(con_row.con_index_dependency_columns or ()),
+                comment=con_row.con_comment,
+                deferrable=con_row.con_deferrable,
+                deferred=con_row.con_deferred,
+            )
+            table = (
+                context().db_introspection_result.schema_by_name[con_row.schema_name].table_by_name[con_row.table_name]
+            )
+            if constraint.is_foreign_key:
+                table.foreign_key_by_name[con_row.con_name] = constraint
+            else:
+                table.constraint_by_name[con_row.con_name] = constraint

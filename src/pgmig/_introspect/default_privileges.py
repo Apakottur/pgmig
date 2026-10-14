@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import GrantRow, IntrospectionRow, grants
 from pgmig._keys import DefaultAclKey
 from pgmig._models import DefaultAcl
@@ -24,21 +24,26 @@ class _DefaultAclRow(IntrospectionRow):
     baseline_grants: list[GrantRow]
 
 
-async def load() -> None:
+class DefaultPrivilegesLoader(Loader[_DefaultAclRow]):
     """
     ALTER DEFAULT PRIVILEGES rules (pg_default_acl, database-level).
     """
-    for row in await run_introspection_query(IntrospectionQuery.DEFAULT_PRIVILEGES, _DefaultAclRow):
-        # schema_name is optional here (None = a cluster-wide rule), so the row is not an
-        # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule
-        # scoped to an ignored schema.
-        if row.schema_name in context().ignore_schemas:
-            continue
-        key = DefaultAclKey(role=row.role, schema=row.schema_name, object_type=row.object_type)
-        context().db_introspection_result.default_acl_by_key[key] = DefaultAcl(
-            role=row.role,
-            schema=row.schema_name,
-            object_type=_OBJECT_TYPE_KEYWORD[row.object_type],
-            grants=grants(row.grants),
-            baseline=grants(row.baseline_grants),
-        )
+
+    file_name = "default_privileges.sql"
+    model = _DefaultAclRow
+
+    def process_rows(self, rows: list[_DefaultAclRow]) -> None:
+        for row in rows:
+            # schema_name is optional here (None = a cluster-wide rule), so the row is not an
+            # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule
+            # scoped to an ignored schema.
+            if row.schema_name in context().ignore_schemas:
+                continue
+            key = DefaultAclKey(role=row.role, schema=row.schema_name, object_type=row.object_type)
+            context().db_introspection_result.default_acl_by_key[key] = DefaultAcl(
+                role=row.role,
+                schema=row.schema_name,
+                object_type=_OBJECT_TYPE_KEYWORD[row.object_type],
+                grants=grants(row.grants),
+                baseline=grants(row.baseline_grants),
+            )

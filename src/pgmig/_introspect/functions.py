@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import GrantRow, IntrospectionRow, IntrospectionRowWithSchema, grants
 from pgmig._keys import FunctionKey, RelationKey
 from pgmig._models import Function, FunctionDependent
@@ -44,33 +44,38 @@ class _FunctionRow(IntrospectionRowWithSchema):
     func_depends_on_relations: list[_RelationDep]
 
 
-async def load() -> None:
+class FunctionsLoader(Loader[_FunctionRow]):
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
-    for func_row in await run_introspection_query(IntrospectionQuery.FUNCTIONS, _FunctionRow):
-        signature = f"{func_row.func_name}({func_row.func_args})"
-        context().db_introspection_result.schema_by_name[func_row.schema_name].function_by_signature[signature] = (
-            Function(
-                name=func_row.func_name,
-                identity_arguments=func_row.func_args,
-                definition=func_row.func_def.rstrip(),
-                return_type=func_row.func_rettype,
-                kind=func_row.func_kind,
-                comment=func_row.func_comment,
-                owner=func_row.func_owner,
-                grants=grants(func_row.func_grants),
-                has_dependents=func_row.func_has_dependents,
-                dependents=tuple(
-                    FunctionDependent(kind=dep.kind, schema=dep.schema_name, table=dep.table, name=dep.name)
-                    for dep in func_row.func_dependents
-                ),
-                depends_on_functions=frozenset(
-                    FunctionKey(schema=dep.schema_name, signature=f"{dep.name}({dep.args})")
-                    for dep in func_row.func_depends_on_functions
-                ),
-                depends_on_relations=frozenset(
-                    RelationKey(schema=dep.schema_name, name=dep.name) for dep in func_row.func_depends_on_relations
-                ),
+
+    file_name = "functions.sql"
+    model = _FunctionRow
+
+    def process_rows(self, rows: list[_FunctionRow]) -> None:
+        for func_row in rows:
+            signature = f"{func_row.func_name}({func_row.func_args})"
+            context().db_introspection_result.schema_by_name[func_row.schema_name].function_by_signature[signature] = (
+                Function(
+                    name=func_row.func_name,
+                    identity_arguments=func_row.func_args,
+                    definition=func_row.func_def.rstrip(),
+                    return_type=func_row.func_rettype,
+                    kind=func_row.func_kind,
+                    comment=func_row.func_comment,
+                    owner=func_row.func_owner,
+                    grants=grants(func_row.func_grants),
+                    has_dependents=func_row.func_has_dependents,
+                    dependents=tuple(
+                        FunctionDependent(kind=dep.kind, schema=dep.schema_name, table=dep.table, name=dep.name)
+                        for dep in func_row.func_dependents
+                    ),
+                    depends_on_functions=frozenset(
+                        FunctionKey(schema=dep.schema_name, signature=f"{dep.name}({dep.args})")
+                        for dep in func_row.func_depends_on_functions
+                    ),
+                    depends_on_relations=frozenset(
+                        RelationKey(schema=dep.schema_name, name=dep.name) for dep in func_row.func_depends_on_relations
+                    ),
+                )
             )
-        )
