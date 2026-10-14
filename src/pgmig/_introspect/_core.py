@@ -39,7 +39,7 @@ class IntrospectionQuery(Enum):
     MATVIEW_DEPENDENCIES = ("matview_dependencies.sql", IntrospectionQueryType.GUARD)
     SCHEMA_CONNECTIONS = ("schema_connections.sql", IntrospectionQueryType.GUARD)
 
-    # Loaders. Their run order is set by _engine._IntrospectionPreflight.get_loaders, not here.
+    # Loaders. Their run order is set by _engine._get_loaders, not here.
     SCHEMAS = ("schemas.sql", IntrospectionQueryType.LOAD)
     TABLES = ("tables.sql", IntrospectionQueryType.LOAD)
     INDEXES = ("indexes.sql", IntrospectionQueryType.LOAD)
