@@ -61,14 +61,6 @@ class Loader(IntrospectionQuery[_RowT, None]):
     filter_ignored_schemas = True
 
 
-async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]]) -> _ResultT:
-    """
-    Run the given introspection query, and process its rows.
-    """
-    [result] = await run_introspection_queries([query])
-    return result
-
-
 async def run_introspection_queries(queries: Sequence[type[IntrospectionQuery[Any, _ResultT]]]) -> list[_ResultT]:
     """
     Run the given introspection queries in a single round trip, and process the rows of each one, in order.
@@ -80,12 +72,20 @@ async def run_introspection_queries(queries: Sequence[type[IntrospectionQuery[An
     return [_process_rows(query, rows) for query, rows in zip(queries, rows_per_query, strict=True)]
 
 
+async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]]) -> _ResultT:
+    """
+    Run the given introspection query, and process its rows.
+    """
+    [result] = await run_introspection_queries([query])
+    return result
+
+
 def _process_rows(query: type[IntrospectionQuery[_RowT, _ResultT]], raw_rows: list[dict[str, Any]]) -> _ResultT:
     """
     Parse each row of the given introspection query into the query's model, and process the rows.
     """
     # Parse the rows.
-    rows = [query.model(**raw_row) for raw_row in raw_rows]
+    rows = [query.model.model_validate(raw_row) for raw_row in raw_rows]
 
     # Filter out rows in ignored schemas.
     ignored_schemas = context().ignore_schemas
