@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Policy
 
 
-class _PolicyRow(IntrospectionRowWithSchema):
+class PolicyRow(IntrospectionRowWithSchema):
     table_name: str
     policy_name: str
     policy_command: str  # polcmd: 'r'/'a'/'w'/'d'/'*'
@@ -15,7 +14,7 @@ class _PolicyRow(IntrospectionRowWithSchema):
     policy_comment: str | None
 
 
-def load_rows(rows: list[_PolicyRow]) -> None:
+def load_rows(rows: list[PolicyRow]) -> None:
     """
     Row-level security policies (pg_policy), attached to their owning table. Runs after tables
     are loaded so the owner lookup resolves.
@@ -31,10 +30,3 @@ def load_rows(rows: list[_PolicyRow]) -> None:
             check=row.policy_check,
             comment=row.policy_comment,
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.POLICIES, _PolicyRow))

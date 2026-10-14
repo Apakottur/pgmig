@@ -19,3 +19,10 @@ class PreflightRow(IntrospectionRow):
     has_domains: bool
     has_composite_types: bool
     has_range_types: bool
+
+
+def load_rows(rows: list[PreflightRow]) -> PreflightRow:
+    """
+    Preflight (the single row of the preflight query).
+    """
+    return rows[0]

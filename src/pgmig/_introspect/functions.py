@@ -1,5 +1,4 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import GrantRow, IntrospectionRow, IntrospectionRowWithSchema, grants
 from pgmig._keys import FunctionKey, RelationKey
 from pgmig._models import Function, FunctionDependent
@@ -29,7 +28,7 @@ class _RelationDep(IntrospectionRow):
     name: str
 
 
-class _FunctionRow(IntrospectionRowWithSchema):
+class FunctionRow(IntrospectionRowWithSchema):
     func_name: str
     func_args: str
     func_def: str
@@ -44,7 +43,7 @@ class _FunctionRow(IntrospectionRowWithSchema):
     func_depends_on_relations: list[_RelationDep]
 
 
-def load_rows(rows: list[_FunctionRow]) -> None:
+def load_rows(rows: list[FunctionRow]) -> None:
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
@@ -74,10 +73,3 @@ def load_rows(rows: list[_FunctionRow]) -> None:
                 ),
             )
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.FUNCTIONS, _FunctionRow))

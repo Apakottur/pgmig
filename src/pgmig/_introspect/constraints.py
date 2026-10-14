@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Constraint
 
 
-class _ConstraintRow(IntrospectionRowWithSchema):
+class ConstraintRow(IntrospectionRowWithSchema):
     table_name: str
     con_name: str
     con_def: str
@@ -17,7 +16,7 @@ class _ConstraintRow(IntrospectionRowWithSchema):
     con_comment: str | None
 
 
-def load_rows(rows: list[_ConstraintRow]) -> None:
+def load_rows(rows: list[ConstraintRow]) -> None:
     """
     Constraints (primary key, unique, check, and exclusion). Foreign keys are routed to their
     own bucket on the table.
@@ -39,10 +38,3 @@ def load_rows(rows: list[_ConstraintRow]) -> None:
             table.foreign_key_by_name[con_row.con_name] = constraint
         else:
             table.constraint_by_name[con_row.con_name] = constraint
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.CONSTRAINTS, _ConstraintRow))

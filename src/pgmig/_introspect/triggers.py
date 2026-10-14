@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Table, Trigger, View
 
 
-class _TriggerRow(IntrospectionRowWithSchema):
+class TriggerRow(IntrospectionRowWithSchema):
     table_name: str
     relkind: str  # pg_class.relkind of the owning relation: 'r'/'p' table, 'v' view
     trigger_name: str
@@ -14,7 +13,7 @@ class _TriggerRow(IntrospectionRowWithSchema):
     trigger_comment: str | None
 
 
-def load_rows(rows: list[_TriggerRow]) -> None:
+def load_rows(rows: list[TriggerRow]) -> None:
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
 
@@ -36,10 +35,3 @@ def load_rows(rows: list[_TriggerRow]) -> None:
             enabled=trigger_row.trigger_enabled,
             comment=trigger_row.trigger_comment,
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.TRIGGERS, _TriggerRow))

@@ -2,7 +2,6 @@ from collections.abc import Callable
 from typing import Protocol, TypeVar
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Index, Schema
 
@@ -21,7 +20,7 @@ class _HasIndexes(Protocol):
 _T = TypeVar("_T", bound=_HasIndexes)
 
 
-class _IndexRow(IntrospectionRowWithSchema):
+class IndexRow(IntrospectionRowWithSchema):
     relation_name: str  # the table or matview the index sits on
     index_name: str
     index_def: str
@@ -30,7 +29,7 @@ class _IndexRow(IntrospectionRowWithSchema):
     index_comment: str | None
 
 
-def _load_indexes(rows: list[_IndexRow], select_target: Callable[[Schema], dict[str, _T]]) -> None:
+def _load_indexes(rows: list[IndexRow], select_target: Callable[[Schema], dict[str, _T]]) -> None:
     """
     Shared body for the table-index and matview-index loaders. The two queries differ (a
     matview has no partitioning, primary keys or constraint-backed indexes to exclude), but
@@ -48,15 +47,8 @@ def _load_indexes(rows: list[_IndexRow], select_target: Callable[[Schema], dict[
         )
 
 
-def load_rows(rows: list[_IndexRow]) -> None:
+def load_rows(rows: list[IndexRow]) -> None:
     """
     Indexes (standalone only; constraint-backed indexes are excluded).
     """
     _load_indexes(rows, lambda schema: schema.table_by_name)
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.INDEXES, _IndexRow))

@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import RangeType
 
 
-class _RangeTypeRow(IntrospectionRowWithSchema):
+class RangeTypeRow(IntrospectionRowWithSchema):
     type_name: str
     subtype: str
     subtype_opclass: str | None
@@ -14,7 +13,7 @@ class _RangeTypeRow(IntrospectionRowWithSchema):
     type_owner: str
 
 
-def load_rows(rows: list[_RangeTypeRow]) -> None:
+def load_rows(rows: list[RangeTypeRow]) -> None:
     """
     Range types (user range types only; extension-owned ones are excluded).
     """
@@ -28,10 +27,3 @@ def load_rows(rows: list[_RangeTypeRow]) -> None:
             comment=row.type_comment,
             owner=row.type_owner,
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.RANGE_TYPES, _RangeTypeRow))

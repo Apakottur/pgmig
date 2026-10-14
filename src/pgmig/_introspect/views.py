@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import MaterializedView, View
 
 
-class _ViewRow(IntrospectionRowWithSchema):
+class ViewRow(IntrospectionRowWithSchema):
     relkind: str  # pg_class.relkind: 'v' view, 'm' materialized view
     view_name: str
     view_definition: str
@@ -13,7 +12,7 @@ class _ViewRow(IntrospectionRowWithSchema):
     view_owner: str
 
 
-def load_rows(rows: list[_ViewRow]) -> None:
+def load_rows(rows: list[ViewRow]) -> None:
     """
     Views and materialized views (user ones only; extension-owned ones are excluded). Their
     rows share one query; the relkind routes each onto the schema's view or matview mapping.
@@ -43,10 +42,3 @@ def load_rows(rows: list[_ViewRow]) -> None:
                 options=tuple(sorted(row.view_options or [])),
                 owner=row.view_owner,
             )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.VIEWS, _ViewRow))

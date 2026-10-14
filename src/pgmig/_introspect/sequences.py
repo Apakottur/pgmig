@@ -1,11 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import GrantRow, IntrospectionRowWithSchema, grants
 from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
 
 
-class _SequenceRow(IntrospectionRowWithSchema):
+class SequenceRow(IntrospectionRowWithSchema):
     seq_name: str
     seq_type: str
     seq_start: int
@@ -23,7 +22,7 @@ class _SequenceRow(IntrospectionRowWithSchema):
     owned_column: str | None
 
 
-def load_rows(rows: list[_SequenceRow]) -> None:
+def load_rows(rows: list[SequenceRow]) -> None:
     """
     Sequences (the backing sequence of a serial/identity column is excluded; a manually
     owned sequence is kept, with its OWNED BY target in `owned_by`).
@@ -51,10 +50,3 @@ def load_rows(rows: list[_SequenceRow]) -> None:
                 unlogged=seq_row.seq_persistence == "u",
             )
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.SEQUENCES, _SequenceRow))

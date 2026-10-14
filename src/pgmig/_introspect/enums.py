@@ -1,17 +1,16 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import EnumType
 
 
-class _EnumRow(IntrospectionRowWithSchema):
+class EnumRow(IntrospectionRowWithSchema):
     enum_name: str
     enum_values: list[str]
     enum_comment: str | None
     enum_owner: str
 
 
-def load_rows(rows: list[_EnumRow]) -> None:
+def load_rows(rows: list[EnumRow]) -> None:
     """
     Enum types (user enums only; extension-owned ones are excluded).
     """
@@ -24,10 +23,3 @@ def load_rows(rows: list[_EnumRow]) -> None:
                 owner=enum_row.enum_owner,
             )
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.ENUMS, _EnumRow))

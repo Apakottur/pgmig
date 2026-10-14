@@ -1,11 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import GrantRow, IntrospectionRowWithSchema, grants
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
 
 
-class _TableRow(IntrospectionRowWithSchema):
+class TableRow(IntrospectionRowWithSchema):
     table_name: str
     table_comment: str | None
     table_owner: str
@@ -42,7 +41,7 @@ class _TableRow(IntrospectionRowWithSchema):
     partition_parent_name: str | None
 
 
-def load_rows(rows: list[_TableRow]) -> None:
+def load_rows(rows: list[TableRow]) -> None:
     """
     Tables (and their columns, in physical order).
     """
@@ -103,10 +102,3 @@ def load_rows(rows: list[_TableRow]) -> None:
                 identity_cycle=table_row.identity_cycle,
             )
         )
-
-
-async def load() -> None:
-    """
-    Run the query and load its rows.
-    """
-    load_rows(await run_introspection_query(IntrospectionQuery.TABLES, _TableRow))
