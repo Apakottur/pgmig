@@ -22,7 +22,8 @@ class ViewsLoader(Loader[_ViewRow]):
     file_name = "views.sql"
     model = _ViewRow
 
-    def process_rows(self, rows: list[_ViewRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_ViewRow]) -> None:
         for row in rows:
             schema = context().db_introspection_result.schema_by_name[row.schema_name]
             # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing

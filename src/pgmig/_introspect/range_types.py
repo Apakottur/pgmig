@@ -22,7 +22,8 @@ class RangeTypesLoader(Loader[_RangeTypeRow]):
     file_name = "range_types.sql"
     model = _RangeTypeRow
 
-    def process_rows(self, rows: list[_RangeTypeRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_RangeTypeRow]) -> None:
         for row in rows:
             context().db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = (
                 RangeType(

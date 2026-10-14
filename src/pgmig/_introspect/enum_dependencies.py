@@ -27,7 +27,8 @@ class EnumDependenciesLoader(Loader[_EnumDependencyRow]):
     file_name = "enum_dependencies.sql"
     model = _EnumDependencyRow
 
-    def process_rows(self, rows: list[_EnumDependencyRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_EnumDependencyRow]) -> None:
         for row in rows:
             key = EnumKey(row.enum_schema, row.enum_name)
             context().db_introspection_result.enum_column_dependencies.setdefault(key, []).append(

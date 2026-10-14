@@ -24,7 +24,8 @@ class PoliciesLoader(Loader[_PolicyRow]):
     file_name = "policies.sql"
     model = _PolicyRow
 
-    def process_rows(self, rows: list[_PolicyRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_PolicyRow]) -> None:
         for row in rows:
             table = context().db_introspection_result.schema_by_name[row.schema_name].table_by_name[row.table_name]
             table.policy_by_name[row.policy_name] = Policy(

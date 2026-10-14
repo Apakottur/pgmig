@@ -27,7 +27,8 @@ class SchemaConnectionsGuard(Guard[_ConnectionRow]):
     file_name = "schema_connections.sql"
     model = _ConnectionRow
 
-    def process_rows(self, rows: list[_ConnectionRow]) -> list[str]:
+    @classmethod
+    def process_rows(cls, rows: list[_ConnectionRow]) -> list[str]:
         ignore = context().ignore_schemas
         findings: set[str] = set()
         for row in rows:

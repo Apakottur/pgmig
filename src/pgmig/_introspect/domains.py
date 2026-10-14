@@ -22,7 +22,8 @@ class DomainsLoader(Loader[_DomainRow]):
     file_name = "domains.sql"
     model = _DomainRow
 
-    def process_rows(self, rows: list[_DomainRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_DomainRow]) -> None:
         for domain_row in rows:
             context().db_introspection_result.schema_by_name[domain_row.schema_name].domain_by_name[
                 domain_row.domain_name

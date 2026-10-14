@@ -34,7 +34,8 @@ class MatviewDependenciesGuard(Guard[_MatviewDependencyRow]):
     file_name = "matview_dependencies.sql"
     model = _MatviewDependencyRow
 
-    def process_rows(self, rows: list[_MatviewDependencyRow]) -> list[str]:
+    @classmethod
+    def process_rows(cls, rows: list[_MatviewDependencyRow]) -> list[str]:
         findings: list[str] = []
         for row in rows:
             if row.dependent_kind == "m":

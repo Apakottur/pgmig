@@ -19,7 +19,8 @@ class EnumsLoader(Loader[_EnumRow]):
     file_name = "enums.sql"
     model = _EnumRow
 
-    def process_rows(self, rows: list[_EnumRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_EnumRow]) -> None:
         for enum_row in rows:
             context().db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
                 EnumType(

@@ -35,65 +35,65 @@ from pgmig._introspect.preflight import PreflightQuery, PreflightRow
 from pgmig._models import DbIntrospectionResult
 
 
-def _get_guards(preflight: PreflightRow) -> list[Guard[Any]]:
+def _get_guards(preflight: PreflightRow) -> list[type[Guard[Any]]]:
     """
     Get the guards to run before any loader.
     """
-    guards: list[Guard[Any]] = [unsupported.UnsupportedGuard()]
+    guards: list[type[Guard[Any]]] = [unsupported.UnsupportedGuard]
     if preflight.has_matviews:
-        guards.append(matview_dependencies.MatviewDependenciesGuard())
+        guards.append(matview_dependencies.MatviewDependenciesGuard)
     if preflight.has_indexes:
-        guards.append(invalid_indexes.InvalidIndexesGuard())
+        guards.append(invalid_indexes.InvalidIndexesGuard)
     return guards
 
 
-def _get_loaders(preflight: PreflightRow) -> list[Loader[Any]]:
+def _get_loaders(preflight: PreflightRow) -> list[type[Loader[Any]]]:
     """
     Get the loaders to run, in dependency-significant order.
     """
-    loaders: list[Loader[Any]] = [schemas.SchemasLoader()]
+    loaders: list[type[Loader[Any]]] = [schemas.SchemasLoader]
     if preflight.has_tables:
-        loaders.append(tables.TablesLoader())
+        loaders.append(tables.TablesLoader)
     if preflight.has_indexes:
-        loaders.append(indexes.IndexesLoader())
+        loaders.append(indexes.IndexesLoader)
     if preflight.has_constraints:
-        loaders.append(constraints.ConstraintsLoader())
+        loaders.append(constraints.ConstraintsLoader)
     if preflight.has_sequences:
-        loaders.append(sequences.SequencesLoader())
+        loaders.append(sequences.SequencesLoader)
     if preflight.has_functions:
-        loaders.append(functions.FunctionsLoader())
+        loaders.append(functions.FunctionsLoader)
     if preflight.has_enums:
-        loaders.append(enums.EnumsLoader())
+        loaders.append(enums.EnumsLoader)
         # Enum-on-column edges: only meaningful when there are also tables to depend on it.
         if preflight.has_tables:
-            loaders.append(enum_dependencies.EnumDependenciesLoader())
+            loaders.append(enum_dependencies.EnumDependenciesLoader)
     # One query loads both views and matviews, so it runs when either kind is present.
     if preflight.has_views or preflight.has_matviews:
-        loaders.append(views.ViewsLoader())
+        loaders.append(views.ViewsLoader)
     if preflight.has_views:
-        loaders.append(view_dependencies.ViewDependenciesLoader())
+        loaders.append(view_dependencies.ViewDependenciesLoader)
     # Triggers load after both tables and views: an INSTEAD OF trigger's owner is a view,
     # and the loader routes each trigger onto its table or view, so both must exist first.
     if preflight.has_triggers:
-        loaders.append(triggers.TriggersLoader())
+        loaders.append(triggers.TriggersLoader)
     # Policies attach to tables, so their loader runs after the tables loader.
     if preflight.has_policies:
-        loaders.append(policies.PoliciesLoader())
+        loaders.append(policies.PoliciesLoader)
     if preflight.has_views or preflight.has_matviews:
-        loaders.append(view_column_dependencies.ViewColumnDependenciesLoader())
+        loaders.append(view_column_dependencies.ViewColumnDependenciesLoader)
     if preflight.has_matviews:
-        loaders.append(matview_indexes.MatviewIndexesLoader())
+        loaders.append(matview_indexes.MatviewIndexesLoader)
     if preflight.has_domains:
-        loaders.append(domains.DomainsLoader())
+        loaders.append(domains.DomainsLoader)
     if preflight.has_composite_types:
         loaders += [
-            composite_types.CompositeTypesLoader(),
-            composite_type_dependencies.CompositeTypeDependenciesLoader(),
+            composite_types.CompositeTypesLoader,
+            composite_type_dependencies.CompositeTypeDependenciesLoader,
         ]
     if preflight.has_range_types:
-        loaders.append(range_types.RangeTypesLoader())
-    loaders.append(extensions.ExtensionsLoader())
-    loaders.append(default_privileges.DefaultPrivilegesLoader())
+        loaders.append(range_types.RangeTypesLoader)
+    loaders.append(extensions.ExtensionsLoader)
+    loaders.append(default_privileges.DefaultPrivilegesLoader)
     return loaders
 
 
@@ -114,7 +114,7 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
         with context_scope(data):
             # Verify that the ignored schemas are isolated from the kept ones.
             if ignore_schemas:
-                connections = await run_introspection_query(schema_connections.SchemaConnectionsGuard())
+                connections = await run_introspection_query(schema_connections.SchemaConnectionsGuard)
                 if connections:
                     message = (
                         "pgmig cannot ignore a schema that is connected to a kept schema "
@@ -124,7 +124,7 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
                     raise PgmigUnsupportedError(message)
 
             # Run the preflight query to find out which introspection steps to run.
-            preflight = await run_introspection_query(PreflightQuery())
+            preflight = await run_introspection_query(PreflightQuery)
 
             # Look for any unsupported objects.
             all_findings = [

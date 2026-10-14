@@ -24,7 +24,8 @@ class CompositeTypesLoader(Loader[_CompositeTypeRow]):
     file_name = "composite_types.sql"
     model = _CompositeTypeRow
 
-    def process_rows(self, rows: list[_CompositeTypeRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_CompositeTypeRow]) -> None:
         for row in rows:
             fields = [CompositeField(name=field.name, type=field.type) for field in row.fields]
             context().db_introspection_result.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = (

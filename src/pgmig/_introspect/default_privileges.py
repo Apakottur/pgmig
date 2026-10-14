@@ -32,7 +32,8 @@ class DefaultPrivilegesLoader(Loader[_DefaultAclRow]):
     file_name = "default_privileges.sql"
     model = _DefaultAclRow
 
-    def process_rows(self, rows: list[_DefaultAclRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_DefaultAclRow]) -> None:
         for row in rows:
             # schema_name is optional here (None = a cluster-wide rule), so the row is not an
             # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule

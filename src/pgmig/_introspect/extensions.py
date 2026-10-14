@@ -18,7 +18,8 @@ class ExtensionsLoader(Loader[_ExtensionRow]):
     file_name = "extensions.sql"
     model = _ExtensionRow
 
-    def process_rows(self, rows: list[_ExtensionRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_ExtensionRow]) -> None:
         for ext_row in rows:
             context().db_introspection_result.extension_by_name[ext_row.name] = Extension(
                 name=ext_row.name,

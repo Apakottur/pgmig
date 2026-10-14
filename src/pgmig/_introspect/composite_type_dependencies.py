@@ -22,7 +22,8 @@ class CompositeTypeDependenciesLoader(Loader[_CompositeTypeDependencyRow]):
     file_name = "composite_type_dependencies.sql"
     model = _CompositeTypeDependencyRow
 
-    def process_rows(self, rows: list[_CompositeTypeDependencyRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_CompositeTypeDependencyRow]) -> None:
         for row in rows:
             dependent = CompositeTypeKey(row.dependent_schema, row.dependent_type)
             referenced = CompositeTypeKey(row.referenced_schema, row.referenced_type)

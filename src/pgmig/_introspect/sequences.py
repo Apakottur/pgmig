@@ -32,7 +32,8 @@ class SequencesLoader(Loader[_SequenceRow]):
     file_name = "sequences.sql"
     model = _SequenceRow
 
-    def process_rows(self, rows: list[_SequenceRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_SequenceRow]) -> None:
         for seq_row in rows:
             # A manual OWNED BY resolves all three owned_* columns together; a standalone
             # sequence leaves them NULL.

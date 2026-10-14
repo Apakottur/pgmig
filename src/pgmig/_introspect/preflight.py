@@ -30,5 +30,6 @@ class PreflightQuery(IntrospectionQuery[PreflightRow, PreflightRow]):
     file_name = "preflight.sql"
     model = PreflightRow
 
-    def process_rows(self, rows: list[PreflightRow]) -> PreflightRow:
+    @classmethod
+    def process_rows(cls, rows: list[PreflightRow]) -> PreflightRow:
         return rows[0]

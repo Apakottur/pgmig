@@ -52,7 +52,8 @@ class FunctionsLoader(Loader[_FunctionRow]):
     file_name = "functions.sql"
     model = _FunctionRow
 
-    def process_rows(self, rows: list[_FunctionRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_FunctionRow]) -> None:
         for func_row in rows:
             signature = f"{func_row.func_name}({func_row.func_args})"
             context().db_introspection_result.schema_by_name[func_row.schema_name].function_by_signature[signature] = (

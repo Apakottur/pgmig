@@ -26,7 +26,8 @@ class ConstraintsLoader(Loader[_ConstraintRow]):
     file_name = "constraints.sql"
     model = _ConstraintRow
 
-    def process_rows(self, rows: list[_ConstraintRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_ConstraintRow]) -> None:
         for con_row in rows:
             constraint = Constraint(
                 name=con_row.con_name,

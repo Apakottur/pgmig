@@ -20,7 +20,8 @@ class InvalidIndexesGuard(Guard[_InvalidIndexRow]):
     file_name = "invalid_indexes.sql"
     model = _InvalidIndexRow
 
-    def process_rows(self, rows: list[_InvalidIndexRow]) -> list[str]:
+    @classmethod
+    def process_rows(cls, rows: list[_InvalidIndexRow]) -> list[str]:
         findings: list[str] = []
         for row in rows:
             index = qualified(row.schema_name, row.index_name)

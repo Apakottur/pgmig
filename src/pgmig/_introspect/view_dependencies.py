@@ -22,7 +22,8 @@ class ViewDependenciesLoader(Loader[_ViewDependencyRow]):
     file_name = "view_dependencies.sql"
     model = _ViewDependencyRow
 
-    def process_rows(self, rows: list[_ViewDependencyRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_ViewDependencyRow]) -> None:
         for row in rows:
             dependent = RelationKey(row.dependent_schema, row.dependent_view)
             referenced = RelationKey(row.referenced_schema, row.referenced_view)

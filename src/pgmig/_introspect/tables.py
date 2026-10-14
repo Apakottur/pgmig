@@ -50,7 +50,8 @@ class TablesLoader(Loader[_TableRow]):
     file_name = "tables.sql"
     model = _TableRow
 
-    def process_rows(self, rows: list[_TableRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_TableRow]) -> None:
         for table_row in rows:
             schema = context().db_introspection_result.schema_by_name[table_row.schema_name]
             table = schema.table_by_name.get(table_row.table_name)

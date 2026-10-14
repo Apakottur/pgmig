@@ -23,7 +23,8 @@ class ViewColumnDependenciesLoader(Loader[_ViewColumnDependencyRow]):
     file_name = "view_column_dependencies.sql"
     model = _ViewColumnDependencyRow
 
-    def process_rows(self, rows: list[_ViewColumnDependencyRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_ViewColumnDependencyRow]) -> None:
         for row in rows:
             view = RelationKey(row.view_schema, row.view_name)
             column = ColumnKey(row.table_schema, row.table_name, row.column_name)

@@ -26,7 +26,8 @@ class TriggersLoader(Loader[_TriggerRow]):
     file_name = "triggers.sql"
     model = _TriggerRow
 
-    def process_rows(self, rows: list[_TriggerRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_TriggerRow]) -> None:
         for trigger_row in rows:
             schema = context().db_introspection_result.schema_by_name[trigger_row.schema_name]
             owner: Table | View

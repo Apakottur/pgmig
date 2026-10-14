@@ -33,8 +33,9 @@ class IntrospectionQuery(ABC, Generic[_RowT, _ResultT]):
     # Whether rows in ignored schemas are dropped before processing.
     filter_ignored_schemas: bool = False
 
+    @classmethod
     @abstractmethod
-    def process_rows(self, rows: list[_RowT]) -> _ResultT:
+    def process_rows(cls, rows: list[_RowT]) -> _ResultT:
         """
         Process the parsed rows of the query.
         """
@@ -59,7 +60,7 @@ class Loader(IntrospectionQuery[_RowT, None]):
     filter_ignored_schemas = True
 
 
-async def run_introspection_query(query: IntrospectionQuery[_RowT, _ResultT]) -> _ResultT:
+async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]]) -> _ResultT:
     """
     Run the given introspection query, parsing each row into the query's model, and process the rows.
     """

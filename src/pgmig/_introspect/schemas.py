@@ -18,7 +18,8 @@ class SchemasLoader(Loader[_SchemaRow]):
     file_name = "schemas.sql"
     model = _SchemaRow
 
-    def process_rows(self, rows: list[_SchemaRow]) -> None:
+    @classmethod
+    def process_rows(cls, rows: list[_SchemaRow]) -> None:
         for schema_row in rows:
             context().db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
                 name=schema_row.schema_name,

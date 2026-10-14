@@ -38,7 +38,8 @@ class UnsupportedGuard(Guard[_UnsupportedRow]):
     file_name = "unsupported.sql"
     model = _UnsupportedRow
 
-    def process_rows(self, rows: list[_UnsupportedRow]) -> list[str]:
+    @classmethod
+    def process_rows(cls, rows: list[_UnsupportedRow]) -> list[str]:
         findings = []
         for row in rows:
             name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
