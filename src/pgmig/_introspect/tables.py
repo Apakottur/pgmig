@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import GrantRow, IntrospectionRowWithSchema, grants
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
@@ -42,64 +42,70 @@ class _TableRow(IntrospectionRowWithSchema):
     partition_parent_name: str | None
 
 
-async def load() -> None:
+class TablesLoader(Loader[_TableRow]):
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in await run_introspection_query(IntrospectionQuery.TABLES, _TableRow):
-        schema = context().db_introspection_result.schema_by_name[table_row.schema_name]
-        table = schema.table_by_name.get(table_row.table_name)
-        if table is None:
-            # A partition has both a parent schema and name (the query sets them together).
-            partition_parent = (
-                RelationKey(table_row.partition_parent_schema, table_row.partition_parent_name)
-                if table_row.partition_parent_schema is not None and table_row.partition_parent_name is not None
-                else None
+
+    file_name = "tables.sql"
+    model = _TableRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_TableRow]) -> None:
+        for table_row in rows:
+            schema = context().db_introspection_result.schema_by_name[table_row.schema_name]
+            table = schema.table_by_name.get(table_row.table_name)
+            if table is None:
+                # A partition has both a parent schema and name (the query sets them together).
+                partition_parent = (
+                    RelationKey(table_row.partition_parent_schema, table_row.partition_parent_name)
+                    if table_row.partition_parent_schema is not None and table_row.partition_parent_name is not None
+                    else None
+                )
+                table = Table(
+                    name=table_row.table_name,
+                    columns=[],
+                    comment=table_row.table_comment,
+                    owner=table_row.table_owner,
+                    grants=grants(table_row.table_grants),
+                    unlogged=table_row.table_persistence == "u",
+                    row_security=table_row.table_row_security,
+                    force_row_security=table_row.table_force_row_security,
+                    replica_identity=table_row.table_replica_identity,
+                    replica_identity_index=table_row.table_replica_identity_index,
+                    partition_strategy=table_row.partition_strategy,
+                    partition_key=table_row.partition_key,
+                    partition_bound=table_row.partition_bound,
+                    partition_parent=partition_parent,
+                )
+                schema.table_by_name[table_row.table_name] = table
+            # A zero-column table's phantom row (all column fields NULL) creates the table
+            # above but adds no column.
+            if (
+                table_row.column_name is None
+                or table_row.column_type is None
+                or table_row.column_not_null is None
+                or table_row.column_identity is None
+                or table_row.column_generated is None
+            ):
+                continue
+            table.columns.append(
+                Column(
+                    name=table_row.column_name,
+                    type=table_row.column_type,
+                    collation=table_row.column_collation,
+                    not_null=table_row.column_not_null,
+                    default=table_row.column_default,
+                    comment=table_row.column_comment,
+                    identity=table_row.column_identity,
+                    serial_sequence=table_row.column_serial_sequence,
+                    generated=table_row.column_generated,
+                    generation_expression=table_row.generation_expression,
+                    identity_start=table_row.identity_start,
+                    identity_increment=table_row.identity_increment,
+                    identity_min=table_row.identity_min,
+                    identity_max=table_row.identity_max,
+                    identity_cache=table_row.identity_cache,
+                    identity_cycle=table_row.identity_cycle,
+                )
             )
-            table = Table(
-                name=table_row.table_name,
-                columns=[],
-                comment=table_row.table_comment,
-                owner=table_row.table_owner,
-                grants=grants(table_row.table_grants),
-                unlogged=table_row.table_persistence == "u",
-                row_security=table_row.table_row_security,
-                force_row_security=table_row.table_force_row_security,
-                replica_identity=table_row.table_replica_identity,
-                replica_identity_index=table_row.table_replica_identity_index,
-                partition_strategy=table_row.partition_strategy,
-                partition_key=table_row.partition_key,
-                partition_bound=table_row.partition_bound,
-                partition_parent=partition_parent,
-            )
-            schema.table_by_name[table_row.table_name] = table
-        # A zero-column table's phantom row (all column fields NULL) creates the table
-        # above but adds no column.
-        if (
-            table_row.column_name is None
-            or table_row.column_type is None
-            or table_row.column_not_null is None
-            or table_row.column_identity is None
-            or table_row.column_generated is None
-        ):
-            continue
-        table.columns.append(
-            Column(
-                name=table_row.column_name,
-                type=table_row.column_type,
-                collation=table_row.column_collation,
-                not_null=table_row.column_not_null,
-                default=table_row.column_default,
-                comment=table_row.column_comment,
-                identity=table_row.column_identity,
-                serial_sequence=table_row.column_serial_sequence,
-                generated=table_row.column_generated,
-                generation_expression=table_row.generation_expression,
-                identity_start=table_row.identity_start,
-                identity_increment=table_row.identity_increment,
-                identity_min=table_row.identity_min,
-                identity_max=table_row.identity_max,
-                identity_cache=table_row.identity_cache,
-                identity_cycle=table_row.identity_cycle,
-            )
-        )

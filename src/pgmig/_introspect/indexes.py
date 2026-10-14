@@ -1,8 +1,8 @@
-from collections.abc import Callable
-from typing import Protocol, TypeVar
+from collections.abc import Mapping
+from typing import Protocol
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Index, Schema
 
@@ -18,9 +18,6 @@ class _HasIndexes(Protocol):
     def index_by_name(self) -> dict[str, Index]: ...
 
 
-_T = TypeVar("_T", bound=_HasIndexes)
-
-
 class _IndexRow(IntrospectionRowWithSchema):
     relation_name: str  # the table or matview the index sits on
     index_name: str
@@ -30,26 +27,30 @@ class _IndexRow(IntrospectionRowWithSchema):
     index_comment: str | None
 
 
-async def _load_indexes(query: IntrospectionQuery, select_target: Callable[[Schema], dict[str, _T]]) -> None:
+class IndexesLoader(Loader[_IndexRow]):
     """
-    Shared body for the table-index and matview-index loaders. The two queries differ (a
-    matview has no partitioning, primary keys or constraint-backed indexes to exclude), but
-    the parsing and storage are identical; `select_target` picks the schema's table/matview
-    mapping that owns the index.
+    Indexes on tables (standalone only; constraint-backed indexes are excluded).
     """
-    for row in await run_introspection_query(query, _IndexRow):
-        relation = select_target(context().db_introspection_result.schema_by_name[row.schema_name])[row.relation_name]
-        relation.index_by_name[row.index_name] = Index(
-            name=row.index_name,
-            definition=row.index_def,
-            canonical=row.index_canonical,
-            dependency_columns=frozenset(row.index_dependency_columns or ()),
-            comment=row.index_comment,
-        )
 
+    file_name = "indexes.sql"
+    model = _IndexRow
 
-async def load() -> None:
-    """
-    Indexes (standalone only; constraint-backed indexes are excluded).
-    """
-    await _load_indexes(IntrospectionQuery.INDEXES, lambda schema: schema.table_by_name)
+    @classmethod
+    def get_relations(cls, schema: Schema) -> Mapping[str, _HasIndexes]:
+        """
+        Get the schema's relations that own the indexes, by name.
+        """
+        return schema.table_by_name
+
+    @classmethod
+    def process_rows(cls, rows: list[_IndexRow]) -> None:
+        for row in rows:
+            schema = context().db_introspection_result.schema_by_name[row.schema_name]
+            relation = cls.get_relations(schema)[row.relation_name]
+            relation.index_by_name[row.index_name] = Index(
+                name=row.index_name,
+                definition=row.index_def,
+                canonical=row.index_canonical,
+                dependency_columns=frozenset(row.index_dependency_columns or ()),
+                comment=row.index_comment,
+            )

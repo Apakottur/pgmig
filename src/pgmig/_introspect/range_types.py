@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import RangeType
 
@@ -14,17 +14,25 @@ class _RangeTypeRow(IntrospectionRowWithSchema):
     type_owner: str
 
 
-async def load() -> None:
+class RangeTypesLoader(Loader[_RangeTypeRow]):
     """
     Range types (user range types only; extension-owned ones are excluded).
     """
-    for row in await run_introspection_query(IntrospectionQuery.RANGE_TYPES, _RangeTypeRow):
-        context().db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = RangeType(
-            name=row.type_name,
-            subtype=row.subtype,
-            subtype_opclass=row.subtype_opclass,
-            collation=row.collation,
-            subtype_diff=row.subtype_diff,
-            comment=row.type_comment,
-            owner=row.type_owner,
-        )
+
+    file_name = "range_types.sql"
+    model = _RangeTypeRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_RangeTypeRow]) -> None:
+        for row in rows:
+            context().db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = (
+                RangeType(
+                    name=row.type_name,
+                    subtype=row.subtype,
+                    subtype_opclass=row.subtype_opclass,
+                    collation=row.collation,
+                    subtype_diff=row.subtype_diff,
+                    comment=row.type_comment,
+                    owner=row.type_owner,
+                )
+            )

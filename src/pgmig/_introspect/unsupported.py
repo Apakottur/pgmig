@@ -1,4 +1,4 @@
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Guard
 from pgmig._introspect._rows import IntrospectionRow
 from pgmig._sql import qualified
 
@@ -25,7 +25,7 @@ class _UnsupportedRow(IntrospectionRow):
     kind: str
 
 
-async def check() -> list[str]:
+class UnsupportedGuard(Guard[_UnsupportedRow]):
     """
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
     list: foreign tables, base types, aggregate/window
@@ -34,9 +34,15 @@ async def check() -> list[str]:
     diffs only the supported kinds and returns "" for a database whose not-yet-modelled
     objects differ on one side, falsely claiming convergence.
     """
-    findings = []
-    for row in await run_introspection_query(IntrospectionQuery.UNSUPPORTED, _UnsupportedRow):
-        name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
-        parts = [row.schema_name, row.obj_name] if row.schema_name is not None else [row.obj_name]
-        findings.append(f"{name} {qualified(*parts)} is not supported yet")
-    return findings
+
+    file_name = "unsupported.sql"
+    model = _UnsupportedRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_UnsupportedRow]) -> list[str]:
+        findings = []
+        for row in rows:
+            name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
+            parts = [row.schema_name, row.obj_name] if row.schema_name is not None else [row.obj_name]
+            findings.append(f"{name} {qualified(*parts)} is not supported yet")
+        return findings

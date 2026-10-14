@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Guard
 from pgmig._introspect._rows import IntrospectionRow
 from pgmig._keys import RelationKey
 from pgmig._sql import qualified
@@ -17,7 +17,7 @@ class _MatviewDependencyRow(IntrospectionRow):
     referenced_kind: str
 
 
-async def check() -> list[str]:
+class MatviewDependenciesGuard(Guard[_MatviewDependencyRow]):
     """
     Guard: report a plain view that reads a materialized view. A matview is created in a later
     phase than plain views (and dropped in an earlier one), so a view cannot be ordered before
@@ -30,25 +30,36 @@ async def check() -> list[str]:
     recreate set. A finding refuses the database before any loader runs, so the recorded edges
     are only used once the unsupported pairing is ruled out.
     """
-    findings: list[str] = []
-    for row in await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES, _MatviewDependencyRow):
-        if row.dependent_kind == "m":
-            # These rows name their schemas dependent_schema/referenced_schema (not the shared
-            # schema_name), so run_introspection_query does not drop them; skip an edge touching an
-            # ignored schema so no ignored matview enters the dependency map. A connected schema is
-            # refused up front, so a surviving ignored edge has both endpoints in the ignored schema.
-            if row.dependent_schema in context().ignore_schemas or row.referenced_schema in context().ignore_schemas:
+
+    file_name = "matview_dependencies.sql"
+    model = _MatviewDependencyRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_MatviewDependencyRow]) -> list[str]:
+        findings: list[str] = []
+        for row in rows:
+            if row.dependent_kind == "m":
+                # These rows name their schemas dependent_schema/referenced_schema (not the shared
+                # schema_name), so run_introspection_query does not drop them; skip an edge touching an
+                # ignored schema so no ignored matview enters the dependency map. A connected schema is
+                # refused up front, so a surviving ignored edge has both endpoints in the ignored schema.
+                if (
+                    row.dependent_schema in context().ignore_schemas
+                    or row.referenced_schema in context().ignore_schemas
+                ):
+                    continue
+                dependent_key = RelationKey(row.dependent_schema, row.dependent_view)
+                referenced_key = RelationKey(row.referenced_schema, row.referenced_view)
+                context().db_introspection_result.matview_dependencies.setdefault(dependent_key, set()).add(
+                    referenced_key
+                )
                 continue
-            dependent_key = RelationKey(row.dependent_schema, row.dependent_view)
-            referenced_key = RelationKey(row.referenced_schema, row.referenced_view)
-            context().db_introspection_result.matview_dependencies.setdefault(dependent_key, set()).add(referenced_key)
-            continue
-        dependent = qualified(row.dependent_schema, row.dependent_view)
-        referenced = qualified(row.referenced_schema, row.referenced_view)
-        dependent_label = _KIND_LABEL[row.dependent_kind]
-        referenced_label = _KIND_LABEL[row.referenced_kind]
-        findings.append(
-            f"{dependent_label} {dependent} reads from {referenced_label} {referenced}: "
-            f"a plain view reading a materialized view is not supported"
-        )
-    return findings
+            dependent = qualified(row.dependent_schema, row.dependent_view)
+            referenced = qualified(row.referenced_schema, row.referenced_view)
+            dependent_label = _KIND_LABEL[row.dependent_kind]
+            referenced_label = _KIND_LABEL[row.referenced_kind]
+            findings.append(
+                f"{dependent_label} {dependent} reads from {referenced_label} {referenced}: "
+                f"a plain view reading a materialized view is not supported"
+            )
+        return findings

@@ -1,5 +1,5 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._core import Loader
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Extension
 
@@ -10,14 +10,20 @@ class _ExtensionRow(IntrospectionRowWithSchema):
     extension_comment: str | None
 
 
-async def load() -> None:
+class ExtensionsLoader(Loader[_ExtensionRow]):
     """
     Extensions (database-level).
     """
-    for ext_row in await run_introspection_query(IntrospectionQuery.EXTENSIONS, _ExtensionRow):
-        context().db_introspection_result.extension_by_name[ext_row.name] = Extension(
-            name=ext_row.name,
-            version=ext_row.version,
-            schema=ext_row.schema_name,
-            comment=ext_row.extension_comment,
-        )
+
+    file_name = "extensions.sql"
+    model = _ExtensionRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_ExtensionRow]) -> None:
+        for ext_row in rows:
+            context().db_introspection_result.extension_by_name[ext_row.name] = Extension(
+                name=ext_row.name,
+                version=ext_row.version,
+                schema=ext_row.schema_name,
+                comment=ext_row.extension_comment,
+            )

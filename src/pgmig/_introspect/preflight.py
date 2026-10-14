@@ -1,3 +1,4 @@
+from pgmig._introspect._core import IntrospectionQuery
 from pgmig._introspect._rows import IntrospectionRow
 
 
@@ -19,3 +20,16 @@ class PreflightRow(IntrospectionRow):
     has_domains: bool
     has_composite_types: bool
     has_range_types: bool
+
+
+class PreflightQuery(IntrospectionQuery[PreflightRow, PreflightRow]):
+    """
+    Find out which object classes the database contains, to decide which guards and loaders to run.
+    """
+
+    file_name = "preflight.sql"
+    model = PreflightRow
+
+    @classmethod
+    def process_rows(cls, rows: list[PreflightRow]) -> PreflightRow:
+        return rows[0]
