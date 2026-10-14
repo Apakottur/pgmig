@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Self
 
 import psycopg
+from psycopg import pq
 from psycopg.rows import dict_row
 
 from pgmig._drivers import DbDriver
@@ -81,38 +82,37 @@ class DbConnection:
         return []
 
 
+# Opens the transaction all the introspection queries run in, executed in order before the first query.
+_SNAPSHOT_SETUP = (
+    # A read-only REPEATABLE READ transaction, so that all the reads are done on a single consistent snapshot.
+    "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+    # An empty search path, so that introspection is independent of the database's own search path.
+    # SET LOCAL scopes it to the transaction, so it also holds behind a transaction-pooling pgbouncer.
+    "SET LOCAL search_path = ''",
+)
+
+
 class DbReadOnlyConnection(DbConnection):
     """
     DB connection API for read-only operations.
+
+    The introspection queries run in a single snapshot transaction, opened by the first introspect() call and ended
+    (committed, or rolled back on error) when the connection context exits.
     """
-
-    @classmethod
-    @asynccontextmanager
-    async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncIterator[Self]:
-        """
-        Read-only connection context.
-        """
-        async with super().connect(db_conn_info=db_conn_info) as conn:
-            # Force all subsequent transactions to be read-only.
-            await conn.driver_conn.set_read_only(True)
-
-            # Use REPEATABLE READ so that the enclosed reads are done on a single consistent snapshot of the database.
-            await conn.driver_conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
-
-            # Use an empty search path so introspection is independent of the database's own search path.
-            await conn.driver_conn.execute("SET search_path = ''")
-
-            # Run the enclosed reads inside a single transaction to guarantee a consistent snapshot of the database.
-            async with conn.driver_conn.transaction():
-                yield conn
 
     async def introspect(self, queries: Sequence[str]) -> list[list[dict[str, Any]]]:
         """
         Run the given introspection queries in a single round trip, returning the rows of each one.
         """
-        async with self.driver_conn.cursor(row_factory=dict_row) as cur:
-            # Run all the queries as one multi-statement execute. Each query produces its own result set.
-            await cur.execute("\n;\n".join(queries))  # ty: ignore[no-matching-overload]
+        # On the first call, open the snapshot transaction in the same round trip as the queries.
+        setup = _SNAPSHOT_SETUP if self.driver_conn.info.transaction_status == pq.TransactionStatus.IDLE else ()
 
-            # Fetch the rows of each result set.
-            return [await result.fetchall() async for result in cur.results()]
+        async with self.driver_conn.cursor(row_factory=dict_row) as cur:
+            # Run all the statements as one multi-statement execute. Each statement produces its own result set.
+            await cur.execute("\n;\n".join([*setup, *queries]))  # ty: ignore[no-matching-overload]
+
+            # Skip the result sets of the setup statements, and fetch the rows of each query result set.
+            results = cur.results()
+            for _ in setup:
+                await anext(results)
+            return [await result.fetchall() async for result in results]
