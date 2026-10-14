@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import MaterializedView, View
 
 
-class _ViewRow(IntrospectionRowWithSchema):
+class ViewRow(IntrospectionRowWithSchema):
     relkind: str  # pg_class.relkind: 'v' view, 'm' materialized view
     view_name: str
     view_definition: str
@@ -13,12 +12,12 @@ class _ViewRow(IntrospectionRowWithSchema):
     view_owner: str
 
 
-async def load() -> None:
+def load_rows(rows: list[ViewRow]) -> None:
     """
     Views and materialized views (user ones only; extension-owned ones are excluded). Their
     rows share one query; the relkind routes each onto the schema's view or matview mapping.
     """
-    for row in await run_introspection_query(IntrospectionQuery.VIEWS, _ViewRow):
+    for row in rows:
         schema = context().db_introspection_result.schema_by_name[row.schema_name]
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".

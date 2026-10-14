@@ -1,11 +1,10 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRow
 from pgmig._keys import EnumKey
 from pgmig._models import EnumColumnDependency
 
 
-class _EnumDependencyRow(IntrospectionRow):
+class EnumDependencyRow(IntrospectionRow):
     enum_schema: str
     enum_name: str
     table_schema: str
@@ -17,13 +16,13 @@ class _EnumDependencyRow(IntrospectionRow):
     in_constraint: bool
 
 
-async def load() -> None:
+def load_rows(rows: list[EnumDependencyRow]) -> None:
     """
     Enum-on-column edges: for each user enum, the table columns typed by it (directly or as an
     array). The enum diff uses these to rewrite dependent columns when an enum's values are
     removed or reordered, and to refuse the rewrite for columns it cannot handle.
     """
-    for row in await run_introspection_query(IntrospectionQuery.ENUM_DEPENDENCIES, _EnumDependencyRow):
+    for row in rows:
         key = EnumKey(row.enum_schema, row.enum_name)
         context().db_introspection_result.enum_column_dependencies.setdefault(key, []).append(
             EnumColumnDependency(

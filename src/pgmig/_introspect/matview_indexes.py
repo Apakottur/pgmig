@@ -1,10 +1,9 @@
-from pgmig._introspect._core import IntrospectionQuery
-from pgmig._introspect.indexes import _load_indexes
+from pgmig._introspect.indexes import IndexRow, _load_indexes
 
 
-async def load() -> None:
+def load_rows(rows: list[IndexRow]) -> None:
     """
     Indexes on materialized views (standalone; matviews carry no constraint-backed indexes).
     Must run after views.load so the owning matview exists in the model.
     """
-    await _load_indexes(IntrospectionQuery.MATVIEW_INDEXES, lambda schema: schema.materialized_view_by_name)
+    _load_indexes(rows, lambda schema: schema.materialized_view_by_name)

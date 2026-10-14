@@ -1,5 +1,4 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRow
 from pgmig._keys import RelationKey
 from pgmig._sql import qualified
@@ -8,7 +7,7 @@ from pgmig._sql import qualified
 _KIND_LABEL = {"v": "view", "m": "materialized view"}
 
 
-class _MatviewDependencyRow(IntrospectionRow):
+class MatviewDependencyRow(IntrospectionRow):
     dependent_schema: str
     dependent_view: str
     dependent_kind: str
@@ -17,7 +16,7 @@ class _MatviewDependencyRow(IntrospectionRow):
     referenced_kind: str
 
 
-async def check() -> list[str]:
+def check_rows(rows: list[MatviewDependencyRow]) -> list[str]:
     """
     Guard: report a plain view that reads a materialized view. A matview is created in a later
     phase than plain views (and dropped in an earlier one), so a view cannot be ordered before
@@ -31,7 +30,7 @@ async def check() -> list[str]:
     are only used once the unsupported pairing is ruled out.
     """
     findings: list[str] = []
-    for row in await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES, _MatviewDependencyRow):
+    for row in rows:
         if row.dependent_kind == "m":
             # These rows name their schemas dependent_schema/referenced_schema (not the shared
             # schema_name), so run_introspection_query does not drop them; skip an edge touching an

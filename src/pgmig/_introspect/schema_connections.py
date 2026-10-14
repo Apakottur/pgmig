@@ -1,16 +1,15 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRow
 
 
-class _ConnectionRow(IntrospectionRow):
+class ConnectionRow(IntrospectionRow):
     obj_schema: str
     obj_identity: str
     ref_schema: str
     ref_identity: str
 
 
-async def check() -> list[str]:
+def check_rows(rows: list[ConnectionRow]) -> list[str]:
     """
     Report dependency edges that connect an ignored schema to a kept one, in either direction.
 
@@ -25,7 +24,7 @@ async def check() -> list[str]:
     """
     ignore = context().ignore_schemas
     findings: set[str] = set()
-    for row in await run_introspection_query(IntrospectionQuery.SCHEMA_CONNECTIONS, _ConnectionRow):
+    for row in rows:
         if (row.obj_schema in ignore) != (row.ref_schema in ignore):
             findings.add(f"{row.obj_identity} depends on {row.ref_identity}")
     return sorted(findings)

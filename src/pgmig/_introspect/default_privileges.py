@@ -1,5 +1,4 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import GrantRow, IntrospectionRow, grants
 from pgmig._keys import DefaultAclKey
 from pgmig._models import DefaultAcl
@@ -15,7 +14,7 @@ _OBJECT_TYPE_KEYWORD = {
 }
 
 
-class _DefaultAclRow(IntrospectionRow):
+class DefaultAclRow(IntrospectionRow):
     role: str
     # None is a cluster-wide rule (not scoped to any schema); such a rule is never ignored.
     schema_name: str | None
@@ -24,11 +23,11 @@ class _DefaultAclRow(IntrospectionRow):
     baseline_grants: list[GrantRow]
 
 
-async def load() -> None:
+def load_rows(rows: list[DefaultAclRow]) -> None:
     """
     ALTER DEFAULT PRIVILEGES rules (pg_default_acl, database-level).
     """
-    for row in await run_introspection_query(IntrospectionQuery.DEFAULT_PRIVILEGES, _DefaultAclRow):
+    for row in rows:
         # schema_name is optional here (None = a cluster-wide rule), so the row is not an
         # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule
         # scoped to an ignored schema.

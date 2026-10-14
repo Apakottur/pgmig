@@ -1,10 +1,9 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Domain
 
 
-class _DomainRow(IntrospectionRowWithSchema):
+class DomainRow(IntrospectionRowWithSchema):
     domain_name: str
     data_type: str
     not_null: bool
@@ -14,11 +13,11 @@ class _DomainRow(IntrospectionRowWithSchema):
     checks: dict[str, str]
 
 
-async def load() -> None:
+def load_rows(rows: list[DomainRow]) -> None:
     """
     Domain types (user domains only; extension-owned ones are excluded).
     """
-    for domain_row in await run_introspection_query(IntrospectionQuery.DOMAINS, _DomainRow):
+    for domain_row in rows:
         context().db_introspection_result.schema_by_name[domain_row.schema_name].domain_by_name[
             domain_row.domain_name
         ] = Domain(

@@ -1,14 +1,13 @@
-from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
 from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._sql import qualified
 
 
-class _InvalidIndexRow(IntrospectionRowWithSchema):
+class InvalidIndexRow(IntrospectionRowWithSchema):
     table_name: str
     index_name: str
 
 
-async def check() -> list[str]:
+def check_rows(rows: list[InvalidIndexRow]) -> list[str]:
     """
     Guard: report invalid indexes (pg_index.indisvalid = FALSE). An invalid index is
     indistinguishable from a valid one in its deparsed definition, so a diff over it is
@@ -17,7 +16,7 @@ async def check() -> list[str]:
     only suggests the most common one (a failed CREATE INDEX CONCURRENTLY).
     """
     findings: list[str] = []
-    for row in await run_introspection_query(IntrospectionQuery.INVALID_INDEXES, _InvalidIndexRow):
+    for row in rows:
         index = qualified(row.schema_name, row.index_name)
         table = qualified(row.schema_name, row.table_name)
         findings.append(
