@@ -27,14 +27,31 @@ async def test_read_only_snapshot_pins_one_view(gen_setup: GenerateSetup) -> Non
 
     async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
         # Run the probe before the table is created.
-        before = await read_only_conn.execute(probe)
+        before = await read_only_conn.introspect([probe])
 
         # Create the table on a separate (auto-committed) connection.
         await gen_setup.src.execute("CREATE TABLE snap_probe (x int)")
 
         # Run the probe after the table is created.
-        after = await read_only_conn.execute(probe)
+        after = await read_only_conn.introspect([probe])
 
     # The table should not be visible to the read-only connection, both before and after the table is created.
-    assert before == [(0,)]
-    assert after == [(0,)], "snapshot leaked a concurrently-created table -> reads not on one snapshot"
+    assert before == [[{"count": 0}]]
+    assert after == [[{"count": 0}]], "snapshot leaked a concurrently-created table -> reads not on one snapshot"
+
+
+async def test_read_only_snapshot_settings_apply_to_first_query(gen_setup: GenerateSetup) -> None:
+    """
+    Ensure that the snapshot transaction settings are in effect from the very first introspection query.
+    """
+    async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
+        [[settings]] = await read_only_conn.introspect(
+            [
+                "SELECT current_setting('search_path') AS search_path, "
+                "current_setting('transaction_read_only') AS read_only, "
+                "current_setting('transaction_isolation') AS isolation"
+            ]
+        )
+
+    # The first query should already run with an empty search path, in a read-only REPEATABLE READ transaction.
+    assert settings == {"search_path": '""', "read_only": "on", "isolation": "repeatable read"}
