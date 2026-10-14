@@ -1,18 +1,27 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import (
-    Phase,
-    Statement,
-    ctx_iter_object_pairs,
-    diff_comment_statements,
-    owner_statements,
-    topological_drop_order,
-    topological_sort,
+from pgmig._diff._core import Phase, Statement
+from pgmig._diff._view_kinds import ViewKind, generate_view_kind
+from pgmig._models import View
+
+
+def _create_sql(qualified_name: str, view: View) -> str:
+    # security_invoker, security_barrier and check_option (WITH CHECK OPTION) all live in
+    # reloptions; emit them verbatim in a WITH (...) clause between the name and AS.
+    with_clause = f" WITH ({', '.join(view.options)})" if view.options else ""
+    return f"CREATE VIEW {qualified_name}{with_clause} AS {view.definition};"
+
+
+_KIND = ViewKind(
+    keyword="VIEW",
+    select=lambda schema: schema.view_by_name,
+    dependencies=lambda db_introspection_result: db_introspection_result.view_dependencies,
+    recreated=lambda: context().recreated_view_keys,
+    create_sql=_create_sql,
+    drop_phase=Phase.VIEW_DROP,
+    create_phase=Phase.VIEW_CREATE,
 )
-from pgmig._diff._relations import collect_relations
-from pgmig._keys import RelationKey
-from pgmig._sql import qualified
 
 
 def generate() -> Iterator[Statement]:
@@ -25,49 +34,4 @@ def generate() -> Iterator[Statement]:
     the recreate set (see recreated_view_keys) -- Postgres refuses to drop a view another view
     still reads, and the dependents must be rebuilt afterwards.
     """
-    source, target = context().source, context().target
-    src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
-    dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
-
-    recreate = context().recreated_view_keys
-    drop_only = src_views.keys() - dst_views.keys()
-    create_only = dst_views.keys() - src_views.keys()
-
-    # Drops: dependent-first over the source graph.
-    drops = drop_only | recreate
-    for key in topological_drop_order(drops, source.view_dependencies):
-        yield Statement(Phase.VIEW_DROP, f"DROP VIEW {qualified(key.schema, key.name)};")
-
-    # Creates: dependency-first over the target graph.
-    creates = create_only | recreate
-    for key in topological_sort(creates, target.view_dependencies):
-        view = dst_views[key]
-        # security_invoker, security_barrier and check_option (WITH CHECK OPTION) all live in
-        # reloptions; emit them verbatim in a WITH (...) clause between the name and AS.
-        with_clause = f" WITH ({', '.join(view.options)})" if view.options else ""
-        yield Statement(
-            Phase.VIEW_CREATE,
-            f"CREATE VIEW {qualified(key.schema, key.name)}{with_clause} AS {view.definition};",
-        )
-
-    # Ownership, for a view present unchanged on both sides. A recreated view is skipped: its
-    # rebuilt instance is owned by the migration runner and reconciles on a later run, like a
-    # create.
-    for key in sorted(src_views.keys() & dst_views.keys(), key=lambda k: (k.schema, k.name)):
-        if key in recreate:
-            continue
-        for sql in owner_statements(
-            "VIEW", qualified(key.schema, key.name), src_views[key].owner, dst_views[key].owner
-        ):
-            yield Statement(Phase.VIEW_CREATE, sql)
-
-    # Comments, after the views they annotate exist. A recreated view re-emits its comment
-    # (the drop reset it), so pass the recreated names per schema.
-    for schema_name, src_schema_views, dst_schema_views, _pairs in ctx_iter_object_pairs(
-        lambda schema: schema.view_by_name
-    ):
-        recreated_names = {key.name for key in recreate if key.schema == schema_name}
-        for sql in diff_comment_statements(
-            schema_name, src_schema_views, dst_schema_views, kind="VIEW", recreated=recreated_names
-        ):
-            yield Statement(Phase.VIEW_CREATE, sql)
+    return generate_view_kind(_KIND)

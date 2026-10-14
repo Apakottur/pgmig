@@ -1,18 +1,24 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import (
-    Phase,
-    Statement,
-    ctx_iter_object_pairs,
-    diff_comment_statements,
-    owner_statements,
-    topological_drop_order,
-    topological_sort,
+from pgmig._diff._core import Phase, Statement
+from pgmig._diff._view_kinds import ViewKind, generate_view_kind
+from pgmig._models import MaterializedView
+
+
+def _create_sql(qualified_name: str, matview: MaterializedView) -> str:
+    return f"CREATE MATERIALIZED VIEW {qualified_name} AS {matview.definition} WITH NO DATA;"
+
+
+_KIND = ViewKind(
+    keyword="MATERIALIZED VIEW",
+    select=lambda schema: schema.materialized_view_by_name,
+    dependencies=lambda db_introspection_result: db_introspection_result.matview_dependencies,
+    recreated=lambda: context().recreated_matview_keys,
+    create_sql=_create_sql,
+    drop_phase=Phase.MATVIEW_DROP,
+    create_phase=Phase.MATVIEW_CREATE,
 )
-from pgmig._diff._relations import collect_relations
-from pgmig._keys import RelationKey
-from pgmig._sql import qualified
 
 
 def generate() -> Iterator[Statement]:
@@ -30,45 +36,4 @@ def generate() -> Iterator[Statement]:
     recreated. recreated_matview_keys is the single source of truth for that decision, shared
     with the matview-index differ so both agree on which matviews are recreated.
     """
-    source, target = context().source, context().target
-    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
-    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name, RelationKey)
-
-    recreate = context().recreated_matview_keys
-    drop_only = src_matviews.keys() - dst_matviews.keys()
-    create_only = dst_matviews.keys() - src_matviews.keys()
-
-    # Drops: dependent-first over the source graph.
-    drops = drop_only | recreate
-    for key in topological_drop_order(drops, source.matview_dependencies):
-        yield Statement(Phase.MATVIEW_DROP, f"DROP MATERIALIZED VIEW {qualified(key.schema, key.name)};")
-
-    # Creates: dependency-first over the target graph.
-    creates = create_only | recreate
-    for key in topological_sort(creates, target.matview_dependencies):
-        matview = dst_matviews[key]
-        yield Statement(
-            Phase.MATVIEW_CREATE,
-            f"CREATE MATERIALIZED VIEW {qualified(key.schema, key.name)} AS {matview.definition} WITH NO DATA;",
-        )
-
-    # Ownership, for a matview present unchanged on both sides. A recreated matview is skipped:
-    # its rebuilt instance is owned by the migration runner and reconciles on a later run.
-    for key in sorted(src_matviews.keys() & dst_matviews.keys(), key=lambda k: (k.schema, k.name)):
-        if key in recreate:
-            continue
-        for sql in owner_statements(
-            "MATERIALIZED VIEW", qualified(key.schema, key.name), src_matviews[key].owner, dst_matviews[key].owner
-        ):
-            yield Statement(Phase.MATVIEW_CREATE, sql)
-
-    # Comments, after the matviews they annotate exist. A recreated matview re-emits its comment
-    # (the drop reset it), so pass the recreated names per schema.
-    for schema_name, src_schema_matviews, dst_schema_matviews, _pairs in ctx_iter_object_pairs(
-        lambda schema: schema.materialized_view_by_name
-    ):
-        recreated_names = {key.name for key in recreate if key.schema == schema_name}
-        for sql in diff_comment_statements(
-            schema_name, src_schema_matviews, dst_schema_matviews, kind="MATERIALIZED VIEW", recreated=recreated_names
-        ):
-            yield Statement(Phase.MATVIEW_CREATE, sql)
+    return generate_view_kind(_KIND)
