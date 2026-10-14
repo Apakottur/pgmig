@@ -104,15 +104,14 @@ class DbReadOnlyConnection(DbConnection):
         """
         Run the given introspection queries in a single round trip, returning the rows of each one.
         """
-        # On the first call, open the snapshot transaction in the same round trip as the queries.
-        setup = _SNAPSHOT_SETUP if self.driver_conn.info.transaction_status == pq.TransactionStatus.IDLE else ()
+        # On the first call, also open the snapshot transaction, in the same round trip as the queries.
+        statements = list(queries)
+        if self.driver_conn.info.transaction_status == pq.TransactionStatus.IDLE:
+            statements = [*_SNAPSHOT_SETUP, *statements]
 
         async with self.driver_conn.cursor(row_factory=dict_row) as cur:
             # Run all the statements as one multi-statement execute. Each statement produces its own result set.
-            await cur.execute("\n;\n".join([*setup, *queries]))  # ty: ignore[no-matching-overload]
+            await cur.execute("\n;\n".join(statements))  # ty: ignore[no-matching-overload]
 
-            # Skip the result sets of the setup statements, and fetch the rows of each query result set.
-            results = cur.results()
-            for _ in setup:
-                await anext(results)
-            return [await result.fetchall() async for result in results]
+            # Fetch the rows of each query result set. The setup statements return no rows, so their sets are skipped.
+            return [await result.fetchall() async for result in cur.results() if result.description is not None]
