@@ -1,11 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import (
-    GrantRow,
-    IntrospectionQuery,
-    IntrospectionRowWithSchema,
-    grants,
-    run_introspection_query,
-)
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import GrantRow, IntrospectionRowWithSchema, grants
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
 

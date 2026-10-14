@@ -1,10 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import (
-    IntrospectionQuery,
-    IntrospectionRow,
-    IntrospectionRowWithSchema,
-    run_introspection_query,
-)
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import IntrospectionRow, IntrospectionRowWithSchema
 from pgmig._models import CompositeField, CompositeType
 
 

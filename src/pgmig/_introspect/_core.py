@@ -3,10 +3,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, TypeVar
 
-from pydantic import BaseModel, ConfigDict
-
 from pgmig._introspect._context import context
-from pgmig._models import Grant
+from pgmig._introspect._rows import IntrospectionRow, IntrospectionRowWithSchema
 
 # Static introspection queries dir.
 _QUERIES_DIR = Path(__file__).parent / "queries"
@@ -66,45 +64,6 @@ class IntrospectionQuery(Enum):
     def __init__(self, file_name: str, kind: IntrospectionQueryType) -> None:
         self.file_name = file_name
         self.kind = kind
-
-
-class IntrospectionRow(BaseModel):
-    """
-    Base for every model parsed from a bundled SQL query -- a top-level row, or a nested
-    jsonb object a query builds.
-    """
-
-    model_config = ConfigDict(
-        # Ensure queries dont fetch unused columns.
-        extra="forbid",
-    )
-
-
-class IntrospectionRowWithSchema(IntrospectionRow):
-    """
-    Base for every top-level row that carries a required schema in `schema_name` -- the schema an
-    object belongs to. A shared base so that schema-bearing rows can be told apart from the rest
-    (dependency rows carry a pair of schemas, a few carry none).
-    """
-
-    schema_name: str
-
-
-class GrantRow(IntrospectionRow):
-    """
-    One effective privilege of an object's ACL (jsonb object built by the queries).
-    """
-
-    grantee: str
-    privilege: str
-    grantable: bool
-
-
-def grants(rows: list[GrantRow]) -> frozenset[Grant]:
-    """
-    Convert parsed ACL rows into the model's grant set.
-    """
-    return frozenset(Grant(grantee=row.grantee, privilege=row.privilege, grantable=row.grantable) for row in rows)
 
 
 class Loader(Protocol):

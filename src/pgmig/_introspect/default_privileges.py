@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import GrantRow, IntrospectionQuery, IntrospectionRow, grants, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import GrantRow, IntrospectionRow, grants
 from pgmig._keys import DefaultAclKey
 from pgmig._models import DefaultAcl
 

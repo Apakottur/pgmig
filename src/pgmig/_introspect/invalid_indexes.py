@@ -1,4 +1,5 @@
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._sql import qualified
 
 

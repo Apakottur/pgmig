@@ -2,7 +2,8 @@ from collections.abc import Callable
 from typing import Protocol, TypeVar
 
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import IntrospectionQuery, run_introspection_query
+from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Index, Schema
 
 
