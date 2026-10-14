@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pgmig._introspect._context import context
 from pgmig._introspect._rows import IntrospectionRow, IntrospectionRowWithSchema
@@ -60,15 +61,31 @@ class Loader(IntrospectionQuery[_RowT, None]):
     filter_ignored_schemas = True
 
 
+async def run_introspection_queries(queries: Sequence[type[IntrospectionQuery[Any, _ResultT]]]) -> list[_ResultT]:
+    """
+    Run the given introspection queries in a single round trip, and process the rows of each one, in order.
+    """
+    # Run all the queries.
+    rows_per_query = await context().conn.introspect([_read_query(query.file_name) for query in queries])
+
+    # Process the rows of each query.
+    return [_process_rows(query, rows) for query, rows in zip(queries, rows_per_query, strict=True)]
+
+
 async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]]) -> _ResultT:
     """
-    Run the given introspection query, parsing each row into the query's model, and process the rows.
+    Run the given introspection query, and process its rows.
     """
-    # Get the query SQL.
-    sql = _read_query(query.file_name)
+    [result] = await run_introspection_queries([query])
+    return result
 
-    # Run the query.
-    rows = await context().conn.introspect(sql, query.model)
+
+def _process_rows(query: type[IntrospectionQuery[_RowT, _ResultT]], raw_rows: list[dict[str, Any]]) -> _ResultT:
+    """
+    Parse each row of the given introspection query into the query's model, and process the rows.
+    """
+    # Parse the rows.
+    rows = [query.model.model_validate(raw_row) for raw_row in raw_rows]
 
     # Filter out rows in ignored schemas.
     ignored_schemas = context().ignore_schemas

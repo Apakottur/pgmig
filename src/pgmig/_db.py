@@ -1,16 +1,13 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Self, TypeVar
+from typing import Any, Self
 
 import psycopg
-from psycopg.rows import class_row
-from pydantic import BaseModel
+from psycopg.rows import dict_row
 
 from pgmig._drivers import DbDriver
 from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
-
-_RowT = TypeVar("_RowT", bound=BaseModel)
 
 
 class UniqueViolation(Exception):
@@ -109,10 +106,13 @@ class DbReadOnlyConnection(DbConnection):
             async with conn.driver_conn.transaction():
                 yield conn
 
-    async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
+    async def introspect(self, queries: Sequence[str]) -> list[list[dict[str, Any]]]:
         """
-        Run an introspection query and parse each row into the given model.
+        Run the given introspection queries in a single round trip, returning the rows of each one.
         """
-        async with self.driver_conn.cursor(row_factory=class_row(response_model)) as cur:
-            await cur.execute(query)  # ty: ignore[no-matching-overload]
-            return await cur.fetchall()
+        async with self.driver_conn.cursor(row_factory=dict_row) as cur:
+            # Run all the queries as one multi-statement execute. Each query produces its own result set.
+            await cur.execute("\n;\n".join(queries))  # ty: ignore[no-matching-overload]
+
+            # Fetch the rows of each result set.
+            return [await result.fetchall() async for result in cur.results()]

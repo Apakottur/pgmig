@@ -30,7 +30,7 @@ from pgmig._introspect import (
     views,
 )
 from pgmig._introspect._context import ContextData, context_scope
-from pgmig._introspect._core import Guard, Loader, run_introspection_query
+from pgmig._introspect._core import Guard, Loader, run_introspection_queries, run_introspection_query
 from pgmig._introspect.preflight import PreflightQuery, PreflightRow
 from pgmig._models import DbIntrospectionResult
 
@@ -126,18 +126,17 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
             # Run the preflight query to find out which introspection steps to run.
             preflight = await run_introspection_query(PreflightQuery)
 
-            # Look for any unsupported objects.
-            all_findings = [
-                finding for guard in _get_guards(preflight) for finding in await run_introspection_query(guard)
-            ]
+            # Look for any unsupported objects, running the guards as one batch.
+            all_findings = []
+            for findings in await run_introspection_queries(_get_guards(preflight)):
+                all_findings += findings
             if all_findings:
                 message = "pgmig cannot process this database:\n" + "\n".join(
                     f"  - {finding}" for finding in all_findings
                 )
                 raise PgmigUnsupportedError(message)
 
-            # Run the introspections for the classes the database actually contains.
-            for loader in _get_loaders(preflight):
-                await run_introspection_query(loader)
+            # Run the introspections for the classes the database actually contains, as one batch.
+            await run_introspection_queries(_get_loaders(preflight))
 
     return db_introspection_result
