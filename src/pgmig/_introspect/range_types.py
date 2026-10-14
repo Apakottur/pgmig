@@ -14,11 +14,11 @@ class _RangeTypeRow(IntrospectionRowWithSchema):
     type_owner: str
 
 
-async def load() -> None:
+def load_rows(rows: list[_RangeTypeRow]) -> None:
     """
     Range types (user range types only; extension-owned ones are excluded).
     """
-    for row in await run_introspection_query(IntrospectionQuery.RANGE_TYPES, _RangeTypeRow):
+    for row in rows:
         context().db_introspection_result.schema_by_name[row.schema_name].range_type_by_name[row.type_name] = RangeType(
             name=row.type_name,
             subtype=row.subtype,
@@ -28,3 +28,10 @@ async def load() -> None:
             comment=row.type_comment,
             owner=row.type_owner,
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.RANGE_TYPES, _RangeTypeRow))

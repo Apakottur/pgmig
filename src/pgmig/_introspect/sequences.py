@@ -23,12 +23,12 @@ class _SequenceRow(IntrospectionRowWithSchema):
     owned_column: str | None
 
 
-async def load() -> None:
+def load_rows(rows: list[_SequenceRow]) -> None:
     """
     Sequences (the backing sequence of a serial/identity column is excluded; a manually
     owned sequence is kept, with its OWNED BY target in `owned_by`).
     """
-    for seq_row in await run_introspection_query(IntrospectionQuery.SEQUENCES, _SequenceRow):
+    for seq_row in rows:
         # A manual OWNED BY resolves all three owned_* columns together; a standalone
         # sequence leaves them NULL.
         owned_by: ColumnKey | None = None
@@ -51,3 +51,10 @@ async def load() -> None:
                 unlogged=seq_row.seq_persistence == "u",
             )
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.SEQUENCES, _SequenceRow))

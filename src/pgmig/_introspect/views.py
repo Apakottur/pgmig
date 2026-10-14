@@ -13,12 +13,12 @@ class _ViewRow(IntrospectionRowWithSchema):
     view_owner: str
 
 
-async def load() -> None:
+def load_rows(rows: list[_ViewRow]) -> None:
     """
     Views and materialized views (user ones only; extension-owned ones are excluded). Their
     rows share one query; the relkind routes each onto the schema's view or matview mapping.
     """
-    for row in await run_introspection_query(IntrospectionQuery.VIEWS, _ViewRow):
+    for row in rows:
         schema = context().db_introspection_result.schema_by_name[row.schema_name]
         # pg_get_viewdef renders the SELECT with surrounding whitespace and a trailing
         # semicolon; strip both so the stored definition is what follows "AS".
@@ -43,3 +43,10 @@ async def load() -> None:
                 options=tuple(sorted(row.view_options or [])),
                 owner=row.view_owner,
             )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.VIEWS, _ViewRow))

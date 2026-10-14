@@ -15,12 +15,12 @@ class _PolicyRow(IntrospectionRowWithSchema):
     policy_comment: str | None
 
 
-async def load() -> None:
+def load_rows(rows: list[_PolicyRow]) -> None:
     """
     Row-level security policies (pg_policy), attached to their owning table. Runs after tables
     are loaded so the owner lookup resolves.
     """
-    for row in await run_introspection_query(IntrospectionQuery.POLICIES, _PolicyRow):
+    for row in rows:
         table = context().db_introspection_result.schema_by_name[row.schema_name].table_by_name[row.table_name]
         table.policy_by_name[row.policy_name] = Policy(
             name=row.policy_name,
@@ -31,3 +31,10 @@ async def load() -> None:
             check=row.policy_check,
             comment=row.policy_comment,
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.POLICIES, _PolicyRow))

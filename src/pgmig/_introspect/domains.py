@@ -14,11 +14,11 @@ class _DomainRow(IntrospectionRowWithSchema):
     checks: dict[str, str]
 
 
-async def load() -> None:
+def load_rows(rows: list[_DomainRow]) -> None:
     """
     Domain types (user domains only; extension-owned ones are excluded).
     """
-    for domain_row in await run_introspection_query(IntrospectionQuery.DOMAINS, _DomainRow):
+    for domain_row in rows:
         context().db_introspection_result.schema_by_name[domain_row.schema_name].domain_by_name[
             domain_row.domain_name
         ] = Domain(
@@ -30,3 +30,10 @@ async def load() -> None:
             comment=domain_row.comment,
             owner=domain_row.domain_owner,
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.DOMAINS, _DomainRow))

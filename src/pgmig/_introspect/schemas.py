@@ -10,14 +10,21 @@ class _SchemaRow(IntrospectionRowWithSchema):
     schema_grants: list[GrantRow]
 
 
-async def load() -> None:
+def load_rows(rows: list[_SchemaRow]) -> None:
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in await run_introspection_query(IntrospectionQuery.SCHEMAS, _SchemaRow):
+    for schema_row in rows:
         context().db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
             name=schema_row.schema_name,
             comment=schema_row.schema_comment,
             owner=schema_row.schema_owner,
             grants=grants(schema_row.schema_grants),
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.SCHEMAS, _SchemaRow))

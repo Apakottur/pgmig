@@ -17,7 +17,7 @@ class _MatviewDependencyRow(IntrospectionRow):
     referenced_kind: str
 
 
-async def check() -> list[str]:
+def check_rows(rows: list[_MatviewDependencyRow]) -> list[str]:
     """
     Guard: report a plain view that reads a materialized view. A matview is created in a later
     phase than plain views (and dropped in an earlier one), so a view cannot be ordered before
@@ -31,7 +31,7 @@ async def check() -> list[str]:
     are only used once the unsupported pairing is ruled out.
     """
     findings: list[str] = []
-    for row in await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES, _MatviewDependencyRow):
+    for row in rows:
         if row.dependent_kind == "m":
             # These rows name their schemas dependent_schema/referenced_schema (not the shared
             # schema_name), so run_introspection_query does not drop them; skip an edge touching an
@@ -52,3 +52,10 @@ async def check() -> list[str]:
             f"a plain view reading a materialized view is not supported"
         )
     return findings
+
+
+async def check() -> list[str]:
+    """
+    Run the query and check its rows.
+    """
+    return check_rows(await run_introspection_query(IntrospectionQuery.MATVIEW_DEPENDENCIES, _MatviewDependencyRow))

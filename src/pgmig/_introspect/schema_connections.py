@@ -10,7 +10,7 @@ class _ConnectionRow(IntrospectionRow):
     ref_identity: str
 
 
-async def check() -> list[str]:
+def check_rows(rows: list[_ConnectionRow]) -> list[str]:
     """
     Report dependency edges that connect an ignored schema to a kept one, in either direction.
 
@@ -25,7 +25,14 @@ async def check() -> list[str]:
     """
     ignore = context().ignore_schemas
     findings: set[str] = set()
-    for row in await run_introspection_query(IntrospectionQuery.SCHEMA_CONNECTIONS, _ConnectionRow):
+    for row in rows:
         if (row.obj_schema in ignore) != (row.ref_schema in ignore):
             findings.add(f"{row.obj_identity} depends on {row.ref_identity}")
     return sorted(findings)
+
+
+async def check() -> list[str]:
+    """
+    Run the query and check its rows.
+    """
+    return check_rows(await run_introspection_query(IntrospectionQuery.SCHEMA_CONNECTIONS, _ConnectionRow))

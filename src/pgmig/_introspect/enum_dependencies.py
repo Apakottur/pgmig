@@ -17,13 +17,13 @@ class _EnumDependencyRow(IntrospectionRow):
     in_constraint: bool
 
 
-async def load() -> None:
+def load_rows(rows: list[_EnumDependencyRow]) -> None:
     """
     Enum-on-column edges: for each user enum, the table columns typed by it (directly or as an
     array). The enum diff uses these to rewrite dependent columns when an enum's values are
     removed or reordered, and to refuse the rewrite for columns it cannot handle.
     """
-    for row in await run_introspection_query(IntrospectionQuery.ENUM_DEPENDENCIES, _EnumDependencyRow):
+    for row in rows:
         key = EnumKey(row.enum_schema, row.enum_name)
         context().db_introspection_result.enum_column_dependencies.setdefault(key, []).append(
             EnumColumnDependency(
@@ -36,3 +36,10 @@ async def load() -> None:
                 in_constraint=row.in_constraint,
             )
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.ENUM_DEPENDENCIES, _EnumDependencyRow))

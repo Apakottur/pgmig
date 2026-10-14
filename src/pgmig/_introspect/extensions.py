@@ -10,14 +10,21 @@ class _ExtensionRow(IntrospectionRowWithSchema):
     extension_comment: str | None
 
 
-async def load() -> None:
+def load_rows(rows: list[_ExtensionRow]) -> None:
     """
     Extensions (database-level).
     """
-    for ext_row in await run_introspection_query(IntrospectionQuery.EXTENSIONS, _ExtensionRow):
+    for ext_row in rows:
         context().db_introspection_result.extension_by_name[ext_row.name] = Extension(
             name=ext_row.name,
             version=ext_row.version,
             schema=ext_row.schema_name,
             comment=ext_row.extension_comment,
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.EXTENSIONS, _ExtensionRow))

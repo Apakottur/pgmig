@@ -42,11 +42,11 @@ class _TableRow(IntrospectionRowWithSchema):
     partition_parent_name: str | None
 
 
-async def load() -> None:
+def load_rows(rows: list[_TableRow]) -> None:
     """
     Tables (and their columns, in physical order).
     """
-    for table_row in await run_introspection_query(IntrospectionQuery.TABLES, _TableRow):
+    for table_row in rows:
         schema = context().db_introspection_result.schema_by_name[table_row.schema_name]
         table = schema.table_by_name.get(table_row.table_name)
         if table is None:
@@ -103,3 +103,10 @@ async def load() -> None:
                 identity_cycle=table_row.identity_cycle,
             )
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.TABLES, _TableRow))

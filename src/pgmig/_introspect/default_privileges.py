@@ -24,11 +24,11 @@ class _DefaultAclRow(IntrospectionRow):
     baseline_grants: list[GrantRow]
 
 
-async def load() -> None:
+def load_rows(rows: list[_DefaultAclRow]) -> None:
     """
     ALTER DEFAULT PRIVILEGES rules (pg_default_acl, database-level).
     """
-    for row in await run_introspection_query(IntrospectionQuery.DEFAULT_PRIVILEGES, _DefaultAclRow):
+    for row in rows:
         # schema_name is optional here (None = a cluster-wide rule), so the row is not an
         # IntrospectionRowWithSchema and run_introspection_query does not drop it; skip a rule
         # scoped to an ignored schema.
@@ -42,3 +42,10 @@ async def load() -> None:
             grants=grants(row.grants),
             baseline=grants(row.baseline_grants),
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.DEFAULT_PRIVILEGES, _DefaultAclRow))

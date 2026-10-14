@@ -44,11 +44,11 @@ class _FunctionRow(IntrospectionRowWithSchema):
     func_depends_on_relations: list[_RelationDep]
 
 
-async def load() -> None:
+def load_rows(rows: list[_FunctionRow]) -> None:
     """
     Functions and procedures (excluding aggregates, window functions, and extension-owned ones).
     """
-    for func_row in await run_introspection_query(IntrospectionQuery.FUNCTIONS, _FunctionRow):
+    for func_row in rows:
         signature = f"{func_row.func_name}({func_row.func_args})"
         context().db_introspection_result.schema_by_name[func_row.schema_name].function_by_signature[signature] = (
             Function(
@@ -74,3 +74,10 @@ async def load() -> None:
                 ),
             )
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.FUNCTIONS, _FunctionRow))

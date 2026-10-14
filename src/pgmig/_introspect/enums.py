@@ -11,11 +11,11 @@ class _EnumRow(IntrospectionRowWithSchema):
     enum_owner: str
 
 
-async def load() -> None:
+def load_rows(rows: list[_EnumRow]) -> None:
     """
     Enum types (user enums only; extension-owned ones are excluded).
     """
-    for enum_row in await run_introspection_query(IntrospectionQuery.ENUMS, _EnumRow):
+    for enum_row in rows:
         context().db_introspection_result.schema_by_name[enum_row.schema_name].enum_by_name[enum_row.enum_name] = (
             EnumType(
                 name=enum_row.enum_name,
@@ -24,3 +24,10 @@ async def load() -> None:
                 owner=enum_row.enum_owner,
             )
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.ENUMS, _EnumRow))

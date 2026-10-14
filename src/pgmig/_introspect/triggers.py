@@ -14,7 +14,7 @@ class _TriggerRow(IntrospectionRowWithSchema):
     trigger_comment: str | None
 
 
-async def load() -> None:
+def load_rows(rows: list[_TriggerRow]) -> None:
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
 
@@ -22,7 +22,7 @@ async def load() -> None:
     row to the matching mapping so both carry their triggers uniformly. This runs after both
     tables and views are loaded so both lookups resolve.
     """
-    for trigger_row in await run_introspection_query(IntrospectionQuery.TRIGGERS, _TriggerRow):
+    for trigger_row in rows:
         schema = context().db_introspection_result.schema_by_name[trigger_row.schema_name]
         owner: Table | View
         if trigger_row.relkind == "v":
@@ -36,3 +36,10 @@ async def load() -> None:
             enabled=trigger_row.trigger_enabled,
             comment=trigger_row.trigger_comment,
         )
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.TRIGGERS, _TriggerRow))

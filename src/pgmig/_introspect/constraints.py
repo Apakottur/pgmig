@@ -17,12 +17,12 @@ class _ConstraintRow(IntrospectionRowWithSchema):
     con_comment: str | None
 
 
-async def load() -> None:
+def load_rows(rows: list[_ConstraintRow]) -> None:
     """
     Constraints (primary key, unique, check, and exclusion). Foreign keys are routed to their
     own bucket on the table.
     """
-    for con_row in await run_introspection_query(IntrospectionQuery.CONSTRAINTS, _ConstraintRow):
+    for con_row in rows:
         constraint = Constraint(
             name=con_row.con_name,
             definition=con_row.con_def,
@@ -39,3 +39,10 @@ async def load() -> None:
             table.foreign_key_by_name[con_row.con_name] = constraint
         else:
             table.constraint_by_name[con_row.con_name] = constraint
+
+
+async def load() -> None:
+    """
+    Run the query and load its rows.
+    """
+    load_rows(await run_introspection_query(IntrospectionQuery.CONSTRAINTS, _ConstraintRow))
