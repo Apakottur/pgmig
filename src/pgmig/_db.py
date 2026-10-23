@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Self
@@ -49,7 +49,7 @@ class DbConnection:
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncIterator[Self]:
+    async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncGenerator[Self]:
         """
         Connection context.
         """

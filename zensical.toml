@@ -1,0 +1,52 @@
+[project]
+site_name = "pgmig"
+site_description = "Generate migrations between Postgres databases."
+site_url = "https://pgmig.readthedocs.io/"
+repo_name = "Apakottur/pgmig"
+repo_url = "https://github.com/Apakottur/pgmig"
+edit_uri = "edit/main/docs/"
+docs_dir = "docs"
+site_dir = "site"
+strict = true
+nav = [
+  { "Home" = "index.md" },
+  { "Configuration" = "configuration.md" },
+  { "Reference" = [
+    { "Python API" = "reference/api.md" },
+  ] },
+  { "FAQ" = "faq.md" },
+]
+
+[project.theme]
+features = ["content.code.copy", "navigation.footer", "toc.follow"]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+pymdownx.highlight = {}
+pymdownx.superfences = {}
+toc.permalink = true
+
+[project.plugins.mkdocstrings.handlers.python]
+inventories = ["https://docs.python.org/3/objects.inv"]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+heading_level = 2
+members_order = "source"
+separate_signature = true
+show_root_heading = true
+show_signature_annotations = true
+show_source = false

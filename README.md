@@ -5,6 +5,7 @@
 [![image](https://img.shields.io/pypi/v/pgmig.svg)](https://pypi.python.org/pypi/pgmig)
 [![image](https://img.shields.io/pypi/l/pgmig.svg)](https://github.com/Apakottur/pgmig/blob/main/LICENSE)
 [![image](https://img.shields.io/pypi/pyversions/pgmig.svg)](https://pypi.python.org/pypi/pgmig)
+[![Documentation](https://readthedocs.org/projects/pgmig/badge/?version=latest)](https://pgmig.readthedocs.io/)
 
 Generate migrations between Postgres databases.
 
@@ -17,63 +18,33 @@ runs the generated SQL for you: you review it and apply it yourself.
 pgmig officially supports **Postgres 14–18** — the majors currently maintained upstream — and is
 tested against each in CI. Other versions may work but are not tested.
 
-This project is currently in active development, see [Roadmap](https://github.com/Apakottur/pgmig/issues/8).
+**Documentation**: [pgmig.readthedocs.io](https://pgmig.readthedocs.io/)
 
-## Table of Contents
+## Quick start
 
-1. [Getting Started](#getting-started)
-2. [Configuration](#configuration)
-3. [FAQ](#faq)
-4. [Contributing](#contributing)
-5. [License](#license)
+Say the `current` database has a `users` table, and the `desired` one adds an `email` column with a unique index:
 
-## Getting Started
+```sql
+-- current
+CREATE TABLE users (id bigint PRIMARY KEY, name text NOT NULL);
 
-### Installation
-
-pgmig is available as [`pgmig`](https://pypi.org/project/pgmig/) on PyPI.
-
-Invoke pgmig directly with [`uvx`](https://docs.astral.sh/uv/):
-
-```shell
-uvx pgmig generate \
-  --source postgresql://user:pass@localhost:5432/current \
-  --target postgresql://user:pass@localhost:5432/desired
+-- desired
+CREATE TABLE users (id bigint PRIMARY KEY, name text NOT NULL, email text NOT NULL);
+CREATE UNIQUE INDEX users_email_idx ON users (email);
 ```
 
-Or install pgmig with `uv` (recommended) or `pip`:
+Print the migration SQL that makes `current` match `desired`, using [`uvx`](https://docs.astral.sh/uv/):
 
 ```shell
-# With uv.
-uv tool install pgmig@latest  # Install pgmig globally.
-uv add --dev pgmig            # Or add pgmig to your project.
+$ uvx pgmig generate \
+    --source postgresql://user:pass@localhost:5432/current \
+    --target postgresql://user:pass@localhost:5432/desired
 
-# With pip.
-pip install pgmig
+ALTER TABLE "public"."users" ADD COLUMN "email" text NOT NULL;
+CREATE UNIQUE INDEX users_email_idx ON public.users USING btree (email);
 ```
 
-The base install uses the pure-Python psycopg driver (needs a system libpq). For a faster build
-or a bundled-libpq build, see [which build should I install?](#which-build-should-i-install).
-
-### Usage
-
-`pgmig` can be used directly in the command line or as a Python library.
-
-#### Command line
-
-Print the migration SQL that makes `source` match `target`:
-
-```shell
-pgmig generate \
-  --source postgresql://user:pass@localhost:5432/current \
-  --target postgresql://user:pass@localhost:5432/desired
-```
-
-When the two structures already match, nothing is printed.
-
-#### Library
-
-The same diff is available as a function that returns the SQL as a string:
+Or from Python:
 
 ```python
 import pgmig
@@ -83,74 +54,10 @@ sql = pgmig.generate(
     target="postgresql://user:pass@localhost:5432/desired",
 )
 
-print(sql)  # the migration SQL
+print(sql)
+# ALTER TABLE "public"."users" ADD COLUMN "email" text NOT NULL;
+# CREATE UNIQUE INDEX users_email_idx ON public.users USING btree (email);
 ```
-
-`generate` returns an empty string when the structures already match.
-
-## Configuration
-
-`pgmig` has no configuration file — everything is passed on the command line (or as arguments to `pgmig.generate`).
-
-The CLI (`pgmig generate`) and the library (`pgmig.generate`) share the same options; the CLI
-adds a few more (`—` in the library column):
-
-| CLI option               | Library argument     | Description                                             |
-| ------------------------ | -------------------- | ------------------------------------------------------- |
-| `--source`, `-s`         | `source`             | DSN of the source (current) database. Falls back to the `PGMIG_SOURCE` environment variable. |
-| `--target`, `-t`         | `target`             | DSN of the target (desired) database. Falls back to the `PGMIG_TARGET` environment variable. |
-| `--index-concurrently`     | `index_concurrently` | Whether to emit `CREATE`/`DROP INDEX` (including `CREATE UNIQUE INDEX`) with `CONCURRENTLY`. Using `CONCURRENTLY` avoids blocking index read/write operations, but takes longer to execute and cannot be run inside a transaction block. |
-| `--safe-not-null`        | `safe_not_null`      | Whether to emit `SET NOT NULL` on an existing column through a `CHECK (col IS NOT NULL)` constraint that is added `NOT VALID`, validated, and dropped once the column is `NOT NULL`. Plain `SET NOT NULL` scans the whole table under an `ACCESS EXCLUSIVE` lock; validating the `CHECK` scans under a lock that does not block reads or writes, and lets `SET NOT NULL` skip its scan. Run the statements outside a transaction block, otherwise the lock taken by the first one is held throughout. |
-| `--ignore-extension-version` | `ignore_extension_version` | Names of extensions whose version mismatch is ignored: no `ALTER EXTENSION ... UPDATE TO` is emitted for them. Repeatable on the CLI; a list of names in the library. |
-| `--ignore-schema`         | `ignore_schemas`     | Schema names to exclude from the diff entirely: their tables and every other object, and the `CREATE`/`DROP` of the schema itself, are ignored (even object kinds pgmig cannot otherwise process). The schema must be isolated — if it shares any dependency with a kept schema (a foreign key, a view read, a cross-schema type, …), pgmig errors rather than emit a migration that would fail at apply. Repeatable on the CLI; a list of names in the library. |
-| `--include-owner`        | `include_owner`      | Emit `ALTER ... OWNER TO` statements to reconcile ownership. Off by default: ownership references cluster-level roles that routinely differ across environments, so it is not part of the default convergence. |
-| `--include-grants`       | `include_grants`     | Also emit named-role `GRANT`/`REVOKE`. `PUBLIC` grants are always diffed (portable and apply-safe); named-role grants reference cluster-level roles that diverge across environments and fail on apply when the role is absent on the target, so they are opt-in. |
-| `--driver`               | `driver`             | Database driver to connect with: `auto` (default) or `psycopg`. `auto` picks among the supported drivers; naming one pins it. On the CLI it falls back to the `PGMIG_DRIVER` environment variable. |
-| `--output`, `-o`         | —                    | Write the migration SQL to this file instead of stdout. |
-| `--check`, `-c`          | —                    | Exit non-zero if the databases differ (CI gate); the migration is still emitted. |
-
-### Connections
-
-Each DSN can be passed as a flag or through its environment variable; an explicit flag wins.
-Command-line arguments are visible in `ps` output and shell history, so prefer the environment
-variables for anything containing secrets — for example, in CI:
-
-```yaml
-- run: pgmig generate --check
-  env:
-    PGMIG_SOURCE: ${{ secrets.PROD_DATABASE_URL }}
-    PGMIG_TARGET: postgresql://postgres:postgres@localhost:5432/desired
-```
-
-Other commands:
-
-| Command           | Description                  |
-| ----------------- | ---------------------------- |
-| `pgmig --version` | Print the installed version. |
-| `pgmig --help`    | Show help for any command.   |
-
-A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
-e.g. `postgresql://user:pass@host:5432/dbname`.
-
-## FAQ
-
-### Which build should I install?
-
-pgmig talks to Postgres through the psycopg driver. The base `pgmig` install uses its pure
-Python build; extras swap in a faster one. The migration code is identical, only the connection
-layer changes.
-
-| Install                         | Build                 | Needs at install           | libpq        | Notes |
-| ------------------------------- | --------------------- | -------------------------- | ------------ | ----- |
-| `pip install pgmig`             | psycopg (pure Python) | nothing                    | system libpq | Works everywhere; slowest. |
-| `pip install 'pgmig[binary]'`   | psycopg (prebuilt C)  | nothing                    | **bundled**  | Fast, no build tools or system libpq. Bundled libpq/OpenSSL only update with the wheel, so psycopg advises against it in production — ideal for CLI / standalone use. |
-| `pip install 'pgmig[c]'`        | psycopg (compiled C)  | C compiler + libpq headers | system libpq | Fast **and** rides your OS's libpq security updates. Recommended for production. |
-
-### Do I need libpq installed?
-
-Depends on the install. The base install and the `c` extra use the system libpq (install it via
-your OS, e.g. `apt install libpq5`). The `binary` extra bundles its own, so it needs nothing
-extra on the machine.
 
 ## Contributing
 

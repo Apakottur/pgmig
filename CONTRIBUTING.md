@@ -38,6 +38,23 @@ uv run mypy --config-file linters/mypy.toml .
 uv run ty check --project . --config-file linters/ty.toml
 ```
 
+## Documentation
+
+The documentation site lives in `docs/`, is built with [Zensical](https://zensical.org/), and is hosted on
+[Read the Docs](https://pgmig.readthedocs.io/). The Python API reference is generated from the docstrings.
+
+Preview it locally with live reload:
+
+```shell
+uv run --group docs zensical serve
+```
+
+Build it the way CI does (warnings, such as broken links, fail the build):
+
+```shell
+uv run --group docs zensical build --strict
+```
+
 ## Releasing
 
 To release a new version, run the interactive script (it requires the [`gh`](https://cli.github.com/) CLI,
