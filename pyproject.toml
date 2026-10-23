@@ -44,10 +44,9 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
-# The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
-# builds are opt-in extras below.
 dependencies = [
-  #
+  # The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
+  # builds are opt-in extras below.
   "psycopg>=3.3.5",
   "pydantic>=2.12",
   "typer>=0.15.4",
