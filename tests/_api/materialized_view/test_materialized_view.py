@@ -57,12 +57,11 @@ async def test_materialized_view_over_system_view_not_refused(gen_setup: Generat
     must not trip the matview-dependency guard: system schemas are not managed by pgmig, so
     the dependency is not a matview-on-managed-view edge that needs ordering.
     """
-    # pg_get_viewdef qualifies the column with the relation name on 14/15, bare on 16+.
-    column = "pg_stat_activity.pid" if gen_setup.pg_major in (14, 15) else "pid"
+    body = gen_setup.select_body("pid", "pg_stat_activity", "pg_stat_activity")
     await gen_setup.assert_diff(
         src=[],
         dst=["CREATE MATERIALIZED VIEW active AS SELECT pid FROM pg_stat_activity"],
-        diff=[f'CREATE MATERIALIZED VIEW "public"."active" AS SELECT {column}\n   FROM pg_stat_activity WITH NO DATA'],
+        diff=[f'CREATE MATERIALIZED VIEW "public"."active" AS {body} WITH NO DATA'],
     )
 
 
@@ -73,9 +72,7 @@ async def test_materialized_view_over_extension_view_not_refused(gen_setup: Gene
     relations are not diffed, so the referenced side always exists and needs no ordering.
     Its schema is not a system schema, so only the extension-ownership leg excludes it.
     """
-    # pg_get_viewdef qualifies the column with the relation name on 14/15, bare on 16+; the
-    # FROM relation is schema-qualified because introspection runs with an empty search_path.
-    column = "pg_stat_statements.userid" if gen_setup.pg_major in (14, 15) else "userid"
+    body = gen_setup.select_body("userid", "pg_stat_statements", "public.pg_stat_statements")
     await gen_setup.assert_diff(
         both=["CREATE EXTENSION pg_stat_statements"],
         src=[],
@@ -83,7 +80,6 @@ async def test_materialized_view_over_extension_view_not_refused(gen_setup: Gene
         # which the test server does not have; the unpopulated matview only needs the catalog.
         dst=["CREATE MATERIALIZED VIEW stats AS SELECT userid FROM pg_stat_statements WITH NO DATA"],
         diff=[
-            f'CREATE MATERIALIZED VIEW "public"."stats" AS SELECT {column}'
-            "\n   FROM public.pg_stat_statements WITH NO DATA"
+            f'CREATE MATERIALIZED VIEW "public"."stats" AS {body} WITH NO DATA',
         ],
     )

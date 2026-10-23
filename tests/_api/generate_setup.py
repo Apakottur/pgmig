@@ -1,3 +1,4 @@
+import functools
 from collections.abc import Sequence
 
 import pytest
@@ -40,6 +41,15 @@ class GenerateSetup:
         # Unique key for the test session.
         self.unique_key = unique_key
 
+    def select_body(self, column: str, rel: str, from_ref: str) -> str:
+        """
+        A view/matview body `SELECT <column> FROM <from_ref>` as pg_get_viewdef renders it: PG
+        14/15 qualify the column with the reading relation name, 16+ do not. FROM is rendered as
+        given (introspection runs with an empty search_path, so user relations are schema-qualified).
+        """
+        rendered = f"{rel}.{column}" if self.pg_major in (14, 15) else column
+        return f"SELECT {rendered}\n   FROM {from_ref}"
+
     async def assert_diff(
         self,
         *,
@@ -49,6 +59,7 @@ class GenerateSetup:
         both: list[str] | None = None,
         apply: bool = True,
         index_concurrently: bool = False,
+        safe_not_null: bool = False,
         include_owner: bool = False,
         include_grants: bool = False,
         ignore_schemas: Sequence[str] = (),
@@ -63,6 +74,7 @@ class GenerateSetup:
             both: statements to run on both databases.
             apply: Whether to apply the migration to the source database and confirm it converges.
             index_concurrently: Pass through to `generate` to emit CONCURRENTLY index statements.
+            safe_not_null: Pass through to `generate` to emit SET NOT NULL via a validated CHECK.
             include_owner: Pass through to `generate` to emit ALTER ... OWNER TO statements.
             include_grants: Pass through to `generate` to emit named-role GRANT / REVOKE.
             ignore_schemas: Pass through to `generate` to exclude these schemas from the diff.
@@ -86,15 +98,18 @@ class GenerateSetup:
         expected_sql = "\n".join([f"{cmd};" for cmd in diff])
 
         # Generate the migration SQL.
-        result = await agenerate(
+        generate = functools.partial(
+            agenerate,
             source=self.src.dsn,
             target=self.dst.dsn,
             index_concurrently=index_concurrently,
+            safe_not_null=safe_not_null,
             include_owner=include_owner,
             include_grants=include_grants,
             ignore_schemas=ignore_schemas,
             driver=self.driver,
         )
+        result = await generate()
 
         # Verify the result.
         assert result == expected_sql, f"\nExpected SQL:\n{expected_sql}\nGenerated SQL:\n{result}"
@@ -103,15 +118,7 @@ class GenerateSetup:
         # source should match target, so a second generate must produce nothing.
         if apply and result:
             await self.src.execute(result)
-            residual = await agenerate(
-                source=self.src.dsn,
-                target=self.dst.dsn,
-                index_concurrently=index_concurrently,
-                include_owner=include_owner,
-                include_grants=include_grants,
-                ignore_schemas=ignore_schemas,
-                driver=self.driver,
-            )
+            residual = await generate()
             assert residual == "", f"\nMigration did not make source match target.\nResidual diff:\n{residual}"
 
     async def assert_unsupported(

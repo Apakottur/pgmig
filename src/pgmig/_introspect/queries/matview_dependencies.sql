@@ -29,8 +29,8 @@ WHERE
     -- Both endpoints must be objects pgmig manages, or this guard falsely refuses a database
     -- over a dependency on something it never diffs. A monitoring matview over pg_stat_activity
     -- (system schema) or over pg_stat_statements (extension-owned view, in the user's own
-    -- public schema) is the common trigger. Exclude, on each side, what views.sql /
-    -- materialized_views.sql exclude from the model:
+    -- public schema) is the common trigger. Exclude, on each side, what views.sql
+    -- excludes from the model:
     --   [x] system-schema leg -- pg_catalog / information_schema (nspname)
     --   [x] namespace leg     -- object in an extension-owned schema (*_ns.oid)
     --   [x] self leg          -- the object itself is extension-owned (dependent/referenced.oid)

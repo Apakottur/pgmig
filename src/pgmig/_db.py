@@ -1,18 +1,16 @@
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Self, TypeVar, cast
+from typing import Any, Self, cast
 
 import asyncpg
 import psycopg
-from psycopg.rows import class_row
-from pydantic import BaseModel
+from psycopg import pq
+from psycopg.rows import dict_row
 
 from pgmig._drivers import DbDriver
 from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
-
-_RowT = TypeVar("_RowT", bound=BaseModel)
 
 
 class UniqueViolation(Exception):
@@ -132,50 +130,51 @@ class DbConnection:
                 return []
 
 
+# Opens the transaction all the introspection queries run in, executed in order before the first query.
+_SNAPSHOT_SETUP = (
+    # A read-only REPEATABLE READ transaction, so that all the reads are done on a single consistent snapshot.
+    "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+    # An empty search path, so that introspection is independent of the database's own search path.
+    # SET LOCAL scopes it to the transaction, so it also holds behind a transaction-pooling pgbouncer.
+    "SET LOCAL search_path = ''",
+)
+
+
 class DbReadOnlyConnection(DbConnection):
     """
     DB connection API for read-only operations.
+
+    The introspection queries run in a single snapshot transaction, opened by the first introspect() call and ended
+    (committed, or rolled back on error) when the connection context exits.
     """
 
-    @classmethod
-    @asynccontextmanager
-    async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncIterator[Self]:
+    async def introspect(self, queries: Sequence[str]) -> list[list[dict[str, Any]]]:
         """
-        Read-only connection context.
-        """
-        async with super().connect(db_conn_info=db_conn_info) as conn:
-            match conn.driver:
-                case DbDriver.PSYCOPG:
-                    # Force all subsequent transactions to be read-only.
-                    await conn.driver_conn.set_read_only(True)
-
-                    # Use REPEATABLE READ so all introspection reads a single snapshot of the database.
-                    await conn.driver_conn.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
-
-                # asyncpg, which has no setters for either and takes them as statements.
-                case _:
-                    await conn.driver_conn.execute("SET default_transaction_read_only = on")
-                    await conn.driver_conn.execute("SET default_transaction_isolation = 'repeatable read'")
-
-            # Use an empty search path so introspection is independent of the database's own search
-            # path: pg_get_*def()/format_type() then emit fully schema-qualified names.
-            await conn.execute("SET search_path = ''")
-
-            # Run the enclosed reads inside a single transaction to guarantee a consistent snapshot of the database.
-            async with conn.driver_conn.transaction():
-                yield conn
-
-    async def introspect(self, query: str, response_model: type[_RowT]) -> list[_RowT]:
-        """
-        Run an introspection query and parse each row into the given model.
+        Run the given introspection queries in a single round trip, returning the rows of each one.
         """
         match self.driver:
             case DbDriver.PSYCOPG:
-                async with self.driver_conn.cursor(row_factory=class_row(response_model)) as cur:
-                    await cur.execute(query)
-                    return cast("list[_RowT]", await cur.fetchall())
+                # On the first call, also open the snapshot transaction, in the same round trip as the queries.
+                statements = list(queries)
+                if self.driver_conn.info.transaction_status == pq.TransactionStatus.IDLE:
+                    statements = [*_SNAPSHOT_SETUP, *statements]
+
+                async with self.driver_conn.cursor(row_factory=dict_row) as cur:
+                    # Run all the statements as one multi-statement execute. Each statement produces its own result
+                    # set.
+                    await cur.execute("\n;\n".join(statements))
+
+                    # Fetch the rows of each query result set. The setup statements return no rows, so their sets
+                    # are skipped.
+                    return [await result.fetchall() async for result in cur.results() if result.description is not None]
 
             # asyncpg.
             case _:
-                records = await self.driver_conn.fetch(query)
-                return [response_model(**record) for record in records]
+                # On the first call, open the snapshot transaction. execute() uses the simple protocol, which allows
+                # multiple statements in one round trip.
+                if not self.driver_conn.is_in_transaction():
+                    await self.driver_conn.execute(";\n".join(_SNAPSHOT_SETUP))
+
+                # fetch() uses the extended protocol, which returns rows but runs a single statement, so each query is
+                # its own round trip.
+                return [[dict(record) for record in await self.driver_conn.fetch(query)] for query in queries]

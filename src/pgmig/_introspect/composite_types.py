@@ -1,10 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import (
-    IntrospectionQuery,
-    IntrospectionRow,
-    IntrospectionRowWithSchema,
-    run_introspection_query,
-)
+from pgmig._introspect._core import Loader
+from pgmig._introspect._rows import IntrospectionRow, IntrospectionRowWithSchema
 from pgmig._models import CompositeField, CompositeType
 
 
@@ -20,12 +16,18 @@ class _CompositeTypeRow(IntrospectionRowWithSchema):
     fields: list[_CompositeFieldRow]
 
 
-async def load() -> None:
+class CompositeTypesLoader(Loader[_CompositeTypeRow]):
     """
     Standalone composite types (user types only; extension-owned ones are excluded).
     """
-    for row in await run_introspection_query(IntrospectionQuery.COMPOSITE_TYPES, _CompositeTypeRow):
-        fields = [CompositeField(name=field.name, type=field.type) for field in row.fields]
-        context.db_introspection_result.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = (
-            CompositeType(name=row.type_name, fields=fields, comment=row.type_comment, owner=row.type_owner)
-        )
+
+    file_name = "composite_types.sql"
+    model = _CompositeTypeRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_CompositeTypeRow]) -> None:
+        for row in rows:
+            fields = [CompositeField(name=field.name, type=field.type) for field in row.fields]
+            context().db_introspection_result.schema_by_name[row.schema_name].composite_type_by_name[row.type_name] = (
+                CompositeType(name=row.type_name, fields=fields, comment=row.type_comment, owner=row.type_owner)
+            )

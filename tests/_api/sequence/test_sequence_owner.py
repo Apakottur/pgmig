@@ -15,7 +15,7 @@ async def test_owned_sequence_create(gen_setup: GenerateSetup) -> None:
             "ALTER SEQUENCE s OWNED BY t.x",
         ],
         diff=[
-            'CREATE SEQUENCE "public"."s" AS integer INCREMENT BY 1 MINVALUE 1 MAXVALUE 100 START WITH 1 CACHE 1',
+            'CREATE SEQUENCE "public"."s" AS integer MAXVALUE 100',
             'CREATE TABLE "public"."t" ("x" integer)',
             'ALTER SEQUENCE "public"."s" OWNED BY "public"."t"."x"',
         ],
@@ -161,8 +161,7 @@ async def test_serial_backing_sequence_still_excluded(gen_setup: GenerateSetup) 
             "ALTER SEQUENCE s OWNED BY person.id",
         ],
         diff=[
-            'CREATE SEQUENCE "public"."s" AS bigint INCREMENT BY 1 MINVALUE 1 '
-            "MAXVALUE 9223372036854775807 START WITH 1 CACHE 1",
+            'CREATE SEQUENCE "public"."s"',
             'CREATE TABLE "public"."person" ("id" serial)',
             'ALTER SEQUENCE "public"."s" OWNED BY "public"."person"."id"',
         ],

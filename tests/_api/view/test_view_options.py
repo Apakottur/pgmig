@@ -61,11 +61,9 @@ async def test_view_options_order_independent(gen_setup: GenerateSetup) -> None:
 async def test_view_check_option_added(gen_setup: GenerateSetup) -> None:
     """
     WITH CHECK OPTION is stored as the check_option reloption and emitted in the WITH clause.
-    Needs an automatically-updatable view (a single table). pg_get_viewdef qualifies the
-    column with the table name on Postgres 14-15.
+    Needs an automatically-updatable view (a single table).
     """
-    column = "t.x" if gen_setup.pg_major in (14, 15) else "x"
-    body = f"SELECT {column}\n   FROM public.t"
+    body = gen_setup.select_body("x", "t", "public.t")
     await gen_setup.assert_diff(
         both=["CREATE TABLE t (x int)"],
         src=["CREATE VIEW active AS SELECT x FROM t"],

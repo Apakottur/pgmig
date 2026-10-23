@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import Loader
+from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Table, Trigger, View
 
 
@@ -13,7 +14,7 @@ class _TriggerRow(IntrospectionRowWithSchema):
     trigger_comment: str | None
 
 
-async def load() -> None:
+class TriggersLoader(Loader[_TriggerRow]):
     """
     Triggers (user triggers only; internal RI/constraint-backing triggers are excluded).
 
@@ -21,17 +22,23 @@ async def load() -> None:
     row to the matching mapping so both carry their triggers uniformly. This runs after both
     tables and views are loaded so both lookups resolve.
     """
-    for trigger_row in await run_introspection_query(IntrospectionQuery.TRIGGERS, _TriggerRow):
-        schema = context.db_introspection_result.schema_by_name[trigger_row.schema_name]
-        owner: Table | View
-        if trigger_row.relkind == "v":
-            owner = schema.view_by_name[trigger_row.table_name]
-        else:
-            owner = schema.table_by_name[trigger_row.table_name]
-        owner.trigger_by_name[trigger_row.trigger_name] = Trigger(
-            name=trigger_row.trigger_name,
-            definition=trigger_row.trigger_def,
-            canonical=trigger_row.trigger_canonical,
-            enabled=trigger_row.trigger_enabled,
-            comment=trigger_row.trigger_comment,
-        )
+
+    file_name = "triggers.sql"
+    model = _TriggerRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_TriggerRow]) -> None:
+        for trigger_row in rows:
+            schema = context().db_introspection_result.schema_by_name[trigger_row.schema_name]
+            owner: Table | View
+            if trigger_row.relkind == "v":
+                owner = schema.view_by_name[trigger_row.table_name]
+            else:
+                owner = schema.table_by_name[trigger_row.table_name]
+            owner.trigger_by_name[trigger_row.trigger_name] = Trigger(
+                name=trigger_row.trigger_name,
+                definition=trigger_row.trigger_def,
+                canonical=trigger_row.trigger_canonical,
+                enabled=trigger_row.trigger_enabled,
+                comment=trigger_row.trigger_comment,
+            )

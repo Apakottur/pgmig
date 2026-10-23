@@ -164,10 +164,10 @@ async def test_ignore_schema_still_guards_invalid_index(gen_setup: GenerateSetup
 
 async def test_ignore_schema_excludes_matview_dependency_edges(gen_setup: GenerateSetup) -> None:
     """
-    A matview reading another matview records a dependency edge in matview_dependencies.load;
+    A matview reading another matview records a dependency edge in matview_dependencies.check;
     when both sit in the ignored schema the edge is dropped, so no ignored matview leaks into the
     dependency map (its rows carry dependent_schema/referenced_schema, not the shared filter's
-    schema_name, so load skips them itself).
+    schema_name, so check skips them itself).
     """
     await gen_setup.assert_diff(
         src=[],

@@ -6,6 +6,11 @@ on:
 
   workflow_dispatch:
 
+# A new push to a PR supersedes its in-flight run; manual runs are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   linters:
     name: Linters
@@ -43,7 +48,7 @@ jobs:
         run: mypy --config-file linters/mypy.toml .
 
       - name: Run ty
-        run: ty check --project . --config-file linters/ty.toml
+        run: ty check --project . --config-file linters/ty.toml --python-version ${{ matrix.python-version }}
 
   unit-tests:
     strategy:
@@ -80,8 +85,15 @@ jobs:
           - python-version: "3.14"
             pg-version: "18"
             driver: "asyncpg"
+          # The oldest dependency versions allowed by pyproject.toml.
+          - python-version: "3.11"
+            pg-version: "18"
+            driver: "psycopg"
+            resolution: lowest-direct
 
-    name: Unit Tests - Python ${{ matrix.python-version }} - Postgres ${{ matrix.pg-version }} - ${{ matrix.driver }}
+    name: >-
+      Unit Tests - Python ${{ matrix.python-version }} - Postgres ${{ matrix.pg-version }}
+      - ${{ matrix.driver }} ${{ matrix.resolution }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -89,6 +101,7 @@ jobs:
       - uses: ./.github/workflows/util/setup_python
         with:
           python-version: ${{ matrix.python-version }}
+          resolution: ${{ matrix.resolution }}
 
       - name: Run unit tests
         env:

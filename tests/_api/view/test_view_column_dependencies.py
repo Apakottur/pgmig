@@ -1,19 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def _view_body(gen_setup: GenerateSetup, column: str, table: str, from_ref: str) -> str:
-    """
-    The recreated view body as pg_get_viewdef renders it, which varies by Postgres major:
-    14/15 qualify the column with the table name, 16+ do not.
-    """
-    match gen_setup.pg_major:
-        case 14 | 15:
-            rendered = f"{table}.{column}"
-        case _:
-            rendered = column
-    return f"SELECT {rendered}\n   FROM {from_ref}"
-
-
 async def test_view_over_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None:
     """
     A view reading a column whose type changes is dropped before the ALTER COLUMN TYPE and
@@ -27,7 +14,7 @@ async def test_view_over_retyped_column_is_recreated(gen_setup: GenerateSetup) -
         diff=[
             'DROP VIEW "public"."v"',
             'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
-            f'CREATE VIEW "public"."v" AS {_view_body(gen_setup, "val", "t", "public.t")}',
+            f'CREATE VIEW "public"."v" AS {gen_setup.select_body("val", "t", "public.t")}',
         ],
     )
 
@@ -53,8 +40,8 @@ async def test_view_on_view_over_retyped_column_cascades(gen_setup: GenerateSetu
             'DROP VIEW "public"."derived"',
             'DROP VIEW "public"."base"',
             'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
-            f'CREATE VIEW "public"."base" AS {_view_body(gen_setup, "val", "t", "public.t")}',
-            f'CREATE VIEW "public"."derived" AS {_view_body(gen_setup, "val", "base", "public.base")}',
+            f'CREATE VIEW "public"."base" AS {gen_setup.select_body("val", "t", "public.t")}',
+            f'CREATE VIEW "public"."derived" AS {gen_setup.select_body("val", "base", "public.base")}',
         ],
     )
 
@@ -93,6 +80,6 @@ async def test_view_over_retyped_column_cross_schema(gen_setup: GenerateSetup) -
         diff=[
             'DROP VIEW "api"."v"',
             'ALTER TABLE "data"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
-            f'CREATE VIEW "api"."v" AS {_view_body(gen_setup, "val", "t", "data.t")}',
+            f'CREATE VIEW "api"."v" AS {gen_setup.select_body("val", "t", "data.t")}',
         ],
     )

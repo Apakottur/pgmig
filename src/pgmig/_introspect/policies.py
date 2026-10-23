@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRowWithSchema, run_introspection_query
+from pgmig._introspect._core import Loader
+from pgmig._introspect._rows import IntrospectionRowWithSchema
 from pgmig._models import Policy
 
 
@@ -14,19 +15,25 @@ class _PolicyRow(IntrospectionRowWithSchema):
     policy_comment: str | None
 
 
-async def load() -> None:
+class PoliciesLoader(Loader[_PolicyRow]):
     """
     Row-level security policies (pg_policy), attached to their owning table. Runs after tables
     are loaded so the owner lookup resolves.
     """
-    for row in await run_introspection_query(IntrospectionQuery.POLICIES, _PolicyRow):
-        table = context.db_introspection_result.schema_by_name[row.schema_name].table_by_name[row.table_name]
-        table.policy_by_name[row.policy_name] = Policy(
-            name=row.policy_name,
-            command=row.policy_command,
-            permissive=row.policy_permissive,
-            roles=row.policy_roles,
-            using=row.policy_using,
-            check=row.policy_check,
-            comment=row.policy_comment,
-        )
+
+    file_name = "policies.sql"
+    model = _PolicyRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_PolicyRow]) -> None:
+        for row in rows:
+            table = context().db_introspection_result.schema_by_name[row.schema_name].table_by_name[row.table_name]
+            table.policy_by_name[row.policy_name] = Policy(
+                name=row.policy_name,
+                command=row.policy_command,
+                permissive=row.policy_permissive,
+                roles=row.policy_roles,
+                using=row.policy_using,
+                check=row.policy_check,
+                comment=row.policy_comment,
+            )

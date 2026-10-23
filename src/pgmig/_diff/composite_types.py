@@ -4,13 +4,13 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    collect_relations,
     ctx_iter_object_pairs,
     diff_comment_statements,
     owner_statements,
     topological_drop_order,
     topological_sort,
 )
+from pgmig._diff._relations import collect_relations
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import CompositeTypeKey
 from pgmig._models import CompositeType
@@ -72,7 +72,7 @@ def generate() -> Iterator[Statement]:
     before, the type it references. Creates are topologically ordered dependencies-first over
     the target graph; drops are ordered dependents-first (the reverse) over the source graph.
     """
-    source, target = context.source, context.target
+    source, target = context().source, context().target
     src_types = collect_relations(source, lambda schema: schema.composite_type_by_name, CompositeTypeKey)
     dst_types = collect_relations(target, lambda schema: schema.composite_type_by_name, CompositeTypeKey)
 

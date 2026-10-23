@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar
 
 from pgmig._diff._context import context
 from pgmig._keys import RelationKey
-from pgmig._models import DbIntrospectionResult, Schema, Table, View
+from pgmig._models import Column, Schema, Table, View
 from pgmig._sql import comment_on, ident, qualified
 
 if TYPE_CHECKING:
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 _Renamable = TypeVar("_Renamable")
 _ObjT = TypeVar("_ObjT")
-_KeyT = TypeVar("_KeyT")
 _SortableT = TypeVar("_SortableT", bound="SupportsRichComparison")
 
 
@@ -82,7 +81,7 @@ class _Commented(Protocol):
 _CommentedT = TypeVar("_CommentedT", bound=_Commented)
 
 
-def _diff_comments(
+def diff_comments(
     src: Mapping[str, _CommentedT],
     dst: Mapping[str, _CommentedT],
     *,
@@ -130,17 +129,12 @@ def diff_single_comment(
     render: Callable[[_CommentedT], str],
 ) -> list[str]:
     """
-    Single-object counterpart to _diff_comments: render a COMMENT ON for `dst_obj` when
+    Single-object counterpart to diff_comments: render a COMMENT ON for `dst_obj` when
     its comment differs from `src_obj` (an absent source object counts as no comment),
-    else nothing. Wraps the pair in a one-entry mapping and defers to _diff_comments so
-    the "absent source = None" rule lives in exactly one place, rather than being
-    hand-copied as `(src.comment if src else None) != dst.comment` per object kind.
+    else nothing.
     """
-    return _diff_comments(
-        {} if src_obj is None else {"": src_obj},
-        {"": dst_obj},
-        render=lambda _name, obj: render(obj),
-    )
+    src_comment = src_obj.comment if src_obj is not None else None
+    return [render(dst_obj)] if src_comment != dst_obj.comment else []
 
 
 def diff_comment_statements(
@@ -156,9 +150,9 @@ def diff_comment_statements(
     COMMENT ON <kind> for every target object (identified by its schema-qualified name)
     whose comment differs from source. The render shared by every schema-qualified object
     kind (types, domains, sequences, indexes, views, ...), gathered here so the per-kind
-    generators name their `kind` rather than each restating the _diff_comments call.
+    generators name their `kind` rather than each restating the diff_comments call.
     """
-    return _diff_comments(
+    return diff_comments(
         src,
         dst,
         render=lambda name, obj: comment_on(kind, qualified(schema_name, name), obj.comment),
@@ -182,7 +176,7 @@ def diff_child_comment_statements(
     (constraints, triggers) whose comment differs from source.
     """
     table = qualified(schema_name, table_name)
-    return _diff_comments(
+    return diff_comments(
         src,
         dst,
         render=lambda name, obj: comment_on(kind, f"{ident(name)} ON {table}", obj.comment),
@@ -205,7 +199,7 @@ def owner_statements(kind: str, qualified_name: str, src_owner: str | None, dst_
 
     Ownership reconciliation is off by default; it runs only with --include-owner.
     """
-    if not context.include_owner or src_owner is None or src_owner == dst_owner:
+    if not context().include_owner or src_owner is None or src_owner == dst_owner:
         return []
     return [f"ALTER {kind} {qualified_name} OWNER TO {ident(dst_owner)};"]
 
@@ -228,6 +222,8 @@ class Phase(Enum):
     EXTENSION_CREATE = auto()  # Before tables/types that may use what the extension provides.
     TYPE_CREATE = auto()  # Before tables (a column may be of the type) and its ADD VALUE alters.
     SEQUENCE_CREATE = auto()  # Before tables (a column default may reference a sequence).
+    # Before TABLE: a constraint a column removal would block rather than cascade away.
+    CONSTRAINT_DROP_EARLY = auto()
     TABLE = auto()
     SEQUENCE_OWNED_BY = auto()  # After tables: OWNED BY needs its target table/column to exist.
     INDEX = auto()
@@ -278,11 +274,11 @@ def ctx_iter_schema_pairs() -> Iterator[tuple[str, Schema | None, Schema | None]
     Yield (schema_name, source_schema, target_schema) for every schema across both
     databases, sorted by name. Either schema is None when absent on that side.
     """
-    for schema_name in sorted(context.source.schema_by_name.keys() | context.target.schema_by_name.keys()):
+    for schema_name in sorted(context().source.schema_by_name.keys() | context().target.schema_by_name.keys()):
         yield (
             schema_name,
-            context.source.schema_by_name.get(schema_name),
-            context.target.schema_by_name.get(schema_name),
+            context().source.schema_by_name.get(schema_name),
+            context().target.schema_by_name.get(schema_name),
         )
 
 
@@ -290,13 +286,17 @@ def ctx_iter_table_pairs() -> Iterator[tuple[str, str, Table | None, Table | Non
     """
     Yield (schema_name, table_name, source_table, target_table) for every table across
     both databases, sorted by schema then table. Either table is None when absent on
-    that side.
+    that side. A repartitioned source table (see context().repartitioned_tables) counts as
+    absent, so every generator re-emits it as newly created.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_tables = src_schema.table_by_name if src_schema else {}
-        dst_tables = dst_schema.table_by_name if dst_schema else {}
-        for table_name in sorted(src_tables.keys() | dst_tables.keys()):
-            yield schema_name, table_name, src_tables.get(table_name), dst_tables.get(table_name)
+    repartitioned = context().repartitioned_tables
+    for schema_name, _src_tables, _dst_tables, pairs in ctx_iter_object_pairs(lambda schema: schema.table_by_name):
+        for table_name, src_table, dst_table in pairs:
+            if RelationKey(schema_name, table_name) not in repartitioned:
+                yield schema_name, table_name, src_table, dst_table
+            elif dst_table is not None:
+                yield schema_name, table_name, None, dst_table
+            # Else gone from the target: it cascades away with its repartitioned ancestor's DROP.
 
 
 class _HasDependencyColumns(Protocol):
@@ -311,25 +311,55 @@ class _HasDependencyColumns(Protocol):
 _DependentT = TypeVar("_DependentT", bound=_HasDependencyColumns)
 
 
-def without_column_drop_cascades(
-    objects: Mapping[str, _DependentT], src_table: Table | None, dst_table: Table
+def is_stored_column_rebuild(src_column: Column, dst_column: Column) -> bool:
+    """
+    Whether a column present on both sides is rebuilt with DROP COLUMN + ADD COLUMN: a stored
+    generated column whose generation expression changes. Its data is derived, so the rebuild
+    is non-destructive and portable to pre-PG18, which has no in-place expression ALTER -- but
+    the column really does go away and come back, taking its dependents with it.
+    """
+    return (
+        src_column.generated == "s"
+        and dst_column.generated == "s"
+        and src_column.generation_expression != dst_column.generation_expression
+    )
+
+
+def removed_columns(src_table: Table | None, dst_table: Table) -> frozenset[str]:
+    """
+    The columns of the source table that do not survive this run's TABLE phase: dropped
+    outright, or rebuilt via DROP COLUMN + ADD COLUMN. Both take every constraint and index
+    that depends on the column with them.
+    """
+    if src_table is None:
+        return frozenset()
+    dst_columns = dst_table.column_by_name
+    return frozenset(
+        name
+        for name, src_column in src_table.column_by_name.items()
+        if name not in dst_columns or is_stored_column_rebuild(src_column, dst_columns[name])
+    )
+
+
+def without_column_removal_cascades(
+    objects: Mapping[str, _DependentT], removed: frozenset[str]
 ) -> dict[str, _DependentT]:
     """
     Remove from a source-side map of table-owned objects (constraints, indexes) every entry
-    Postgres drops for us as a side effect of this run's column drops.
+    Postgres drops for us as a side effect of this run's column removals.
 
     Dropping a column drops every constraint and index that depends on it, and both of those
     phases run after the TABLE phase that emits DROP COLUMN -- so an explicit DROP CONSTRAINT
     / DROP INDEX for one of them would hit an object that is already gone and fail. Treating
     such an object as absent from the source is right for the whole diff, not just the drop:
     one that is also absent from the target needs no statement at all, and one that the
-    target still declares under the same name is correctly re-added rather than renamed.
+    target still declares under the same name is correctly re-created -- which is what makes a
+    rebuilt column's constraints and indexes come back rather than silently disappear.
 
     This is the column-granular form of the dropped-table skip each generator already makes,
     and the mirror of the owned-sequence skip in the sequence diff.
     """
-    dropped = src_table.column_by_name.keys() - dst_table.column_by_name.keys() if src_table else set()
-    return {name: obj for name, obj in objects.items() if obj.dependency_columns.isdisjoint(dropped)}
+    return {name: obj for name, obj in objects.items() if obj.dependency_columns.isdisjoint(removed)}
 
 
 def ctx_iter_view_pairs() -> Iterator[tuple[str, str, View | None, View | None]]:
@@ -338,11 +368,9 @@ def ctx_iter_view_pairs() -> Iterator[tuple[str, str, View | None, View | None]]
     databases, sorted by schema then view. Either view is None when absent on that side.
     The view counterpart of ctx_iter_table_pairs, used to diff view-owned INSTEAD OF triggers.
     """
-    for schema_name, src_schema, dst_schema in ctx_iter_schema_pairs():
-        src_views = src_schema.view_by_name if src_schema else {}
-        dst_views = dst_schema.view_by_name if dst_schema else {}
-        for view_name in sorted(src_views.keys() | dst_views.keys()):
-            yield schema_name, view_name, src_views.get(view_name), dst_views.get(view_name)
+    for schema_name, _src_views, _dst_views, pairs in ctx_iter_object_pairs(lambda schema: schema.view_by_name):
+        for view_name, src_view, dst_view in pairs:
+            yield schema_name, view_name, src_view, dst_view
 
 
 def ctx_iter_object_pairs(
@@ -362,107 +390,6 @@ def ctx_iter_object_pairs(
         dst_objs: dict[str, _ObjT] = dict(select(dst_schema)) if dst_schema else {}
         pairs = [(name, src_objs.get(name), dst_objs.get(name)) for name in sorted(src_objs.keys() | dst_objs.keys())]
         yield schema_name, src_objs, dst_objs, pairs
-
-
-def collect_relations(
-    db_introspection_result: DbIntrospectionResult,
-    select: Callable[[Schema], Mapping[str, _ObjT]],
-    key_factory: Callable[[str, str], _KeyT],
-) -> dict[_KeyT, _ObjT]:
-    """
-    Flatten every schema's objects (as picked by `select`) into one (schema, name) -> object
-    map, keyed by `key_factory(schema_name, name)` (RelationKey for views/matviews,
-    CompositeTypeKey for composite types). Global flattening is needed for object kinds whose
-    create/drop order crosses schemas, so the whole set orders as one.
-    """
-    objects: dict[_KeyT, _ObjT] = {}
-    for schema_name, schema in db_introspection_result.schema_by_name.items():
-        for name, obj in select(schema).items():
-            objects[key_factory(schema_name, name)] = obj
-    return objects
-
-
-def dependents_closure(seeds: set[RelationKey], edges: Mapping[RelationKey, set[RelationKey]]) -> set[RelationKey]:
-    """
-    Every relation that transitively reads any relation in `seeds`, plus the seeds themselves.
-    Used for the recreate cascade: recreating a relation forces every relation that reads it
-    (directly or through a chain) to be recreated too. Edges are dependent -> the set it reads.
-    """
-    reverse: dict[RelationKey, set[RelationKey]] = {}
-    for node, node_deps in edges.items():
-        for dep in node_deps:
-            reverse.setdefault(dep, set()).add(node)
-
-    result = set(seeds)
-    stack = list(seeds)
-    while stack:
-        current = stack.pop()
-        for dependent in reverse.get(current, set()):
-            if dependent not in result:
-                result.add(dependent)
-                stack.append(dependent)
-    return result
-
-
-def recreated_view_keys() -> set[RelationKey]:
-    """
-    Plain views the migration drops and recreates: a changed definition or option set (CREATE OR
-    REPLACE VIEW cannot reshape columns, and options live outside the definition), or reading a
-    table column whose type changes -- plus every view that transitively reads one of those
-    (Postgres refuses to drop a view another view still reads).
-
-    Shared by the view diff and the matview recreate cascade: a matview reading a recreated view
-    must itself be recreated.
-    """
-    source, target = context.source, context.target
-    src_views = collect_relations(source, lambda schema: schema.view_by_name, RelationKey)
-    dst_views = collect_relations(target, lambda schema: schema.view_by_name, RelationKey)
-    shared = src_views.keys() & dst_views.keys()
-    changed = {
-        key
-        for key in shared
-        if src_views[key].definition != dst_views[key].definition or src_views[key].options != dst_views[key].options
-    }
-    return dependents_closure(changed | context.retyped_column_readers, source.view_dependencies) & shared
-
-
-def recreated_matview_keys() -> set[RelationKey]:
-    """
-    Materialized views present on both sides that the migration drops and recreates: the
-    definition changed (there is no CREATE OR REPLACE MATERIALIZED VIEW), the matview reads a
-    table column whose type changes (Postgres refuses ALTER COLUMN ... TYPE while the column is
-    read, and the type change leaves the definition unchanged, so only the column edge catches
-    it), or the matview reads a view or matview that is itself recreated -- propagated to a fixed
-    point over matview-on-matview edges.
-
-    The single source of truth for the recreate decision, consumed by both the matview diff
-    (which drops and recreates) and the matview-index differ (a recreated matview loses its
-    indexes, so every target index is created fresh). A matview present on only one side is a
-    plain create or drop, not a recreate, and is absent here.
-    """
-    source, target = context.source, context.target
-    src_matviews = collect_relations(source, lambda schema: schema.materialized_view_by_name, RelationKey)
-    dst_matviews = collect_relations(target, lambda schema: schema.materialized_view_by_name, RelationKey)
-    both = src_matviews.keys() & dst_matviews.keys()
-
-    column_readers = context.retyped_column_readers
-    recreated_views = recreated_view_keys()
-    edges = source.matview_dependencies
-
-    # Seed: changed definition, retyped-column reader, or a matview reading a recreated plain view
-    # (edges to plain views intersect recreated_views; edges to matviews intersect below).
-    recreated = {
-        key
-        for key in both
-        if src_matviews[key].definition != dst_matviews[key].definition
-        or key in column_readers
-        or edges.get(key, set()) & recreated_views
-    }
-    # Propagate to a fixed point over matview-on-matview edges: a matview reading a recreated
-    # matview must itself be recreated.
-    while added := {key for key in both if key not in recreated and edges.get(key, set()) & recreated}:
-        recreated |= added
-    return recreated
 
 
 class RenameDiff(NamedTuple):

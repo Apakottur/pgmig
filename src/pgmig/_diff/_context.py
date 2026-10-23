@@ -4,11 +4,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property
 
+from pgmig._diff._relations import recreated_matview_keys, recreated_view_keys
+from pgmig._diff._repartition import get_repartitioned_tables
 from pgmig._keys import ColumnKey, RelationKey
 from pgmig._models import DbIntrospectionResult
 
 
-def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrospectionResult) -> set[RelationKey]:
+def _get_retyped_column_readers(
+    source: DbIntrospectionResult, target: DbIntrospectionResult, repartitioned: set[RelationKey]
+) -> set[RelationKey]:
     """
     Views/matviews that read (in the source) a table column whose type changes between source
     and target. Such a reader must be dropped and recreated around the ALTER COLUMN ... TYPE:
@@ -17,19 +21,23 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
     path never catches it. Only the source view-on-column edges catch it.
 
     Computed lazily on first access and cached for the diff scope (see
-    _ContextData.retyped_column_readers), shared by the view diff, the matview diff, and the
-    matview-index differ, so the O(tables x columns) scan runs at most once -- and never at all
-    for a diff with no views.
+    ContextData.retyped_column_readers), shared by the view and matview recreate sets, so the
+    O(tables x columns) scan runs at most once -- and never at all for a diff with no views.
 
     Source-side identity (a column read by a source view exists in the source). A serial change
     keeps the integer `type`, so it does not surface here; that is intentional -- a serial change
     is unsupported and raised by the table diff before applying.
+
+    A repartitioned table (dropped and recreated from scratch, see
+    ContextData.repartitioned_tables) has no source columns to retype, so it is skipped.
     """
     retyped_columns: set[ColumnKey] = set()
     for schema_name in source.schema_by_name.keys() & target.schema_by_name.keys():
         src_tables = source.schema_by_name[schema_name].table_by_name
         dst_tables = target.schema_by_name[schema_name].table_by_name
         for table_name in src_tables.keys() & dst_tables.keys():
+            if RelationKey(schema_name, table_name) in repartitioned:
+                continue
             dst_columns = dst_tables[table_name].column_by_name
             for src_column in src_tables[table_name].columns:
                 dst_column = dst_columns.get(src_column.name)
@@ -39,7 +47,7 @@ def _get_retyped_column_readers(source: DbIntrospectionResult, target: DbIntrosp
 
 
 @dataclass(frozen=True)
-class _ContextData:
+class ContextData:
     """
     Context data for the current diff generation.
     """
@@ -53,6 +61,11 @@ class _ContextData:
     # run inside a transaction block.
     index_concurrently: bool
 
+    # Whether to emit SET NOT NULL on an existing column through a NOT VALID CHECK (col IS NOT NULL) that is
+    # validated, then dropped once the column is NOT NULL. The validated CHECK lets SET NOT NULL skip its
+    # full-table scan, so the ACCESS EXCLUSIVE lock is held only briefly.
+    safe_not_null: bool
+
     # Names of extensions whose version mismatch is ignored: no ALTER EXTENSION ... UPDATE TO
     # is emitted for them. Empty (default) ignores none.
     ignore_extension_version: Sequence[str]
@@ -65,72 +78,40 @@ class _ContextData:
     include_grants: bool
 
     @cached_property
+    def repartitioned_tables(self) -> set[RelationKey]:
+        return get_repartitioned_tables(self.source, self.target)
+
+    @cached_property
     def retyped_column_readers(self) -> set[RelationKey]:
-        return _get_retyped_column_readers(self.source, self.target)
+        return _get_retyped_column_readers(self.source, self.target, self.repartitioned_tables)
+
+    @cached_property
+    def recreated_view_keys(self) -> set[RelationKey]:
+        return recreated_view_keys(self.source, self.target, self.retyped_column_readers)
+
+    @cached_property
+    def recreated_matview_keys(self) -> set[RelationKey]:
+        return recreated_matview_keys(self.source, self.target, self.retyped_column_readers, self.recreated_view_keys)
 
 
 # Context of the current diff generation.
-_context: ContextVar[_ContextData] = ContextVar("pgmig_context")
+_context: ContextVar[ContextData] = ContextVar("pgmig_context")
 
 
-class _Context:
+@contextmanager
+def context_scope(data: ContextData) -> Iterator[None]:
     """
-    Singleton class for the diff context.
+    Run the enclosed diff generation with the given context data.
     """
-
-    @contextmanager
-    def context_scope(
-        self,
-        *,
-        source: DbIntrospectionResult,
-        target: DbIntrospectionResult,
-        index_concurrently: bool,
-        ignore_extension_version: Sequence[str],
-        include_owner: bool,
-        include_grants: bool,
-    ) -> Iterator[None]:
-        token = _context.set(
-            _ContextData(
-                source=source,
-                target=target,
-                index_concurrently=index_concurrently,
-                ignore_extension_version=ignore_extension_version,
-                include_owner=include_owner,
-                include_grants=include_grants,
-            )
-        )
-        try:
-            yield
-        finally:
-            _context.reset(token)
-
-    @property
-    def source(self) -> DbIntrospectionResult:
-        return _context.get().source
-
-    @property
-    def target(self) -> DbIntrospectionResult:
-        return _context.get().target
-
-    @property
-    def index_concurrently(self) -> bool:
-        return _context.get().index_concurrently
-
-    @property
-    def ignore_extension_version(self) -> Sequence[str]:
-        return _context.get().ignore_extension_version
-
-    @property
-    def include_owner(self) -> bool:
-        return _context.get().include_owner
-
-    @property
-    def include_grants(self) -> bool:
-        return _context.get().include_grants
-
-    @property
-    def retyped_column_readers(self) -> set[RelationKey]:
-        return _context.get().retyped_column_readers
+    token = _context.set(data)
+    try:
+        yield
+    finally:
+        _context.reset(token)
 
 
-context = _Context()
+def context() -> ContextData:
+    """
+    The context data of the current diff scope.
+    """
+    return _context.get()

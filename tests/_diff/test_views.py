@@ -1,4 +1,4 @@
-from pgmig._diff._core import dependents_closure
+from pgmig._diff._relations import dependents_closure
 from pgmig._keys import RelationKey
 
 A = RelationKey("public", "a")

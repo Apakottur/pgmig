@@ -1,19 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def _matview_body(gen_setup: GenerateSetup, column: str, table: str, from_ref: str) -> str:
-    """
-    The recreated matview body as pg_get_viewdef renders it, which varies by Postgres major:
-    14/15 qualify the column with the table name, 16+ do not.
-    """
-    match gen_setup.pg_major:
-        case 14 | 15:
-            rendered = f"{table}.{column}"
-        case _:
-            rendered = column
-    return f"SELECT {rendered}\n   FROM {from_ref}"
-
-
 async def test_materialized_view_over_whole_row_retyped_column_is_recreated(gen_setup: GenerateSetup) -> None:
     """
     A materialized view reading a whole-row reference (SELECT t FROM t) physically stores the
@@ -46,7 +33,7 @@ async def test_materialized_view_over_retyped_column_is_recreated(gen_setup: Gen
         diff=[
             'DROP MATERIALIZED VIEW "public"."m"',
             'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
-            f'CREATE MATERIALIZED VIEW "public"."m" AS {_matview_body(gen_setup, "val", "t", "public.t")} WITH NO DATA',
+            f'CREATE MATERIALIZED VIEW "public"."m" AS {gen_setup.select_body("val", "t", "public.t")} WITH NO DATA',
         ],
     )
 

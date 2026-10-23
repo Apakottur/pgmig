@@ -1,5 +1,6 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import IntrospectionQuery, IntrospectionRow, run_introspection_query
+from pgmig._introspect._core import Loader
+from pgmig._introspect._rows import IntrospectionRow
 from pgmig._keys import CompositeTypeKey
 
 
@@ -10,16 +11,20 @@ class _CompositeTypeDependencyRow(IntrospectionRow):
     referenced_type: str
 
 
-async def load() -> None:
+class CompositeTypeDependenciesLoader(Loader[_CompositeTypeDependencyRow]):
     """
     Composite-on-composite edges: record, for each standalone composite type with a field of
     another composite type, the set of composite types it depends on. The composite-type diff
     uses these to topologically order CREATE (dependencies first) and DROP (dependents first)
     within the type phases.
     """
-    for row in await run_introspection_query(
-        IntrospectionQuery.COMPOSITE_TYPE_DEPENDENCIES, _CompositeTypeDependencyRow
-    ):
-        dependent = CompositeTypeKey(row.dependent_schema, row.dependent_type)
-        referenced = CompositeTypeKey(row.referenced_schema, row.referenced_type)
-        context.db_introspection_result.composite_type_dependencies.setdefault(dependent, set()).add(referenced)
+
+    file_name = "composite_type_dependencies.sql"
+    model = _CompositeTypeDependencyRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_CompositeTypeDependencyRow]) -> None:
+        for row in rows:
+            dependent = CompositeTypeKey(row.dependent_schema, row.dependent_type)
+            referenced = CompositeTypeKey(row.referenced_schema, row.referenced_type)
+            context().db_introspection_result.composite_type_dependencies.setdefault(dependent, set()).add(referenced)

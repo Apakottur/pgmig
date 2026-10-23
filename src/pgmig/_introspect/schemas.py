@@ -1,45 +1,29 @@
 from pgmig._introspect._context import context
-from pgmig._introspect._core import (
-    IntrospectionQuery,
-    IntrospectionRow,
-    IntrospectionRowWithSchema,
-    run_introspection_query,
-)
-from pgmig._models import Grant, Schema
-
-
-class _GrantRow(IntrospectionRow):
-    grantee: str
-    privilege: str
-    grantable: bool
+from pgmig._introspect._core import Loader
+from pgmig._introspect._rows import GrantRow, IntrospectionRowWithSchema, grants
+from pgmig._models import Schema
 
 
 class _SchemaRow(IntrospectionRowWithSchema):
     schema_comment: str | None
     schema_owner: str
-    schema_grants: list[_GrantRow]
+    schema_grants: list[GrantRow]
 
 
-async def load() -> None:
+class SchemasLoader(Loader[_SchemaRow]):
     """
     Schemas (user namespaces, excluding system and extension-owned ones).
     """
-    for schema_row in await run_introspection_query(IntrospectionQuery.SCHEMAS, _SchemaRow):
-        context.db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
-            name=schema_row.schema_name,
-            comment=schema_row.schema_comment,
-            owner=schema_row.schema_owner,
-            grants=frozenset(
-                Grant(grantee=grant.grantee, privilege=grant.privilege, grantable=grant.grantable)
-                for grant in schema_row.schema_grants
-            ),
-            table_by_name={},
-            sequence_by_name={},
-            function_by_signature={},
-            enum_by_name={},
-            view_by_name={},
-            materialized_view_by_name={},
-            domain_by_name={},
-            composite_type_by_name={},
-            range_type_by_name={},
-        )
+
+    file_name = "schemas.sql"
+    model = _SchemaRow
+
+    @classmethod
+    def process_rows(cls, rows: list[_SchemaRow]) -> None:
+        for schema_row in rows:
+            context().db_introspection_result.schema_by_name[schema_row.schema_name] = Schema(
+                name=schema_row.schema_name,
+                comment=schema_row.schema_comment,
+                owner=schema_row.schema_owner,
+                grants=grants(schema_row.schema_grants),
+            )

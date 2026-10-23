@@ -1,7 +1,7 @@
 from pgmig._drivers import DbDriver
 
 
-class _PgmigError(Exception):
+class PgmigError(Exception):
     """
     A known, user-facing pgmig error (e.g. an invalid connection string).
     """
@@ -11,19 +11,19 @@ class _PgmigError(Exception):
         super().__init__(message)
 
 
-class PgmigUnsupportedError(_PgmigError):
+class PgmigUnsupportedError(PgmigError):
     """
     The database is in a state that pgmig does not yet support.
     """
 
 
-class PgmigApiError(_PgmigError):
+class PgmigApiError(PgmigError):
     """
     The pgmig API was used incorrectly.
     """
 
 
-class PgmigInvalidDbDsnError(_PgmigError):
+class PgmigInvalidDbDsnError(PgmigError):
     """
     An error occurred while parsing a DB connection string.
     """
@@ -35,7 +35,7 @@ class PgmigInvalidDbDsnError(_PgmigError):
         )
 
 
-class PgmigDbDriverError(_PgmigError):
+class PgmigDbDriverError(PgmigError):
     """
     An error occurred while connecting to a database via the DB driver.
     """
@@ -47,7 +47,7 @@ class PgmigDbDriverError(_PgmigError):
         super().__init__(f"Could not connect to {label} database.")
 
 
-class PgmigDbConnectionError(_PgmigError):
+class PgmigDbConnectionError(PgmigError):
     """
     At least one of a run's two databases could not be connected to.
     """

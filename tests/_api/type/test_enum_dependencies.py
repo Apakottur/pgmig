@@ -208,6 +208,18 @@ async def test_enum_rewrite_domain_over_enum_unsupported(gen_setup: GenerateSetu
     )
 
 
+async def test_enum_rewrite_domain_in_other_schema_unsupported(gen_setup: GenerateSetup) -> None:
+    """
+    A domain over the enum in another schema is reported under its own schema, not the enum's.
+    """
+    await gen_setup.assert_unsupported(
+        both=["CREATE SCHEMA s"],
+        src=["CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')", "CREATE DOMAIN s.feeling AS mood"],
+        dst=["CREATE TYPE mood AS ENUM ('sad', 'happy')", "CREATE DOMAIN s.feeling AS mood"],
+        match=r'domain "s"\."feeling" is defined over the enum',
+    )
+
+
 async def test_enum_rewrite_view_read_column_unsupported(gen_setup: GenerateSetup) -> None:
     """
     A view reading a dependent column blocks ALTER COLUMN TYPE and is not caught by the

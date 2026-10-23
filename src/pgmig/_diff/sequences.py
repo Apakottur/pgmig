@@ -1,36 +1,35 @@
 from collections.abc import Iterator
 
 from pgmig._diff._context import context
-from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements, owner_statements
-from pgmig._diff.grants import grant_statements
+from pgmig._diff._core import Phase, Statement, ctx_iter_object_pairs, diff_comment_statements
+from pgmig._diff.grants import owner_and_grant_statements
 from pgmig._keys import ColumnKey
 from pgmig._models import Sequence
-from pgmig._sql import qualified
+from pgmig._sql import qualified, sequence_option_clauses
 
 
 def _sequence_tail(sequence: Sequence) -> str:
     """
-    Render the parameter tail shared by CREATE SEQUENCE.
+    The parameter tail of a CREATE SEQUENCE, with a leading space -- or "" when every
+    parameter is a default and the bare CREATE SEQUENCE already says everything.
+
+    Only the parameters that differ from their Postgres default are listed. bigint is the
+    default type, so AS is emitted for a narrower one only -- which is also what restores the
+    MINVALUE/MAXVALUE defaults that the omitted bounds rely on.
     """
-    tail = (
-        f"AS {sequence.data_type}"
-        f" INCREMENT BY {sequence.increment}"
-        f" MINVALUE {sequence.min_value}"
-        f" MAXVALUE {sequence.max_value}"
-        f" START WITH {sequence.start}"
-        f" CACHE {sequence.cache}"
+    clauses = [] if sequence.data_type == "bigint" else [f"AS {sequence.data_type}"]
+    clauses.extend(
+        sequence_option_clauses(
+            data_type=sequence.data_type,
+            start=sequence.start,
+            increment=sequence.increment,
+            min_value=sequence.min_value,
+            max_value=sequence.max_value,
+            cache=sequence.cache,
+            cycle=sequence.cycle,
+        )
     )
-    if sequence.cycle:
-        tail += " CYCLE"
-    return tail
-
-
-def _persistence_keyword(sequence: Sequence) -> str:
-    """
-    The "UNLOGGED " keyword (with trailing space) inserted between CREATE and SEQUENCE for an
-    unlogged sequence, or "" for a logged one. UNLOGGED sequences are PG15+.
-    """
-    return "UNLOGGED " if sequence.unlogged else ""
+    return f" {' '.join(clauses)}" if clauses else ""
 
 
 def _alter_statements(schema_name: str, name: str, src_seq: Sequence, dst_seq: Sequence) -> list[str]:
@@ -82,7 +81,7 @@ def _owning_column_survives(owned_by: ColumnKey) -> bool:
     drops the sequence, so an explicit DROP SEQUENCE would fail "sequence does not exist";
     only emit one when the column survives.
     """
-    schema = context.target.schema_by_name.get(owned_by.schema)
+    schema = context().target.schema_by_name.get(owned_by.schema)
     table = schema.table_by_name.get(owned_by.table) if schema else None
     return table is not None and owned_by.column in table.column_by_name
 
@@ -101,9 +100,11 @@ def generate() -> Iterator[Statement]:
             # Present in target only: create it, then assign its OWNED BY after tables exist.
             if src_seq is None:
                 dst = dst_sequences[name]
+                # UNLOGGED sequences are PG15+.
+                persistence = "UNLOGGED " if dst.unlogged else ""
                 yield Statement(
                     Phase.SEQUENCE_CREATE,
-                    f"CREATE {_persistence_keyword(dst)}SEQUENCE {qualified_name} {_sequence_tail(dst)};",
+                    f"CREATE {persistence}SEQUENCE {qualified_name}{_sequence_tail(dst)};",
                 )
                 if dst.owned_by is not None:
                     yield Statement(
@@ -119,19 +120,10 @@ def generate() -> Iterator[Statement]:
             else:
                 for sql in _alter_statements(schema_name, name, src_seq, dst_seq):
                     yield Statement(Phase.SEQUENCE_CREATE, sql)
-                for sql in owner_statements("SEQUENCE", qualified_name, src_seq.owner, dst_seq.owner):
-                    yield Statement(Phase.SEQUENCE_CREATE, sql)
-                # ACL reconciliation, after the sequence exists (GRANT phase runs after every create).
-                for sql in grant_statements(
-                    "SEQUENCE",
-                    qualified_name,
-                    src_seq.grants,
-                    dst_seq.grants,
-                    src_seq.owner,
-                    dst_seq.owner,
-                    include_named_roles=context.include_grants,
-                ):
-                    yield Statement(Phase.GRANT, sql)
+                # Ownership, then the ACL after the sequence exists (GRANT phase runs after every create).
+                yield from owner_and_grant_statements(
+                    "SEQUENCE", qualified_name, src_seq, dst_seq, phase=Phase.SEQUENCE_CREATE
+                )
                 # OWNED BY reassignment (added, removed, or retargeted) runs in the later
                 # phase so a newly created target table/column is already in place.
                 if src_seq.owned_by != dst_seq.owned_by:

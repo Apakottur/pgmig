@@ -98,7 +98,7 @@ def driver(request: pytest.FixtureRequest) -> DbDriver:
 async def _admin_conn(request: pytest.FixtureRequest, driver: DbDriver) -> AsyncIterator[DbConnection]:
     """
     Session level database server plus a shared connection to the admin
-    database, reused to (re)create the per-test databases.
+    database, used to create the session's databases.
     """
     # Start the database server.
     shpyx.run("docker compose up -d", exec_dir=_COMPOSE_FILE_DIR)

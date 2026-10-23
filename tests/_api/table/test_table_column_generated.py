@@ -156,3 +156,51 @@ async def test_virtual_generation_expression_change_sets_expression(gen_setup: G
         dst=["CREATE TABLE item (b integer, doubled integer GENERATED ALWAYS AS (b * 5) VIRTUAL)"],
         diff=['ALTER TABLE "public"."item" ALTER COLUMN "doubled" SET EXPRESSION AS (b * 5)'],
     )
+
+
+async def test_stored_generation_expression_change_readds_its_constraint(gen_setup: GenerateSetup) -> None:
+    """
+    Rebuilding a stored generated column drops it, and the column drop cascades to a
+    constraint over it. The constraint stands on both sides, so nothing in the constraint diff
+    would re-add it -- the rebuilt column must be treated as removed for the constraint to be
+    emitted again and the migration to converge.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE item (b integer)"],
+        src=[
+            "ALTER TABLE item ADD COLUMN doubled integer GENERATED ALWAYS AS (b * 2) STORED",
+            "ALTER TABLE item ADD CONSTRAINT item_doubled_key UNIQUE (doubled)",
+        ],
+        dst=[
+            "ALTER TABLE item ADD COLUMN doubled integer GENERATED ALWAYS AS (b * 3) STORED",
+            "ALTER TABLE item ADD CONSTRAINT item_doubled_key UNIQUE (doubled)",
+        ],
+        diff=[
+            'ALTER TABLE "public"."item" DROP COLUMN "doubled"',
+            'ALTER TABLE "public"."item" ADD COLUMN "doubled" integer GENERATED ALWAYS AS (b * 3) STORED',
+            'ALTER TABLE "public"."item" ADD CONSTRAINT "item_doubled_key" UNIQUE (doubled)',
+        ],
+    )
+
+
+async def test_stored_generation_expression_change_recreates_its_index(gen_setup: GenerateSetup) -> None:
+    """
+    The index counterpart: an index over a rebuilt stored generated column goes with the
+    column and must be recreated.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE item (b integer)"],
+        src=[
+            "ALTER TABLE item ADD COLUMN doubled integer GENERATED ALWAYS AS (b * 2) STORED",
+            "CREATE INDEX item_doubled_idx ON item (doubled)",
+        ],
+        dst=[
+            "ALTER TABLE item ADD COLUMN doubled integer GENERATED ALWAYS AS (b * 3) STORED",
+            "CREATE INDEX item_doubled_idx ON item (doubled)",
+        ],
+        diff=[
+            'ALTER TABLE "public"."item" DROP COLUMN "doubled"',
+            'ALTER TABLE "public"."item" ADD COLUMN "doubled" integer GENERATED ALWAYS AS (b * 3) STORED',
+            "CREATE INDEX item_doubled_idx ON public.item USING btree (doubled)",
+        ],
+    )

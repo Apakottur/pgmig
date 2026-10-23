@@ -1,16 +1,6 @@
 from tests._api.generate_setup import GenerateSetup
 
 
-def _reads(gen_setup: GenerateSetup, column: str, rel: str, from_ref: str) -> str:
-    """
-    A matview/view body `SELECT <column> FROM <from_ref>` as pg_get_viewdef renders it: PG
-    14/15 qualify the column with the reading relation name, 16+ do not. FROM is always
-    schema-qualified (introspection runs with an empty search_path).
-    """
-    rendered = f"{rel}.{column}" if gen_setup.pg_major in (14, 15) else column
-    return f"SELECT {rendered}\n   FROM {from_ref}"
-
-
 async def test_matview_on_view_create_ordering(gen_setup: GenerateSetup) -> None:
     """
     A matview reading a plain view is created after the view (view in VIEW_CREATE, matview in
@@ -24,7 +14,7 @@ async def test_matview_on_view_create_ordering(gen_setup: GenerateSetup) -> None
         ],
         diff=[
             'CREATE VIEW "public"."v" AS SELECT 1 AS x',
-            f'CREATE MATERIALIZED VIEW "public"."m" AS {_reads(gen_setup, "x", "v", "public.v")} WITH NO DATA',
+            f'CREATE MATERIALIZED VIEW "public"."m" AS {gen_setup.select_body("x", "v", "public.v")} WITH NO DATA',
         ],
     )
 
@@ -61,9 +51,9 @@ async def test_matview_on_matview_chain_create_ordering(gen_setup: GenerateSetup
         ],
         diff=[
             'CREATE MATERIALIZED VIEW "public"."z_base" AS SELECT 1 AS x WITH NO DATA',
-            f'CREATE MATERIALIZED VIEW "public"."m_mid" AS {_reads(gen_setup, "x", "z_base", "public.z_base")}'
+            f'CREATE MATERIALIZED VIEW "public"."m_mid" AS {gen_setup.select_body("x", "z_base", "public.z_base")}'
             " WITH NO DATA",
-            f'CREATE MATERIALIZED VIEW "public"."a_top" AS {_reads(gen_setup, "x", "m_mid", "public.m_mid")}'
+            f'CREATE MATERIALIZED VIEW "public"."a_top" AS {gen_setup.select_body("x", "m_mid", "public.m_mid")}'
             " WITH NO DATA",
         ],
     )
@@ -108,7 +98,7 @@ async def test_matview_recreated_when_read_view_definition_changes(gen_setup: Ge
             'DROP MATERIALIZED VIEW "public"."m"',
             'DROP VIEW "public"."v"',
             'CREATE VIEW "public"."v" AS SELECT 2 AS x',
-            f'CREATE MATERIALIZED VIEW "public"."m" AS {_reads(gen_setup, "x", "v", "public.v")} WITH NO DATA',
+            f'CREATE MATERIALIZED VIEW "public"."m" AS {gen_setup.select_body("x", "v", "public.v")} WITH NO DATA',
             "CREATE INDEX m_x_idx ON public.m USING btree (x)",
         ],
     )
@@ -132,7 +122,7 @@ async def test_matview_recreate_cascades_through_matview_chain(gen_setup: Genera
             'DROP MATERIALIZED VIEW "public"."derived"',
             'DROP MATERIALIZED VIEW "public"."base"',
             'CREATE MATERIALIZED VIEW "public"."base" AS SELECT 2 AS x WITH NO DATA',
-            f'CREATE MATERIALIZED VIEW "public"."derived" AS {_reads(gen_setup, "x", "base", "public.base")}'
+            f'CREATE MATERIALIZED VIEW "public"."derived" AS {gen_setup.select_body("x", "base", "public.base")}'
             " WITH NO DATA",
         ],
     )
@@ -158,8 +148,8 @@ async def test_matview_recreate_cascades_through_retyped_column(gen_setup: Gener
             'DROP MATERIALIZED VIEW "public"."derived"',
             'DROP MATERIALIZED VIEW "public"."base"',
             'ALTER TABLE "public"."t" ALTER COLUMN "val" TYPE bigint USING "val"::bigint',
-            f'CREATE MATERIALIZED VIEW "public"."base" AS {_reads(gen_setup, "val", "t", "public.t")} WITH NO DATA',
-            f'CREATE MATERIALIZED VIEW "public"."derived" AS {_reads(gen_setup, "val", "base", "public.base")}'
+            f'CREATE MATERIALIZED VIEW "public"."base" AS {gen_setup.select_body("val", "t", "public.t")} WITH NO DATA',
+            f'CREATE MATERIALIZED VIEW "public"."derived" AS {gen_setup.select_body("val", "base", "public.base")}'
             " WITH NO DATA",
         ],
     )

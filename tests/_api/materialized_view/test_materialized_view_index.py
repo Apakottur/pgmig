@@ -49,8 +49,7 @@ async def test_matview_index_recreated_over_retyped_column(gen_setup: GenerateSe
     catches it), which loses its indexes -- including the unique index REFRESH CONCURRENTLY
     needs. The index differ must treat this matview as recreated and create every index fresh.
     """
-    # pg_get_viewdef qualifies the column with the table on PG14/15 but not 16+.
-    body = "SELECT t.val\n   FROM public.t" if gen_setup.pg_major in (14, 15) else "SELECT val\n   FROM public.t"
+    body = gen_setup.select_body("val", "t", "public.t")
     await gen_setup.assert_diff(
         src=[
             "CREATE TABLE t (id int, val integer)",

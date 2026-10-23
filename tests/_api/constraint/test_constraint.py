@@ -374,3 +374,43 @@ async def test_constraint_drop_skipped_for_exclusion_on_dropped_column(gen_setup
         dst=[],
         diff=['ALTER TABLE "public"."room" DROP COLUMN "during"'],
     )
+
+
+async def test_constraint_dropped_before_a_column_its_index_expression_reads(gen_setup: GenerateSetup) -> None:
+    """
+    An exclusion constraint reaching a dropped column only through an expression in its
+    backing index is not cascaded away by the column drop -- Postgres refuses the DROP COLUMN
+    while it stands. Its DROP CONSTRAINT is phased before the column drop instead.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (id integer)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN code text",
+            "ALTER TABLE person ADD CONSTRAINT person_code_excl EXCLUDE ((lower(code)) WITH =)",
+        ],
+        dst=[],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_code_excl"',
+            'ALTER TABLE "public"."person" DROP COLUMN "code"',
+        ],
+    )
+
+
+async def test_constraint_dropped_early_is_recreated_when_the_target_keeps_it(gen_setup: GenerateSetup) -> None:
+    """
+    The blocking constraint is out of the ordinary diff once its early DROP is emitted, so a
+    target that still declares it under the same name gets it back after the column removal.
+    """
+    await gen_setup.assert_diff(
+        both=["CREATE TABLE person (name text)"],
+        src=[
+            "ALTER TABLE person ADD COLUMN code text",
+            "ALTER TABLE person ADD CONSTRAINT person_lower_excl EXCLUDE ((lower(code)) WITH =)",
+        ],
+        dst=["ALTER TABLE person ADD CONSTRAINT person_lower_excl EXCLUDE ((lower(name)) WITH =)"],
+        diff=[
+            'ALTER TABLE "public"."person" DROP CONSTRAINT "person_lower_excl"',
+            'ALTER TABLE "public"."person" DROP COLUMN "code"',
+            'ALTER TABLE "public"."person" ADD CONSTRAINT "person_lower_excl" EXCLUDE USING btree (lower(name) WITH =)',
+        ],
+    )

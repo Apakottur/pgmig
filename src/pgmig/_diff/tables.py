@@ -5,25 +5,16 @@ from pgmig._diff._context import context
 from pgmig._diff._core import (
     Phase,
     Statement,
-    _diff_comments,
     ctx_iter_table_pairs,
+    diff_comments,
     diff_single_comment,
-    owner_statements,
+    is_stored_column_rebuild,
 )
-from pgmig._diff.grants import grant_statements
+from pgmig._diff.grants import owner_and_grant_statements
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import RelationKey
 from pgmig._models import Column, Table
-from pgmig._sql import comment_on, ident, qualified
-
-# Value bounds per integer type an identity column may use (smallint/integer/bigint only).
-# An identity sequence's default MINVALUE/MAXVALUE are derived from these and the increment
-# sign, so an explicitly-set bound can be told apart from a default one.
-_IDENTITY_TYPE_BOUNDS: dict[str, tuple[int, int]] = {
-    "smallint": (-32768, 32767),
-    "integer": (-2147483648, 2147483647),
-    "bigint": (-9223372036854775808, 9223372036854775807),
-}
+from pgmig._sql import comment_on, ident, qualified, sequence_option_clauses
 
 
 def _identity_options_clause(column: Column) -> str:
@@ -31,28 +22,17 @@ def _identity_options_clause(column: Column) -> str:
     The " (OPTION value ...)" tail for an identity column's CREATE/ADD, listing only the
     sequence options that differ from their defaults, or "" when every option is a default.
 
-    Defaults depend on the sign of the increment and on the column's integer type: an
-    ascending sequence runs 1..type_max and a descending one runs type_min..-1, and in both
-    cases the start defaults to the range's near end (MINVALUE ascending, MAXVALUE descending).
     Call only for an identity column (every identity_* field is then set).
     """
-    increment = cast("int", column.identity_increment)
-    type_min, type_max = _IDENTITY_TYPE_BOUNDS[column.type]
-    ascending = increment > 0
-    default_start = column.identity_min if ascending else column.identity_max
-    parts: list[str] = []
-    if column.identity_start != default_start:
-        parts.append(f"START WITH {column.identity_start}")
-    if increment != 1:
-        parts.append(f"INCREMENT BY {increment}")
-    if column.identity_min != (1 if ascending else type_min):
-        parts.append(f"MINVALUE {column.identity_min}")
-    if column.identity_max != (type_max if ascending else -1):
-        parts.append(f"MAXVALUE {column.identity_max}")
-    if column.identity_cache != 1:
-        parts.append(f"CACHE {column.identity_cache}")
-    if column.identity_cycle:
-        parts.append("CYCLE")
+    parts = sequence_option_clauses(
+        data_type=column.type,
+        start=cast("int", column.identity_start),
+        increment=cast("int", column.identity_increment),
+        min_value=cast("int", column.identity_min),
+        max_value=cast("int", column.identity_max),
+        cache=cast("int", column.identity_cache),
+        cycle=cast("bool", column.identity_cycle),
+    )
     return f" ({' '.join(parts)})" if parts else ""
 
 
@@ -89,40 +69,6 @@ class ColumnDiff(NamedTuple):
 
     statements: list[str]
     deferred_drop_not_null: list[str]
-
-
-def _table_owner_statements(schema_name: str, src_table: Table | None, dst_table: Table) -> list[str]:
-    """
-    Emit ALTER TABLE ... OWNER TO when a table present on both sides has a different owner
-    than the target. Delegates to the shared owner_statements (see it for the created-object
-    and --include-owner semantics).
-    """
-    return owner_statements(
-        "TABLE",
-        qualified(schema_name, dst_table.name),
-        None if src_table is None else src_table.owner,
-        dst_table.owner,
-    )
-
-
-def _table_grant_statements(schema_name: str, src_table: Table, dst_table: Table) -> list[str]:
-    """
-    Emit GRANT/REVOKE to reconcile a table's ACL to the target's. Only called for a table
-    present on both sides (the alter path); a newly created table has no grants reconciled here
-    and, like owner, converges on a later run once it exists on both sides.
-
-    PUBLIC grants are always reconciled; named-role grants only under --include-grants (see
-    grant_statements).
-    """
-    return grant_statements(
-        "TABLE",
-        qualified(schema_name, dst_table.name),
-        src_table.grants,
-        dst_table.grants,
-        src_table.owner,
-        dst_table.owner,
-        include_named_roles=context.include_grants,
-    )
 
 
 def _parenthesize_generation(expression: str) -> str:
@@ -290,6 +236,29 @@ def _alter_columns(
     return ColumnDiff(statements, deferred_drop_not_null)
 
 
+def _set_not_null_statements(schema_name: str, table_name: str, column_name: str) -> list[str]:
+    """
+    The statements that make an existing column NOT NULL.
+
+    Plain SET NOT NULL scans the whole table under an ACCESS EXCLUSIVE lock. With
+    context().safe_not_null, a CHECK (col IS NOT NULL) is added NOT VALID (brief lock, no scan)
+    and validated (scans under SHARE UPDATE EXCLUSIVE, which does not block reads or writes);
+    SET NOT NULL then proves the column from the validated CHECK and skips its scan. The CHECK
+    is redundant afterwards, so it is dropped.
+    """
+    table = qualified(schema_name, table_name)
+    set_not_null = f"ALTER TABLE {table} ALTER COLUMN {ident(column_name)} SET NOT NULL;"
+    if not context().safe_not_null:
+        return [set_not_null]
+    check_name = ident(f"pgmig_{column_name}_not_null")
+    return [
+        f"ALTER TABLE {table} ADD CONSTRAINT {check_name} CHECK ({ident(column_name)} IS NOT NULL) NOT VALID;",
+        f"ALTER TABLE {table} VALIDATE CONSTRAINT {check_name};",
+        set_not_null,
+        f"ALTER TABLE {table} DROP CONSTRAINT {check_name};",
+    ]
+
+
 def _alter_shared_column(
     *,
     schema_name: str,
@@ -343,7 +312,7 @@ def _alter_shared_column(
     expression_changed = (
         src_column.generated != "" and src_column.generation_expression != dst_column.generation_expression
     )
-    if expression_changed and src_column.generated == "s":
+    if is_stored_column_rebuild(src_column, dst_column):
         table_prefix = f"ALTER TABLE {qualified(schema_name, table_name)}"
         return ColumnDiff(
             [
@@ -395,7 +364,7 @@ def _alter_shared_column(
             # be NOT NULL, so set it first when the source was nullable (the generic
             # NOT NULL block below is skipped for identity targets, so no double).
             if not src_column.not_null:
-                statements.append(f"{prefix} SET NOT NULL;")
+                statements.extend(_set_not_null_statements(schema_name, table_name, column_name))
             statements.append(f"{prefix} ADD {dst_column.identity_clause}{_identity_options_clause(dst_column)};")
         else:
             # Stays an identity, generation kind flips (ALWAYS <-> BY DEFAULT).
@@ -414,7 +383,7 @@ def _alter_shared_column(
             # Skip if a target primary key or the target identity already implies
             # NOT NULL for this column.
             if column_name not in pk_columns and dst_column.identity_kind is None:
-                statements.append(f"{prefix} SET NOT NULL;")
+                statements.extend(_set_not_null_statements(schema_name, table_name, column_name))
         elif column_name in src_pk_columns:
             # Covering source PK drops this run; defer past the CONSTRAINT phase.
             deferred_drop_not_null.append(f"{prefix} DROP NOT NULL;")
@@ -505,7 +474,7 @@ def _column_comment_statements(schema_name: str, src_table: Table | None, dst_ta
     src_columns = src_table.column_by_name if src_table else {}
     dst_columns = dst_table.column_by_name
 
-    return _diff_comments(
+    return diff_comments(
         src_columns,
         dst_columns,
         render=lambda name, column: comment_on("COLUMN", qualified(schema_name, dst_table.name, name), column.comment),
@@ -528,35 +497,6 @@ def _partition_depth(key: RelationKey, table_map: dict[RelationKey, Table]) -> i
     return depth
 
 
-def _partition_key_changed(src_table: Table, dst_table: Table) -> bool:
-    """
-    Whether a table's declarative partitioning key or strategy differs between the two sides
-    (including a plain table gaining or losing PARTITION BY). Postgres has no in-place ALTER
-    for this, so the table diff recreates the whole subtree destructively (see `generate`).
-    """
-    return (src_table.is_partitioned or dst_table.is_partitioned) and (
-        src_table.partition_strategy != dst_table.partition_strategy
-        or src_table.partition_key != dst_table.partition_key
-    )
-
-
-def _source_subtree(root: RelationKey, src_map: dict[RelationKey, Table]) -> set[RelationKey]:
-    """
-    Every source table in the partition subtree rooted at `root` (inclusive): the root plus
-    all of its partitions, sub-partitions, and so on, walking `partition_parent` links.
-    """
-    subtree = {root}
-    # Fixed-point loop: a table joins once its parent is in the subtree. Bounded by len(src_map).
-    added = True
-    while added:
-        added = False
-        for key, table in src_map.items():
-            if key not in subtree and table.partition_parent in subtree:
-                subtree.add(key)
-                added = True
-    return subtree
-
-
 def _membership_statements(schema_name: str, table_name: str, src_table: Table, dst_table: Table) -> list[str]:
     """
     Statements reconciling a table's partition membership across the diff: ATTACH a
@@ -568,19 +508,13 @@ def _membership_statements(schema_name: str, table_name: str, src_table: Table, 
     src_parent = src_table.partition_parent
     dst_parent = dst_table.partition_parent
     if src_parent is not None and dst_parent is not None:
-        if src_parent != dst_parent:
-            # Re-parent: detach from the old parent, attach to the new one.
+        if src_parent != dst_parent or src_table.partition_bound != dst_table.partition_bound:
+            # Re-parent, or a bound change on the same parent: detach from the old parent and
+            # attach to the new one. A bound has no in-place ALTER, but DETACH then re-ATTACH at
+            # the new bound is non-destructive (the table and its rows survive; Postgres
+            # validates the rows against the new bound on ATTACH, same as any ATTACH).
             return [
                 _detach_partition(schema_name, table_name, src_parent),
-                _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
-            ]
-        if src_table.partition_bound != dst_table.partition_bound:
-            # Bound change on the same parent: no in-place ALTER exists, but DETACH then
-            # re-ATTACH at the new bound is non-destructive (the table and its rows
-            # survive; Postgres validates the rows against the new bound on ATTACH, same
-            # as any ATTACH).
-            return [
-                _detach_partition(schema_name, table_name, dst_parent),
                 _attach_partition(schema_name, table_name, dst_parent, dst_table.partition_bound),
             ]
         return []
@@ -610,38 +544,23 @@ def generate() -> Iterator[Statement]:
     # (its partitions cascade away, DELETING THEIR DATA) and re-CREATE the parent and every
     # target partition from scratch. This is intentionally destructive; a future safety-level
     # flag may gate or refuse it (see the recreate note below). To recreate through the existing
-    # create paths, the affected source tables are removed from the source model, so tables,
-    # indexes, constraints, triggers and comments are all re-emitted as if newly created (their
-    # old copies vanish with the cascading DROP); an explicit DROP of each subtree root is
-    # emitted first. A root nested inside another recreated subtree is not dropped explicitly --
-    # its ancestor's DROP already cascades to it.
+    # create paths, the affected source tables (context().repartitioned_tables) are skipped by
+    # ctx_iter_table_pairs, so tables, indexes, constraints, triggers and comments are all
+    # re-emitted as if newly created (their old copies vanish with the cascading DROP); an
+    # explicit DROP of each subtree root is emitted first. A root nested inside another
+    # recreated subtree is not dropped explicitly -- its ancestor's DROP already cascades to it.
     #
     # NOTE: this recreate deletes data and, if another table's foreign key references the
     # subtree, its plain DROP TABLE fails loudly at apply rather than silently cascading. A
     # planned safety-level flag may later refuse or gate this path; when it lands, revisit this.
     recreate_drops: list[str] = []
-    recreate_roots = [
-        RelationKey(schema_name, table_name)
-        for schema_name, table_name, src_table, dst_table in pairs
-        if src_table is not None and dst_table is not None and _partition_key_changed(src_table, dst_table)
-    ]
-    if recreate_roots:
-        removed: set[RelationKey] = set()
-        for root in recreate_roots:
-            removed |= _source_subtree(root, src_map)
-        # Explicit DROP for each subtree top -- a removed table whose parent is not itself
-        # removed; a nested table (its parent is also removed) cascades from that DROP.
-        for key in sorted(removed, key=lambda relation: (relation.schema, relation.name)):
-            parent = src_map[key].partition_parent
-            if parent is None or parent not in removed:
-                recreate_drops.append(f"DROP TABLE {qualified(key.schema, key.name)};")
-        # Remove the whole source subtree so every generator treats these as create-from-scratch.
-        for key in removed:
-            del context.source.schema_by_name[key.schema].table_by_name[key.name]
-        # Rebuild pairs/maps from the mutated source.
-        pairs = list(ctx_iter_table_pairs())
-        src_map = {RelationKey(schema, name): src for schema, name, src, _dst in pairs if src is not None}
-        dst_map = {RelationKey(schema, name): dst for schema, name, _src, dst in pairs if dst is not None}
+    removed = context().repartitioned_tables
+    # Explicit DROP for each subtree top -- a removed table whose parent is not itself
+    # removed; a nested table (its parent is also removed) cascades from that DROP.
+    for key in sorted(removed, key=lambda relation: (relation.schema, relation.name)):
+        parent = context().source.schema_by_name[key.schema].table_by_name[key.name].partition_parent
+        if parent is None or parent not in removed:
+            recreate_drops.append(f"DROP TABLE {qualified(key.schema, key.name)};")
 
     creates: list[tuple[str, str, Table]] = []
     alters: list[tuple[str, str, Table, Table]] = []
@@ -691,14 +610,17 @@ def generate() -> Iterator[Statement]:
                 src_pk_columns=src_table.get_primary_key_columns(),
             )
             rendered += column_statements
-        rendered += _table_owner_statements(schema_name, src_table, dst_table)
-        rendered += _table_comment_statements(schema_name, src_table, dst_table)
-        rendered += _column_comment_statements(schema_name, src_table, dst_table)
         for sql in rendered:
             yield Statement(Phase.TABLE, sql)
-        # ACL reconciliation is phased after every object exists (GRANT/REVOKE targets).
-        for sql in _table_grant_statements(schema_name, src_table, dst_table):
-            yield Statement(Phase.GRANT, sql)
+        # Ownership, then ACL reconciliation phased after every object exists (GRANT/REVOKE
+        # targets). A table created this run converges on a later run, once on both sides.
+        yield from owner_and_grant_statements(
+            "TABLE", qualified(schema_name, dst_table.name), src_table, dst_table, phase=Phase.TABLE
+        )
+        comments = _table_comment_statements(schema_name, src_table, dst_table)
+        comments += _column_comment_statements(schema_name, src_table, dst_table)
+        for sql in comments:
+            yield Statement(Phase.TABLE, sql)
         # DROP NOT NULL for a column whose covering primary key drops this run must run
         # after the CONSTRAINT-phase DROP CONSTRAINT.
         for sql in deferred_drop_not_null:

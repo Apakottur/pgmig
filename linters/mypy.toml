@@ -4,8 +4,6 @@
 ####################
 # Import discovery #
 ####################
-mypy_path = "$MYPY_CONFIG_FILE_DIR/../linters/stubs"
-
 # Suppresses error messages about imports that cannot be resolved.
 # This can be enabled per-module.
 ignore_missing_imports = false
