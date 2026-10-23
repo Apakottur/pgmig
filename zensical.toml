@@ -10,7 +10,6 @@ site_dir = "site"
 strict = true
 nav = [
   { "Home" = "index.md" },
-  { "Getting Started" = "getting-started.md" },
   { "Configuration" = "configuration.md" },
   { "Reference" = [
     { "Python API" = "reference/api.md" },

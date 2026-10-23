@@ -1,9 +1,11 @@
 # Configuration
 
-`pgmig` has no configuration file — everything is passed on the command line (or as arguments to `pgmig.generate`).
+`pgmig` has no configuration file — everything is passed on the command line (or as arguments to
+[`pgmig.generate`](reference/api.md#pgmig.generate)).
 
-The CLI (`pgmig generate`) and the library (`pgmig.generate`) share the same options; the CLI
-adds a few more (`—` in the library column):
+The CLI (`pgmig generate`) and the library ([`pgmig.generate`](reference/api.md#pgmig.generate) and its async
+twin [`pgmig.agenerate`](reference/api.md#pgmig.agenerate)) share the same options; the CLI adds a few more (`—`
+in the library column):
 
 | CLI option               | Library argument     | Description                                             |
 | ------------------------ | -------------------- | ------------------------------------------------------- |
@@ -32,12 +34,25 @@ variables for anything containing secrets — for example, in CI:
     PGMIG_TARGET: postgresql://postgres:postgres@localhost:5432/desired
 ```
 
-Other commands:
+A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
+e.g. `postgresql://user:pass@host:5432/dbname`.
+
+## Exit codes
+
+`pgmig generate` exits with:
+
+| Code | Meaning                                                                                          |
+| ---- | ------------------------------------------------------------------------------------------------ |
+| `0`  | The migration was generated (or the databases already match).                                   |
+| `1`  | An error occurred, or `--check` was passed and the databases differ.                             |
+| `2`  | Invalid usage, e.g. `--source` or `--target` is missing and its environment variable is not set. |
+
+Errors are printed to stderr, so stdout (or the `--output` file) only ever holds the migration SQL. When the
+databases already match, nothing is printed and the `--output` file is left empty.
+
+## Other commands
 
 | Command           | Description                  |
 | ----------------- | ---------------------------- |
 | `pgmig --version` | Print the installed version. |
 | `pgmig --help`    | Show help for any command.   |
-
-A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
-e.g. `postgresql://user:pass@host:5432/dbname`.

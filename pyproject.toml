@@ -17,7 +17,11 @@ dev = [
   "tenacity==9.1.4",
   "ty==0.0.84",
 ]
-docs = ["mkdocstrings-python==2.0.10", "zensical==0.0.71"]
+docs = [
+  #
+  "mkdocstrings-python==2.0.10",
+  "zensical==0.0.71",
+]
 
 [project]
 name = "pgmig"

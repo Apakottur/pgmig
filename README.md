@@ -18,18 +18,30 @@ runs the generated SQL for you: you review it and apply it yourself.
 pgmig officially supports **Postgres 14–18** — the majors currently maintained upstream — and is
 tested against each in CI. Other versions may work but are not tested.
 
-This project is currently in active development, see [Roadmap](https://github.com/Apakottur/pgmig/issues/8).
-
 **Documentation**: [pgmig.readthedocs.io](https://pgmig.readthedocs.io/)
 
 ## Quick start
 
-Print the migration SQL that makes `source` match `target`, using [`uvx`](https://docs.astral.sh/uv/):
+Say the `current` database has a `users` table, and the `desired` one adds an `email` column with a unique index:
+
+```sql
+-- current
+CREATE TABLE users (id bigint PRIMARY KEY, name text NOT NULL);
+
+-- desired
+CREATE TABLE users (id bigint PRIMARY KEY, name text NOT NULL, email text NOT NULL);
+CREATE UNIQUE INDEX users_email_idx ON users (email);
+```
+
+Print the migration SQL that makes `current` match `desired`, using [`uvx`](https://docs.astral.sh/uv/):
 
 ```shell
-uvx pgmig generate \
-  --source postgresql://user:pass@localhost:5432/current \
-  --target postgresql://user:pass@localhost:5432/desired
+$ uvx pgmig generate \
+    --source postgresql://user:pass@localhost:5432/current \
+    --target postgresql://user:pass@localhost:5432/desired
+
+ALTER TABLE "public"."users" ADD COLUMN "email" text NOT NULL;
+CREATE UNIQUE INDEX users_email_idx ON public.users USING btree (email);
 ```
 
 Or from Python:
@@ -41,9 +53,11 @@ sql = pgmig.generate(
     source="postgresql://user:pass@localhost:5432/current",
     target="postgresql://user:pass@localhost:5432/desired",
 )
-```
 
-See the [documentation](https://pgmig.readthedocs.io/) for installation, every option, and the Python API.
+print(sql)
+# ALTER TABLE "public"."users" ADD COLUMN "email" text NOT NULL;
+# CREATE UNIQUE INDEX users_email_idx ON public.users USING btree (email);
+```
 
 ## Contributing
 
