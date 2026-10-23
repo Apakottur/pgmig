@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -28,7 +28,7 @@ _context: ContextVar[ContextData] = ContextVar("pgmig_introspection_context")
 
 
 @contextmanager
-def context_scope(data: ContextData) -> Iterator[None]:
+def context_scope(data: ContextData) -> Generator[None]:
     """
     Run the enclosed introspection with the given context data.
     """
