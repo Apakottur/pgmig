@@ -55,7 +55,7 @@ def _identity_option_set_clauses(src_column: Column, dst_column: Column) -> list
     if src_column.identity_cache != dst_column.identity_cache:
         clauses.append(f"SET CACHE {dst_column.identity_cache}")
     if src_column.identity_cycle != dst_column.identity_cycle:
-        clauses.append("SET CYCLE" if dst_column.identity_cycle else "SET NO CYCLE")
+        clauses.append("SET CYCLE" if dst_column.identity_cycle is True else "SET NO CYCLE")
     return clauses
 
 
