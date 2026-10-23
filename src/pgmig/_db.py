@@ -2,15 +2,14 @@ import json
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Self, cast
+from typing import Any, Literal, Self, assert_never, cast
 
-import asyncpg
 import psycopg
 from psycopg import pq
 from psycopg.rows import dict_row
 
 from pgmig._drivers import DbDriver
-from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
+from pgmig._errors import PgmigApiError, PgmigDbDriverError, PgmigInvalidDbDsnError
 
 
 class UniqueViolation(Exception):
@@ -50,7 +49,7 @@ class DbConnection:
         return self.db_conn_info.dsn
 
     @property
-    def driver(self) -> DbDriver:
+    def driver(self) -> Literal[DbDriver.PSYCOPG, DbDriver.ASYNCPG]:
         return self.db_conn_info.driver.resolved
 
     @classmethod
@@ -74,8 +73,15 @@ class DbConnection:
                 async with conn:
                     yield cls(db_conn_info=db_conn_info, conn=conn)
 
-            # asyncpg. Spelled as the fallback so that the match cannot fall through.
-            case _:  # pragma: asyncpg-only
+            case DbDriver.ASYNCPG:  # pragma: asyncpg-only
+                # asyncpg is an optional extra, so it is imported only when selected.
+                try:
+                    import asyncpg  # noqa: PLC0415
+                except ModuleNotFoundError as error:
+                    raise PgmigApiError(
+                        "The asyncpg driver is not installed. Install the pgmig[asyncpg] extra."
+                    ) from error
+
                 try:
                     asyncpg_conn = await asyncpg.connect(db_conn_info.dsn)
                 except (ValueError, OSError, asyncpg.PostgresError, asyncpg.InterfaceError) as error:
@@ -101,6 +107,9 @@ class DbConnection:
                 finally:
                     await asyncpg_conn.close()
 
+            case _:
+                assert_never(db_conn_info.driver.resolved)
+
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
         Execute a statement and return the statement results, if any.
@@ -120,8 +129,9 @@ class DbConnection:
                     return cast("list[tuple[Any, ...]]", await result.fetchall())
                 return []
 
-            # asyncpg.
-            case _:  # pragma: asyncpg-only
+            case DbDriver.ASYNCPG:  # pragma: asyncpg-only
+                import asyncpg  # noqa: PLC0415
+
                 # asyncpg splits protocols: fetch() (extended) returns rows but forbids multiple
                 # statements and commands that cannot run in a transaction; execute() (simple) allows
                 # those but returns no rows. Reads are always single SELECT-likes; everything else is DDL.
@@ -134,6 +144,9 @@ class DbConnection:
                 except asyncpg.UniqueViolationError as error:
                     raise UniqueViolation(str(error)) from error
                 return []
+
+            case _:
+                assert_never(self.driver)
 
 
 # Opens the transaction all the introspection queries run in, executed in order before the first query.
@@ -174,8 +187,7 @@ class DbReadOnlyConnection(DbConnection):
                     # are skipped.
                     return [await result.fetchall() async for result in cur.results() if result.description is not None]
 
-            # asyncpg.
-            case _:  # pragma: asyncpg-only
+            case DbDriver.ASYNCPG:  # pragma: asyncpg-only
                 # On the first call, open the snapshot transaction. execute() uses the simple protocol, which allows
                 # multiple statements in one round trip.
                 if not self.driver_conn.is_in_transaction():
@@ -184,3 +196,6 @@ class DbReadOnlyConnection(DbConnection):
                 # fetch() uses the extended protocol, which returns rows but runs a single statement, so each query is
                 # its own round trip.
                 return [[dict(record) for record in await self.driver_conn.fetch(query)] for query in queries]
+
+            case _:
+                assert_never(self.driver)
