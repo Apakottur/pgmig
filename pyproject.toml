@@ -17,6 +17,11 @@ dev = [
   "tenacity==9.2.1",
   "ty==0.0.91",
 ]
+docs = [
+  #
+  "mkdocstrings-python==2.0.10",
+  "zensical==0.0.71",
+]
 
 [project]
 name = "pgmig"
@@ -58,7 +63,7 @@ pgmig = "pgmig._cli._cli:app"
 [project.urls]
 homepage = "https://github.com/Apakottur/pgmig"
 repository = "https://github.com/Apakottur/pgmig"
-documentation = "https://github.com/Apakottur/pgmig"
+documentation = "https://pgmig.readthedocs.io/"
 
 [tool.hatch.version]
 source = "vcs"

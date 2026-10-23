@@ -248,3 +248,5 @@ opcdefault
 opcname
 rngcanonical
 conindid
+lucide
+mkdocstrings
