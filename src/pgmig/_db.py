@@ -60,7 +60,7 @@ class DbConnection:
         Connection context.
         """
         match db_conn_info.driver.resolved:
-            case DbDriver.PSYCOPG:
+            case DbDriver.PSYCOPG:  # pragma: psycopg-only
                 try:
                     conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
                 except psycopg.Error as error:
@@ -75,12 +75,18 @@ class DbConnection:
                     yield cls(db_conn_info=db_conn_info, conn=conn)
 
             # asyncpg. Spelled as the fallback so that the match cannot fall through.
-            case _:
+            case _:  # pragma: asyncpg-only
                 try:
                     asyncpg_conn = await asyncpg.connect(db_conn_info.dsn)
-                except (OSError, asyncpg.PostgresError, asyncpg.InterfaceError) as error:
+                except (ValueError, OSError, asyncpg.PostgresError, asyncpg.InterfaceError) as error:
                     raise PgmigDbDriverError(
-                        label=db_conn_info.label, driver=db_conn_info.driver, driver_error=error
+                        label=db_conn_info.label,
+                        driver=db_conn_info.driver,
+                        # Wrap with a generic exception in case of a DSN parsing error to avoid leaking the DSN.
+                        # asyncpg raises a ValueError for some malformed fields, such as a non-numeric port.
+                        driver_error=PgmigInvalidDbDsnError()
+                        if isinstance(error, (ValueError, asyncpg.ClientConfigurationError))
+                        else error,
                     ) from error
 
                 # asyncpg returns json/jsonb as raw text by default; decode so queries that build
@@ -104,7 +110,7 @@ class DbConnection:
             return []
 
         match self.driver:
-            case DbDriver.PSYCOPG:
+            case DbDriver.PSYCOPG:  # pragma: psycopg-only
                 try:
                     result = await self.driver_conn.execute(statement)
                 except psycopg.errors.UniqueViolation as error:
@@ -115,7 +121,7 @@ class DbConnection:
                 return []
 
             # asyncpg.
-            case _:
+            case _:  # pragma: asyncpg-only
                 # asyncpg splits protocols: fetch() (extended) returns rows but forbids multiple
                 # statements and commands that cannot run in a transaction; execute() (simple) allows
                 # those but returns no rows. Reads are always single SELECT-likes; everything else is DDL.
@@ -153,7 +159,7 @@ class DbReadOnlyConnection(DbConnection):
         Run the given introspection queries in a single round trip, returning the rows of each one.
         """
         match self.driver:
-            case DbDriver.PSYCOPG:
+            case DbDriver.PSYCOPG:  # pragma: psycopg-only
                 # On the first call, also open the snapshot transaction, in the same round trip as the queries.
                 statements = list(queries)
                 if self.driver_conn.info.transaction_status == pq.TransactionStatus.IDLE:
@@ -169,7 +175,7 @@ class DbReadOnlyConnection(DbConnection):
                     return [await result.fetchall() async for result in cur.results() if result.description is not None]
 
             # asyncpg.
-            case _:
+            case _:  # pragma: asyncpg-only
                 # On the first call, open the snapshot transaction. execute() uses the simple protocol, which allows
                 # multiple statements in one round trip.
                 if not self.driver_conn.is_in_transaction():
