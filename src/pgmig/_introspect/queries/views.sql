@@ -2,7 +2,7 @@
 -- relkind tells the loader which schema mapping a row belongs to ('v' view, 'm' matview).
 SELECT
     n.nspname AS schema_name,
-    c.relkind,
+    c.relkind::text AS relkind,
     c.relname AS view_name,
     pg_get_viewdef(c.oid) AS view_definition,
     obj_description(c.oid, 'pg_class') AS view_comment,

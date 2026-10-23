@@ -39,6 +39,8 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
+# The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
+# builds are opt-in extras below.
 dependencies = [
   #
   "psycopg>=3.3.5",
@@ -47,10 +49,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-binary = [
-  #
-  "psycopg[binary]>=3.3.5",
-]
+# psycopg's C speedups compiled against the system libpq. Fast; recommended for production.
+# Needs a C compiler and libpq headers at install time.
+c = ["psycopg[c]>=3.3.5"]
+# psycopg's C speedups shipped as a prebuilt wheel that bundles libpq. Fast and needs no build
+# tools or system libpq -- but the bundled libpq/OpenSSL only update when psycopg-binary does,
+# so psycopg recommends against it for production. Great for CLI / standalone use.
+binary = ["psycopg[binary]>=3.3.5"]
 
 [project.scripts]
 pgmig = "pgmig._cli._cli:app"
