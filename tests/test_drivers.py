@@ -10,3 +10,5 @@ def test_db_driver_resolve() -> None:
                 assert resolved is DbDriver.PSYCOPG
             case DbDriver.PSYCOPG:
                 assert resolved is DbDriver.PSYCOPG
+            case DbDriver.ASYNCPG:
+                assert resolved is DbDriver.ASYNCPG

@@ -4,6 +4,9 @@ requires = ["hatchling", "hatch-vcs"]
 
 [dependency-groups]
 dev = [
+  "asyncpg>=0.31.0",
+  "asyncpg-stubs>=0.31.3",
+  "coverage-conditional-plugin==0.9.0",
   "httpx==0.28.1",
   "mypy==2.4.0",
   "prek==0.5.7",
@@ -46,7 +49,7 @@ classifiers = [
 ]
 dependencies = [
   # The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
-  # builds are opt-in extras below.
+  # builds and the asyncpg driver are opt-in extras below.
   "psycopg>=3.3.5",
   "pydantic>=2.12",
   "typer>=0.15.4",
@@ -60,6 +63,8 @@ c = ["psycopg[c]>=3.3.5"]
 # tools or system libpq -- but the bundled libpq/OpenSSL only update when psycopg-binary does,
 # so psycopg recommends against it for production. Great for CLI / standalone use.
 binary = ["psycopg[binary]>=3.3.5"]
+# The asyncpg driver instead of psycopg. Needs no libpq at all. Select it with driver="asyncpg".
+asyncpg = ["asyncpg>=0.31.0"]
 
 [project.scripts]
 pgmig = "pgmig._cli._cli:app"

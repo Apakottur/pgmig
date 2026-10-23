@@ -26,7 +26,7 @@ pip install pgmig
 ```
 
 The base install uses the pure-Python psycopg driver, which needs the Postgres client library (libpq) on the machine.
-For a faster build or a bundled-libpq build, see [which build should I install?](faq.md#which-build-should-i-install)
+For a faster build, a bundled-libpq build, or the asyncpg driver, see [which build should I install?](faq.md#which-build-should-i-install)
 
 ## Quick start
 
