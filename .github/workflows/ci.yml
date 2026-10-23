@@ -55,8 +55,8 @@ jobs:
       fail-fast: false
       matrix:
         # Sparse cross: every Postgres major on the newest Python, plus every other
-        # Python on the default Postgres (18). The PG-18 x 3.14 cell is shared. Everything
-        # runs on the default psycopg driver; one extra cell covers the asyncpg driver.
+        # Python on the default Postgres (18). The PG-18 x 3.14 cell is shared. Every cell
+        # names the driver it runs on; one extra cell covers the asyncpg driver.
         include:
           - python-version: "3.14"
             pg-version: "14"

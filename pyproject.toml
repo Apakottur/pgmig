@@ -44,8 +44,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 # The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
-# and driver-alternative builds are opt-in extras below; the runtime `driver` argument selects
-# which installed driver to use.
+# builds and the asyncpg driver are opt-in extras below.
 dependencies = [
   #
   "psycopg>=3.3.5",
