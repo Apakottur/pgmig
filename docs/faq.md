@@ -32,7 +32,4 @@ In the library, pass `driver="asyncpg"` to `generate` / `agenerate`. The default
 
 ## Which driver is fastest?
 
-They are level for pgmig's workload. Introspection is a handful of one-shot catalog queries,
-where asyncpg's per-statement prepare cost cancels out its throughput edge, and psycopg's `c` /
-`binary` builds would push it further ahead. A generation finishes in well under a second either
-way, so pick by install convenience rather than speed.
+Internal benchmarking showed no significant difference between the drivers.
