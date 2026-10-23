@@ -25,8 +25,8 @@ uv add --dev pgmig            # Or add pgmig to your project.
 pip install pgmig
 ```
 
-pgmig needs the Postgres client library (libpq) on the machine; see the [FAQ](faq.md#do-i-need-libpq-installed)
-to bundle it instead.
+The base install uses the pure-Python psycopg driver, which needs the Postgres client library (libpq) on the machine.
+For a faster build or a bundled-libpq build, see [which build should I install?](faq.md#which-build-should-i-install)
 
 ## Quick start
 
