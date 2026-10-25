@@ -11,6 +11,7 @@ from pgmig._introspect import (
     domains,
     enum_dependencies,
     enums,
+    event_triggers,
     extensions,
     functions,
     indexes,
@@ -76,6 +77,8 @@ def _get_loaders(preflight: PreflightRow) -> list[type[Loader[Any]]]:
     # and the loader routes each trigger onto its table or view, so both must exist first.
     if preflight.has_triggers:
         loaders.append(triggers.TriggersLoader)
+    if preflight.has_event_triggers:
+        loaders.append(event_triggers.EventTriggersLoader)
     # Policies attach to tables, so their loader runs after the tables loader.
     if preflight.has_policies:
         loaders.append(policies.PoliciesLoader)

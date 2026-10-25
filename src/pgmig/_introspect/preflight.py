@@ -15,6 +15,7 @@ class PreflightRow(IntrospectionRow):
     has_sequences: bool
     has_functions: bool
     has_triggers: bool
+    has_event_triggers: bool
     has_policies: bool
     has_enums: bool
     has_domains: bool

@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import ColumnKey, CompositeTypeKey, DefaultAclKey, EnumKey, FunctionKey, RelationKey
-from pgmig._sql import ident
+from pgmig._sql import ident, literal, qualified
 
 
 @dataclass(frozen=True)
@@ -117,6 +117,43 @@ class Trigger:
     # O=origin/default, D=disabled, R=enable replica, A=enable always.
     enabled: str
     comment: str | None
+
+
+@dataclass(frozen=True)
+class EventTrigger:
+    """
+    A Postgres event trigger (CREATE EVENT TRIGGER). Database-global: it has no schema of its
+    own, only the schema of the function it executes.
+    """
+
+    name: str
+    event: str  # pg_event_trigger.evtevent, e.g. ddl_command_end
+    tags: tuple[str, ...]  # the WHEN TAG IN filter, sorted; empty when the trigger has none
+    function_schema: str
+    function_name: str
+    # pg_event_trigger.evtenabled: O=origin/default, D=disabled, R=enable replica, A=enable always.
+    enabled: str
+    owner: str
+    comment: str | None
+
+    @property
+    def canonical(self) -> str:
+        """
+        The CREATE EVENT TRIGGER clauses after the trigger's name: everything that defines it
+        except the name, so two triggers that differ only by name compare equal (rename detection).
+        """
+        clauses = [f"ON {self.event}"]
+        if self.tags:
+            clauses.append(f"WHEN TAG IN ({', '.join(literal(tag) for tag in self.tags)})")
+        clauses.append(f"EXECUTE FUNCTION {qualified(self.function_schema, self.function_name)}()")
+        return " ".join(clauses)
+
+    @property
+    def definition(self) -> str:
+        """
+        The full CREATE EVENT TRIGGER statement (Postgres has no pg_get_*def for event triggers).
+        """
+        return f"CREATE EVENT TRIGGER {ident(self.name)} {self.canonical}"
 
 
 # pg_policy.polcmd code -> the FOR keyword; ALL ('*') is the default and is omitted.
@@ -561,3 +598,6 @@ class DbIntrospectionResult:
     # ALTER DEFAULT PRIVILEGES rules (pg_default_acl), keyed by (role, schema-or-None,
     # object_type) so the diff can pair a source rule with its target counterpart.
     default_acl_by_key: dict["DefaultAclKey", DefaultAcl] = field(default_factory=dict)
+
+    # Event triggers (pg_event_trigger), database-global and so keyed by name alone.
+    event_trigger_by_name: dict[str, EventTrigger] = field(default_factory=dict)

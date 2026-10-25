@@ -1,4 +1,5 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping
+from typing import Protocol
 
 from pgmig._diff._context import context
 from pgmig._diff._core import (
@@ -13,9 +14,10 @@ from pgmig._keys import RelationKey
 from pgmig._models import Trigger
 from pgmig._sql import ident, qualified
 
-# pg_trigger.tgenabled: the state a freshly CREATE'd trigger always has (origin/default).
+# pg_trigger.tgenabled / pg_event_trigger.evtenabled: the state a freshly CREATE'd trigger
+# always has (origin/default).
 _DEFAULT_ENABLED = "O"
-# tgenabled code -> the ALTER TABLE ... TRIGGER verb that sets that state.
+# tgenabled / evtenabled code -> the ALTER ... TRIGGER verb that sets that state.
 _ENABLED_VERB = {
     "O": "ENABLE",
     "D": "DISABLE",
@@ -24,20 +26,29 @@ _ENABLED_VERB = {
 }
 
 
-def _diff_trigger_states(
+class _HasEnableState(Protocol):
+    """
+    A trigger-like object carrying an enable state: a table trigger or an event trigger.
+    """
+
+    @property
+    def enabled(self) -> str: ...
+
+
+def trigger_state_statements(
     *,
-    table: str,
-    src: dict[str, Trigger],
-    dst: dict[str, Trigger],
+    src: Mapping[str, _HasEnableState],
+    dst: Mapping[str, _HasEnableState],
     recreated: set[str],
     renamed_from: dict[str, str],
+    render: Callable[[str, str], str],
 ) -> list[str]:
     """
-    Emit ALTER TABLE ... {ENABLE | DISABLE | ...} TRIGGER for triggers whose enable state
-    (pg_trigger.tgenabled) must change, given what the structural diff already does. A view's
-    INSTEAD OF trigger cannot be disabled (Postgres refuses ALTER TABLE ... DISABLE TRIGGER on
-    a view), so its state is always the default and this is a no-op there -- but the shared
-    call keeps the table and view walks uniform.
+    Emit `render(name, verb)` -- an ALTER ... {ENABLE | DISABLE | ...} TRIGGER -- for triggers
+    whose enable state (pg_trigger.tgenabled / pg_event_trigger.evtenabled) must change, given
+    what the structural diff already does. A view's INSTEAD OF trigger cannot be disabled
+    (Postgres refuses ALTER TABLE ... DISABLE TRIGGER on a view), so its state is always the
+    default and this is a no-op there -- but the shared call keeps the table and view walks uniform.
 
     The state a target trigger carries *after* the structural statements run is:
       - default (a fresh CREATE) if it was recreated (dropped and recreated for a definition
@@ -55,7 +66,7 @@ def _diff_trigger_states(
         else:
             current = src[name].enabled
         if current != target:
-            statements.append(f"ALTER TABLE {table} {_ENABLED_VERB[target]} TRIGGER {ident(name)};")
+            statements.append(render(name, _ENABLED_VERB[target]))
     return statements
 
 
@@ -92,12 +103,12 @@ def _emit_relation_triggers(
     )
     # State fixups ride after the creates: a recreate lands the default state, so a
     # non-default target needs a following ALTER TABLE ... TRIGGER to converge.
-    states = _diff_trigger_states(
-        table=relation,
+    states = trigger_state_statements(
         src=src,
         dst=dst,
         recreated=recreated,
         renamed_from=renamed_from,
+        render=lambda name, verb: f"ALTER TABLE {relation} {verb} TRIGGER {ident(name)};",
     )
     for sql in (*renames, *creates, *comments, *states):
         yield Statement(Phase.TRIGGER_CREATE, sql)
