@@ -141,3 +141,68 @@ async def test_default_priv_none_configured_no_diff(gen_setup: GenerateSetup) ->
     against the baseline expansion spuriously emitting statements when neither side has a row.
     """
     await gen_setup.assert_diff(src=[], dst=[], diff=[], include_grants=True)
+
+
+async def test_default_priv_in_schema_function_rule_removed_no_public(gen_setup: GenerateSetup) -> None:
+    """
+    A schema-scoped rule can only add to the global defaults, never revoke, so a schema-scoped
+    FUNCTIONS rule without PUBLIC does not mean PUBLIC lost EXECUTE there. A rule on the source
+    only -> no GRANT ... TO PUBLIC (by default nothing is diffed at all).
+    """
+    owner = await ensure_role(gen_setup, "pgmig_dp_owner")
+    grantee = await ensure_role(gen_setup, "pgmig_dp_grantee")
+    await gen_setup.assert_diff(
+        both=["CREATE SCHEMA s"],
+        src=[f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA s GRANT EXECUTE ON FUNCTIONS TO {grantee}"],
+        dst=[],
+        diff=[],
+    )
+
+
+async def test_default_priv_in_schema_function_rule_added_no_public(gen_setup: GenerateSetup) -> None:
+    """
+    A schema-scoped FUNCTIONS rule on the target only -> no REVOKE ... FROM PUBLIC (which could
+    not take effect anyway: a schema-scoped REVOKE cannot remove a global default).
+    """
+    owner = await ensure_role(gen_setup, "pgmig_dp_owner")
+    grantee = await ensure_role(gen_setup, "pgmig_dp_grantee")
+    await gen_setup.assert_diff(
+        both=["CREATE SCHEMA s"],
+        src=[],
+        dst=[f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA s GRANT EXECUTE ON FUNCTIONS TO {grantee}"],
+        diff=[],
+    )
+
+
+async def test_default_priv_in_schema_function_rule_named_grant_removed(gen_setup: GenerateSetup) -> None:
+    """
+    With include_grants, a schema-scoped FUNCTIONS rule on the source only reconciles just its
+    named-role grant: the absent side is an empty schema-scoped rule, not the built-in default.
+    """
+    owner = await ensure_role(gen_setup, "pgmig_dp_owner")
+    grantee = await ensure_role(gen_setup, "pgmig_dp_grantee")
+    await gen_setup.assert_diff(
+        both=["CREATE SCHEMA s"],
+        src=[f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA s GRANT EXECUTE ON FUNCTIONS TO {grantee}"],
+        dst=[],
+        diff=[
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{owner}" IN SCHEMA "s" REVOKE EXECUTE ON FUNCTIONS FROM "{grantee}"'
+        ],
+        include_grants=True,
+    )
+
+
+async def test_default_priv_in_schema_function_rule_named_grant_added(gen_setup: GenerateSetup) -> None:
+    """
+    With include_grants, a schema-scoped FUNCTIONS rule on the target only -> GRANT to the named
+    role alone, no REVOKE ... FROM PUBLIC.
+    """
+    owner = await ensure_role(gen_setup, "pgmig_dp_owner")
+    grantee = await ensure_role(gen_setup, "pgmig_dp_grantee")
+    await gen_setup.assert_diff(
+        both=["CREATE SCHEMA s"],
+        src=[],
+        dst=[f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA s GRANT EXECUTE ON FUNCTIONS TO {grantee}"],
+        diff=[f'ALTER DEFAULT PRIVILEGES FOR ROLE "{owner}" IN SCHEMA "s" GRANT EXECUTE ON FUNCTIONS TO "{grantee}"'],
+        include_grants=True,
+    )

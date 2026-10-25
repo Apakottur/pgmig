@@ -1,7 +1,12 @@
 -- ALTER DEFAULT PRIVILEGES rules (pg_default_acl). A row exists only where the defaults were
 -- altered; its absence means the built-in defaults apply. So each row is surfaced with both its
--- effective ACL (defaclacl) and the built-in baseline (acldefault of the same object type for the
--- same role) -- the diff compares effective-vs-effective, expanding an absent rule to its baseline.
+-- effective ACL (defaclacl) and the baseline an absent rule stands for -- the diff compares
+-- effective-vs-effective, expanding an absent rule to its baseline.
+--
+-- A global rule replaces the built-in defaults, so its baseline is acldefault of the same object
+-- type for the same role. A schema-scoped (IN SCHEMA) rule only adds to the global defaults and
+-- can never revoke them, so its baseline is empty: a schema-scoped rule without PUBLIC does not
+-- mean PUBLIC lost the privilege there.
 --
 -- defaclobjtype uses its own single-char codes, DISTINCT from acldefault's: 'r' TABLES, 'S'
 -- SEQUENCES, 'f' FUNCTIONS, 'T' TYPES, 'n' SCHEMAS (PG15+). acldefault wants the lower-case
@@ -20,8 +25,9 @@ SELECT
         FROM
             aclexplode(d.defaclacl) AS acl
         LEFT JOIN pg_roles gr ON gr.oid = acl.grantee) AS grants,
-    -- Built-in baseline for this (object type, role): acldefault with the object type mapped to
-    -- its acldefault code ('S'->'s' sequence, 'T'->'t' type; the rest coincide).
+    -- Baseline: empty for a schema-scoped rule; for a global rule, the built-in acldefault for
+    -- this (object type, role), with the object type mapped to its acldefault code ('S'->'s'
+    -- sequence, 'T'->'t' type; the rest coincide).
     (
         SELECT
 	    COALESCE(jsonb_agg(jsonb_build_object('grantee', COALESCE(gr.rolname, 'PUBLIC'),
@@ -39,7 +45,9 @@ SELECT
                         't'
                     WHEN 'n' THEN
                         'n' END::"char", d.defaclrole)) AS acl
-            LEFT JOIN pg_roles gr ON gr.oid = acl.grantee) AS baseline_grants
+            LEFT JOIN pg_roles gr ON gr.oid = acl.grantee
+        WHERE
+            d.defaclnamespace = 0) AS baseline_grants
 FROM
     pg_default_acl d
     LEFT JOIN pg_namespace ns ON ns.oid = d.defaclnamespace
