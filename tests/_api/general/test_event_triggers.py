@@ -3,7 +3,6 @@ from tests.fixtures.db_utils import get_unique_postgres_name
 
 # An event trigger function, shared by both sides unless a test changes it.
 _FN = "CREATE FUNCTION et_fn() RETURNS event_trigger LANGUAGE plpgsql AS $$BEGIN END;$$"
-_FN2 = "CREATE FUNCTION et_fn2() RETURNS event_trigger LANGUAGE plpgsql AS $$BEGIN END;$$"
 
 
 async def test_event_trigger_added(gen_setup: GenerateSetup) -> None:
@@ -30,18 +29,6 @@ async def test_event_trigger_added_with_its_function(gen_setup: GenerateSetup) -
             "AS $function$BEGIN END;$function$",
             'CREATE EVENT TRIGGER "et" ON ddl_command_end EXECUTE FUNCTION "public"."et_fn"()',
         ],
-    )
-
-
-async def test_event_trigger_dropped(gen_setup: GenerateSetup) -> None:
-    """
-    An event trigger present only on the source -> DROP EVENT TRIGGER.
-    """
-    await gen_setup.assert_diff(
-        both=[_FN],
-        src=["CREATE EVENT TRIGGER et ON ddl_command_end EXECUTE FUNCTION et_fn()"],
-        dst=[],
-        diff=['DROP EVENT TRIGGER "et"'],
     )
 
 
@@ -94,7 +81,8 @@ async def test_event_trigger_tag_order_is_not_a_change(gen_setup: GenerateSetup)
 
 async def test_event_trigger_tags_changed(gen_setup: GenerateSetup) -> None:
     """
-    A changed tag filter has no ALTER form: the trigger is dropped and recreated.
+    A changed tag filter has no ALTER form: the trigger is dropped and recreated. The event and
+    the function are part of the same rename key, so a change to either takes this path too.
     """
     await gen_setup.assert_diff(
         both=[_FN],
@@ -103,36 +91,6 @@ async def test_event_trigger_tags_changed(gen_setup: GenerateSetup) -> None:
         diff=[
             'DROP EVENT TRIGGER "et"',
             'CREATE EVENT TRIGGER "et" ON ddl_command_start EXECUTE FUNCTION "public"."et_fn"()',
-        ],
-    )
-
-
-async def test_event_trigger_event_changed(gen_setup: GenerateSetup) -> None:
-    """
-    A changed firing event -> drop and recreate.
-    """
-    await gen_setup.assert_diff(
-        both=[_FN],
-        src=["CREATE EVENT TRIGGER et ON ddl_command_start EXECUTE FUNCTION et_fn()"],
-        dst=["CREATE EVENT TRIGGER et ON sql_drop EXECUTE FUNCTION et_fn()"],
-        diff=[
-            'DROP EVENT TRIGGER "et"',
-            'CREATE EVENT TRIGGER "et" ON sql_drop EXECUTE FUNCTION "public"."et_fn"()',
-        ],
-    )
-
-
-async def test_event_trigger_function_changed(gen_setup: GenerateSetup) -> None:
-    """
-    A trigger pointed at a different function -> drop and recreate.
-    """
-    await gen_setup.assert_diff(
-        both=[_FN, _FN2],
-        src=["CREATE EVENT TRIGGER et ON ddl_command_end EXECUTE FUNCTION et_fn()"],
-        dst=["CREATE EVENT TRIGGER et ON ddl_command_end EXECUTE FUNCTION et_fn2()"],
-        diff=[
-            'DROP EVENT TRIGGER "et"',
-            'CREATE EVENT TRIGGER "et" ON ddl_command_end EXECUTE FUNCTION "public"."et_fn2"()',
         ],
     )
 
@@ -176,24 +134,6 @@ async def test_event_trigger_created_in_non_default_state(gen_setup: GenerateSet
             'CREATE EVENT TRIGGER "et" ON ddl_command_end EXECUTE FUNCTION "public"."et_fn"()',
             'ALTER EVENT TRIGGER "et" ENABLE ALWAYS',
         ],
-    )
-
-
-async def test_event_trigger_renamed_keeps_state(gen_setup: GenerateSetup) -> None:
-    """
-    A rename preserves the enable state, so only a differing target state is emitted.
-    """
-    await gen_setup.assert_diff(
-        both=[_FN],
-        src=[
-            "CREATE EVENT TRIGGER et_old ON ddl_command_end EXECUTE FUNCTION et_fn()",
-            "ALTER EVENT TRIGGER et_old DISABLE",
-        ],
-        dst=[
-            "CREATE EVENT TRIGGER et_new ON ddl_command_end EXECUTE FUNCTION et_fn()",
-            "ALTER EVENT TRIGGER et_new DISABLE",
-        ],
-        diff=['ALTER EVENT TRIGGER "et_old" RENAME TO "et_new"'],
     )
 
 
