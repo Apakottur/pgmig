@@ -32,11 +32,12 @@ def generate() -> Iterator[Statement]:
     """
     Generate the migration SQL of ALTER DEFAULT PRIVILEGES rules (pg_default_acl).
 
-    A rule present on only one side is compared against the built-in baseline on the other:
-    each side's effective ACL is its own row's grants, or -- when that side has no row -- the
-    baseline (acldefault) carried by the side that does. Diffing effective-vs-effective this
-    way turns "source configured extra grants, target has none" into the REVOKEs that undo
-    them, and vice versa, without a row on both sides.
+    A rule present on only one side is compared against the baseline on the other: each side's
+    effective ACL is its own row's grants, or -- when that side has no row -- the baseline
+    carried by the side that does (acldefault for a global rule; empty for a schema-scoped one,
+    which only adds to the global defaults). Diffing effective-vs-effective this way turns
+    "source configured extra grants, target has none" into the REVOKEs that undo them, and vice
+    versa, without a row on both sides.
 
     Emitted in the GRANT phase, after schema creates (an IN SCHEMA rule needs its schema) and
     every other object; default-privilege rules affect only future objects, so they have no
@@ -49,8 +50,8 @@ def generate() -> Iterator[Statement]:
     for key in sorted(src_map.keys() | dst_map.keys(), key=lambda k: (k.role, k.schema or "", k.object_type)):
         src_rule = src_map.get(key)
         dst_rule = dst_map.get(key)
-        # The baseline is deterministic in (object type, role), so either side's row carries the
-        # same one; the side without a row falls back to it. The key came from the union of both
+        # The baseline is deterministic in (role, schema, object type), so either side's row
+        # carries the same one; the side without a row falls back to it. The key came from the union of both
         # maps, so at least one side has a row (cast away the Optional the checker sees).
         present = cast("DefaultAcl", src_rule if src_rule is not None else dst_rule)
         src_grants = src_rule.grants if src_rule is not None else present.baseline
