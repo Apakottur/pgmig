@@ -97,6 +97,11 @@ SELECT
         SELECT
             1
         FROM
+            pg_event_trigger) AS has_event_triggers,
+    EXISTS (
+        SELECT
+            1
+        FROM
             pg_policy pol
             JOIN pg_class c ON c.oid = pol.polrelid
             JOIN pg_namespace n ON n.oid = c.relnamespace

@@ -76,18 +76,3 @@ async def test_extended_statistics_raises_not_supported(gen_setup: GenerateSetup
         dst=["CREATE TABLE t (a integer, b integer)", "CREATE STATISTICS t_stats ON a, b FROM t"],
         match=r"extended statistics .* is not supported",
     )
-
-
-async def test_event_trigger_raises_not_supported(gen_setup: GenerateSetup) -> None:
-    """
-    An event trigger (pg_event_trigger) is database-global with no schema, so it exercises
-    the schema-less reporting path. It is not modelled and must raise.
-    """
-    await gen_setup.assert_unsupported(
-        src=[],
-        dst=[
-            "CREATE FUNCTION et_fn() RETURNS event_trigger LANGUAGE plpgsql AS $$BEGIN END;$$",
-            "CREATE EVENT TRIGGER et ON ddl_command_start EXECUTE FUNCTION et_fn()",
-        ],
-        match=r'event trigger "et" is not supported',
-    )

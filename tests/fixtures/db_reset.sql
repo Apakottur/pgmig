@@ -18,6 +18,15 @@ BEGIN
         defaclrole <> CURRENT_USER::regrole LOOP
             EXECUTE format('DROP OWNED BY %s', entry.defaclrole::regrole);
         END LOOP;
+    -- Drop event triggers first: they are database-global, and one left over from a test would
+    -- otherwise fire on every DDL statement of this reset.
+    FOR entry IN
+    SELECT
+        evtname
+    FROM
+        pg_event_trigger LOOP
+            EXECUTE format('DROP EVENT TRIGGER %I', entry.evtname);
+        END LOOP;
     -- Drop extensions before schemas: an extension living in a custom schema blocks
     -- DROP SCHEMA on that schema until the extension itself is gone.
     FOR entry IN

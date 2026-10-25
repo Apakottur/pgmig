@@ -27,8 +27,10 @@ SELECT
             d.refclassid = 'pg_proc'::regclass
             AND d.refobjid = p.oid
             AND d.deptype IN ('n', 'a')
-            AND d.classid <> 'pg_trigger'::regclass) AS func_has_dependents,
-    -- The non-trigger objects that depend on this routine (same pg_depend rows as
+            -- Table and event triggers are phased by their own generator (dropped before and
+            -- created after the routine), so they are not dependents the routine must outlive.
+            AND d.classid NOT IN ('pg_trigger'::regclass, 'pg_event_trigger'::regclass)) AS func_has_dependents,
+    -- The non-trigger (table or event) objects that depend on this routine (same pg_depend rows as
     -- func_has_dependents), each resolved to a structured identity by dependent catalog
     -- (classid). Drives the recreate-around-dependents path on a return-type change:
     --   pg_attrdef   -> a column default ('default'): its table and column.
@@ -81,7 +83,7 @@ SELECT
         d.refclassid = 'pg_proc'::regclass
         AND d.refobjid = p.oid
         AND d.deptype IN ('n', 'a')
-        AND d.classid <> 'pg_trigger'::regclass), '[]'::jsonb) AS func_dependents,
+        AND d.classid NOT IN ('pg_trigger'::regclass, 'pg_event_trigger'::regclass)), '[]'::jsonb) AS func_dependents,
     -- Forward function -> function hard dependencies (deptype 'n'), as {schema_name, name,
     -- args} objects; used to order drops so a routine is dropped before the ones it depends on.
     COALESCE((

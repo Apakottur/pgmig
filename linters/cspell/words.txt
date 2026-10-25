@@ -250,3 +250,9 @@ rngcanonical
 conindid
 lucide
 mkdocstrings
+evtenabled
+evtevent
+evtfoid
+evtowner
+evttags
+supabase
