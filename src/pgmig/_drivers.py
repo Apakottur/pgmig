@@ -17,11 +17,16 @@ class DbDriver(StrEnum):
     # https://github.com/psycopg/psycopg
     PSYCOPG = "psycopg"
 
+    # https://github.com/MagicStack/asyncpg
+    ASYNCPG = "asyncpg"
+
     @property
-    def resolved(self) -> "Literal[DbDriver.PSYCOPG]":
+    def resolved(self) -> "Literal[DbDriver.PSYCOPG, DbDriver.ASYNCPG]":
         match self:
             case DbDriver.AUTO | DbDriver.PSYCOPG:
                 return DbDriver.PSYCOPG
+            case DbDriver.ASYNCPG:
+                return DbDriver.ASYNCPG
             case _:
                 assert_never(self)
 

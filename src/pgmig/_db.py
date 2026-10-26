@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Self, assert_never
 
 from pgmig._drivers import DbConnInfo, DbDriver, DriverConnection
+from pgmig._errors import PgmigApiError
 
 
 def _get_driver_connection_class(driver: DbDriver) -> type[DriverConnection]:
@@ -10,10 +11,18 @@ def _get_driver_connection_class(driver: DbDriver) -> type[DriverConnection]:
     Get the implementation of the given driver.
     """
     match driver.resolved:
-        case DbDriver.PSYCOPG:
+        case DbDriver.PSYCOPG:  # pragma: psycopg-only
             from pgmig._psycopg import PsycopgConnection  # noqa: PLC0415
 
             return PsycopgConnection
+        case DbDriver.ASYNCPG:  # pragma: asyncpg-only
+            # asyncpg is an optional extra, so it may not be installed.
+            try:
+                from pgmig._asyncpg import AsyncpgConnection  # noqa: PLC0415
+            except ModuleNotFoundError as error:
+                raise PgmigApiError("The asyncpg driver is not installed. Install the pgmig[asyncpg] extra.") from error
+
+            return AsyncpgConnection
         case _:
             assert_never(driver.resolved)
 

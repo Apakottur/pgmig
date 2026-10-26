@@ -68,7 +68,7 @@ jobs:
       matrix:
         # Sparse cross: every Postgres major on the newest Python, plus every other
         # Python on the default Postgres (18). The PG-18 x 3.14 cell is shared. Every cell
-        # names the driver it runs on.
+        # names the driver it runs on; one extra cell covers the asyncpg driver.
         include:
           - python-version: "3.14"
             pg-version: "14"
@@ -94,6 +94,9 @@ jobs:
           - python-version: "3.13"
             pg-version: "18"
             driver: "psycopg"
+          - python-version: "3.14"
+            pg-version: "18"
+            driver: "asyncpg"
           # The oldest dependency versions allowed by pyproject.toml.
           - python-version: "3.11"
             pg-version: "18"

@@ -31,6 +31,12 @@ Run the unit tests with `pytest`:
 uv run pytest -c tests/pytest.ini tests
 ```
 
+The tests run on the default psycopg driver. Set `PGMIG_DRIVER` to run them on another one:
+
+```shell
+PGMIG_DRIVER=asyncpg uv run pytest -c tests/pytest.ini tests
+```
+
 Run the type checks with `mypy` and `ty` (both run in CI):
 
 ```shell

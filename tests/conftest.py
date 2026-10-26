@@ -30,13 +30,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Tear down the docker compose stack after the test session (default: leave it running).",
     )
     parser.addoption(
-        "--driver",
-        action="store",
-        default=None,
-        choices=list(DbDriver),
-        help=f"Database driver to test against. Falls back to the PGMIG_DRIVER env var, then {DbDriver.AUTO}.",
-    )
-    parser.addoption(
         "--pg-version",
         action="store",
         default=None,
@@ -81,12 +74,13 @@ def _pg_major(request: pytest.FixtureRequest) -> int:
 
 
 @pytest.fixture(scope="session")
-def driver(request: pytest.FixtureRequest) -> DbDriver:
+def driver() -> DbDriver:
     """
     Get the database driver under test.
     """
-    # Resolve the driver: --driver, then PGMIG_DRIVER, then the default.
-    driver = DbDriver(request.config.getoption("--driver") or os.environ.get("PGMIG_DRIVER") or DbDriver.AUTO)
+    # Resolve the driver from PGMIG_DRIVER, then the default. There is no --driver option: the coverage rules that
+    # exclude the other drivers' code read PGMIG_DRIVER too, and they are evaluated before conftest runs.
+    driver = DbDriver(os.environ.get("PGMIG_DRIVER") or DbDriver.AUTO)
 
     # Export it so CLI invocations (which read PGMIG_DRIVER) use the same driver.
     os.environ["PGMIG_DRIVER"] = driver.value
