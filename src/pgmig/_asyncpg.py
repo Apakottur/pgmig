@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import asyncpg
 
-from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError, UniqueViolation
+from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
 
 if TYPE_CHECKING:
     from pgmig._db import DbConnInfo
@@ -58,13 +58,10 @@ async def execute(conn: asyncpg.Connection, statement: str) -> list[tuple[Any, .
     # statements and commands that cannot run in a transaction; execute() (simple) allows
     # those but returns no rows. Reads are always single SELECT-likes; everything else is DDL.
     is_read = statement.lstrip().upper().startswith(("SELECT", "WITH", "SHOW", "VALUES", "TABLE"))
-    try:
-        if is_read:
-            records = await conn.fetch(statement)
-            return [tuple(record) for record in records]
-        await conn.execute(statement)
-    except asyncpg.UniqueViolationError as error:
-        raise UniqueViolation(str(error)) from error
+    if is_read:
+        records = await conn.fetch(statement)
+        return [tuple(record) for record in records]
+    await conn.execute(statement)
     return []
 
 
