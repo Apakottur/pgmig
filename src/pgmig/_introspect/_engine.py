@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from typing import Any
 
-from pgmig._db import DbConnInfo, DbReadOnlyConnection
+from pgmig._db import DbReadOnlyConnection
+from pgmig._drivers import DbConnInfo
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._introspect import (
     composite_type_dependencies,
