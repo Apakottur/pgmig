@@ -1,10 +1,9 @@
 import asyncio
 from collections.abc import Sequence
 
-from pgmig._db import DbConnInfo
 from pgmig._diff._context import ContextData
 from pgmig._diff._engine import get_diff
-from pgmig._drivers import DbDriver
+from pgmig._drivers import DbConnInfo, DbDriver
 from pgmig._errors import PgmigApiError, PgmigDbConnectionError, PgmigDbDriverError
 from pgmig._introspect._engine import introspect_db
 

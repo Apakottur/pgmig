@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 import tenacity
 
-from pgmig._db import DbConnection, DbConnInfo
+from pgmig._db import DbConnection
+from pgmig._drivers import DbConnInfo
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"
 _PGBOUNCER_DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:16432"

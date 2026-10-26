@@ -1,11 +1,9 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, Self, assert_never
-
-if TYPE_CHECKING:
-    from pgmig._db import DbConnInfo
+from typing import Any, Literal, Self, assert_never
 
 
 class DbDriver(StrEnum):
@@ -28,6 +26,22 @@ class DbDriver(StrEnum):
                 assert_never(self)
 
 
+@dataclass(frozen=True)
+class DbConnInfo:
+    """
+    Information about a single database.
+    """
+
+    # The database DSN.
+    dsn: str
+
+    # Friendly label, used in error/log messages.
+    label: str
+
+    # The driver to connect with.
+    driver: DbDriver = DbDriver.AUTO
+
+
 class DriverConnection(ABC):
     """
     A connection through a single database driver.
@@ -36,7 +50,7 @@ class DriverConnection(ABC):
 
     @classmethod
     @abstractmethod
-    def connect(cls, db_conn_info: "DbConnInfo") -> AbstractAsyncContextManager[Self]:
+    def connect(cls, db_conn_info: DbConnInfo) -> AbstractAsyncContextManager[Self]:
         """
         Connection context.
         """

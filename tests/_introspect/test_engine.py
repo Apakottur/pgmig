@@ -1,4 +1,5 @@
-from pgmig._db import DbConnInfo, DbReadOnlyConnection
+from pgmig._db import DbReadOnlyConnection
+from pgmig._drivers import DbConnInfo
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import get_dsn

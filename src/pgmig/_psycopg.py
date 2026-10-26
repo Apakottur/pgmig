@@ -4,17 +4,14 @@ The psycopg driver, behind the DB connection API in _db.py.
 
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self
 
 import psycopg
 from psycopg import pq
 from psycopg.rows import dict_row
 
-from pgmig._drivers import DriverConnection
+from pgmig._drivers import DbConnInfo, DriverConnection
 from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
-
-if TYPE_CHECKING:
-    from pgmig._db import DbConnInfo
 
 
 class PsycopgConnection(DriverConnection):
@@ -27,7 +24,7 @@ class PsycopgConnection(DriverConnection):
 
     @classmethod
     @asynccontextmanager
-    async def connect(cls, db_conn_info: "DbConnInfo") -> AsyncGenerator[Self]:
+    async def connect(cls, db_conn_info: DbConnInfo) -> AsyncGenerator[Self]:
         try:
             conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
         except psycopg.Error as error:

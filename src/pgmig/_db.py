@@ -1,25 +1,8 @@
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any, Self, assert_never
 
-from pgmig._drivers import DbDriver, DriverConnection
-
-
-@dataclass(frozen=True)
-class DbConnInfo:
-    """
-    Information about a single database.
-    """
-
-    # The database DSN.
-    dsn: str
-
-    # Friendly label, used in error/log messages.
-    label: str
-
-    # The driver to connect with.
-    driver: DbDriver = DbDriver.AUTO
+from pgmig._drivers import DbConnInfo, DbDriver, DriverConnection
 
 
 def _get_driver_connection_class(driver: DbDriver) -> type[DriverConnection]:
