@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import shpyx
 
-from pgmig._db import DbConnection, DbConnInfo
-from pgmig._drivers import DbDriver
+from pgmig._db import DbConnection
+from pgmig._drivers import DbConnInfo, DbDriver
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import (
     get_dsn,

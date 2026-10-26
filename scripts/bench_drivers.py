@@ -9,8 +9,8 @@ import asyncio
 import statistics
 import time
 
-from pgmig._db import DbConnection, DbConnInfo
-from pgmig._drivers import DbDriver
+from pgmig._db import DbConnection
+from pgmig._drivers import DbConnInfo, DbDriver
 from pgmig._introspect._engine import introspect_db
 
 _DSN_PREFIX = "postgresql://pgmig:pgmig@localhost:15432"

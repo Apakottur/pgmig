@@ -1,37 +1,39 @@
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from typing import Any, Literal, Self, assert_never
+from typing import Any, Self, assert_never
 
-from pgmig import _psycopg
-from pgmig._drivers import DbDriver
+from pgmig._drivers import DbConnInfo, DbDriver, DriverConnection
 from pgmig._errors import PgmigApiError
 
 
-@dataclass(frozen=True)
-class DbConnInfo:
+def _get_driver_connection_class(driver: DbDriver) -> type[DriverConnection]:
     """
-    Information about a single database.
+    Get the implementation of the given driver.
     """
+    match driver.resolved:
+        case DbDriver.PSYCOPG:  # pragma: psycopg-only
+            from pgmig._psycopg import PsycopgConnection  # noqa: PLC0415
 
-    # The database DSN.
-    dsn: str
+            return PsycopgConnection
+        case DbDriver.ASYNCPG:  # pragma: asyncpg-only
+            # asyncpg is an optional extra, so it may not be installed.
+            try:
+                from pgmig._asyncpg import AsyncpgConnection  # noqa: PLC0415
+            except ModuleNotFoundError as error:
+                raise PgmigApiError("The asyncpg driver is not installed. Install the pgmig[asyncpg] extra.") from error
 
-    # Friendly label, used in error/log messages.
-    label: str
-
-    # The driver to connect with.
-    driver: DbDriver = DbDriver.AUTO
+            return AsyncpgConnection
+        case _:
+            assert_never(driver.resolved)
 
 
 class DbConnection:
     """
     DB connection API.
     All DB interaction is done through this class to avoid the DB driver leaking into other modules.
-    Each driver's implementation lives in its own module, and every method dispatches on the driver.
     """
 
-    def __init__(self, *, db_conn_info: DbConnInfo, conn: Any) -> None:
+    def __init__(self, *, db_conn_info: DbConnInfo, conn: DriverConnection) -> None:
         self.db_conn_info = db_conn_info
         self.driver_conn = conn
 
@@ -39,47 +41,20 @@ class DbConnection:
     def dsn(self) -> str:
         return self.db_conn_info.dsn
 
-    @property
-    def driver(self) -> Literal[DbDriver.PSYCOPG, DbDriver.ASYNCPG]:
-        return self.db_conn_info.driver.resolved
-
     @classmethod
     @asynccontextmanager
     async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncGenerator[Self]:
         """
         Connection context.
         """
-        match db_conn_info.driver.resolved:
-            case DbDriver.PSYCOPG:  # pragma: psycopg-only
-                async with _psycopg.connect(db_conn_info) as conn:
-                    yield cls(db_conn_info=db_conn_info, conn=conn)
-            case DbDriver.ASYNCPG:  # pragma: asyncpg-only
-                # asyncpg is an optional extra, so its module is imported only when selected.
-                try:
-                    from pgmig import _asyncpg  # noqa: PLC0415
-                except ModuleNotFoundError as error:
-                    raise PgmigApiError(
-                        "The asyncpg driver is not installed. Install the pgmig[asyncpg] extra."
-                    ) from error
-
-                async with _asyncpg.connect(db_conn_info) as conn:
-                    yield cls(db_conn_info=db_conn_info, conn=conn)
-            case _:
-                assert_never(db_conn_info.driver.resolved)
+        async with _get_driver_connection_class(db_conn_info.driver).connect(db_conn_info) as conn:
+            yield cls(db_conn_info=db_conn_info, conn=conn)
 
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
         Execute a statement and return the statement results, if any.
         """
-        match self.driver:
-            case DbDriver.PSYCOPG:  # pragma: psycopg-only
-                return await _psycopg.execute(self.driver_conn, statement)
-            case DbDriver.ASYNCPG:  # pragma: asyncpg-only
-                from pgmig import _asyncpg  # noqa: PLC0415
-
-                return await _asyncpg.execute(self.driver_conn, statement)
-            case _:
-                assert_never(self.driver)
+        return await self.driver_conn.execute(statement)
 
 
 # Opens the transaction all the introspection queries run in, executed in order before the first query.
@@ -104,12 +79,4 @@ class DbReadOnlyConnection(DbConnection):
         """
         Run the given introspection queries, returning the rows of each one.
         """
-        match self.driver:
-            case DbDriver.PSYCOPG:  # pragma: psycopg-only
-                return await _psycopg.introspect(self.driver_conn, queries, _SNAPSHOT_SETUP)
-            case DbDriver.ASYNCPG:  # pragma: asyncpg-only
-                from pgmig import _asyncpg  # noqa: PLC0415
-
-                return await _asyncpg.introspect(self.driver_conn, queries, _SNAPSHOT_SETUP)
-            case _:
-                assert_never(self.driver)
+        return await self.driver_conn.introspect(queries, _SNAPSHOT_SETUP)
