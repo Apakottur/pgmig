@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Self, assert_never
 
 from pgmig._drivers import DbDriver, DriverConnection
-from pgmig._psycopg import PsycopgConnection
 
 
 @dataclass(frozen=True)
@@ -29,6 +28,8 @@ def _get_driver_connection_class(driver: DbDriver) -> type[DriverConnection]:
     """
     match driver.resolved:
         case DbDriver.PSYCOPG:
+            from pgmig._psycopg import PsycopgConnection  # noqa: PLC0415
+
             return PsycopgConnection
         case _:
             assert_never(driver.resolved)
