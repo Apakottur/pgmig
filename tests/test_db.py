@@ -1,7 +1,7 @@
+import importlib
 import sys
 
 import pytest
-import shpyx
 from pytest_mock import MockerFixture
 
 from pgmig._db import DbConnection, DbConnInfo
@@ -9,9 +9,14 @@ from pgmig._drivers import DbDriver
 from pgmig._errors import PgmigApiError
 
 
-def test_importing_pgmig_does_not_import_asyncpg() -> None:
-    # asyncpg is an optional extra, so pgmig must load without it.
-    shpyx.run(f"{sys.executable} -c \"import sys, pgmig, pgmig._cli._cli; assert 'asyncpg' not in sys.modules\"")
+def test_pgmig_imports_without_asyncpg(mocker: MockerFixture) -> None:
+    # asyncpg is an optional extra, so pgmig must load without it. Block asyncpg and drop the loaded pgmig modules, so
+    # that importing pgmig runs all of its imports afresh. patch.dict restores the modules afterwards.
+    mocker.patch.dict(sys.modules, {"asyncpg": None})
+    for name in [name for name in sys.modules if name.split(".")[0] == "pgmig"]:
+        del sys.modules[name]
+
+    importlib.import_module("pgmig._cli._cli")
 
 
 async def test_connect_without_asyncpg_installed(mocker: MockerFixture) -> None:
