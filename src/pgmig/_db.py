@@ -1,12 +1,10 @@
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Literal, Self, assert_never
+from typing import Any, Self, assert_never
 
-import psycopg
-
-from pgmig import _psycopg
-from pgmig._drivers import DbDriver
+from pgmig._drivers import DbDriver, DriverConnection
+from pgmig._psycopg import PsycopgConnection
 
 
 @dataclass(frozen=True)
@@ -25,14 +23,24 @@ class DbConnInfo:
     driver: DbDriver = DbDriver.AUTO
 
 
+def _get_driver_connection_class(driver: DbDriver) -> type[DriverConnection]:
+    """
+    Get the implementation of the given driver.
+    """
+    match driver.resolved:
+        case DbDriver.PSYCOPG:
+            return PsycopgConnection
+        case _:
+            assert_never(driver.resolved)
+
+
 class DbConnection:
     """
     DB connection API.
     All DB interaction is done through this class to avoid the DB driver leaking into other modules.
-    Each driver's implementation lives in its own module, and every method dispatches on the driver.
     """
 
-    def __init__(self, *, db_conn_info: DbConnInfo, conn: psycopg.AsyncConnection[Any]) -> None:
+    def __init__(self, *, db_conn_info: DbConnInfo, conn: DriverConnection) -> None:
         self.db_conn_info = db_conn_info
         self.driver_conn = conn
 
@@ -40,32 +48,20 @@ class DbConnection:
     def dsn(self) -> str:
         return self.db_conn_info.dsn
 
-    @property
-    def driver(self) -> Literal[DbDriver.PSYCOPG]:
-        return self.db_conn_info.driver.resolved
-
     @classmethod
     @asynccontextmanager
     async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncGenerator[Self]:
         """
         Connection context.
         """
-        match db_conn_info.driver.resolved:
-            case DbDriver.PSYCOPG:
-                async with _psycopg.connect(db_conn_info) as conn:
-                    yield cls(db_conn_info=db_conn_info, conn=conn)
-            case _:
-                assert_never(db_conn_info.driver.resolved)
+        async with _get_driver_connection_class(db_conn_info.driver).connect(db_conn_info) as conn:
+            yield cls(db_conn_info=db_conn_info, conn=conn)
 
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
         Execute a statement and return the statement results, if any.
         """
-        match self.driver:
-            case DbDriver.PSYCOPG:
-                return await _psycopg.execute(self.driver_conn, statement)
-            case _:
-                assert_never(self.driver)
+        return await self.driver_conn.execute(statement)
 
 
 # Opens the transaction all the introspection queries run in, executed in order before the first query.
@@ -90,8 +86,4 @@ class DbReadOnlyConnection(DbConnection):
         """
         Run the given introspection queries, returning the rows of each one.
         """
-        match self.driver:
-            case DbDriver.PSYCOPG:
-                return await _psycopg.introspect(self.driver_conn, queries, _SNAPSHOT_SETUP)
-            case _:
-                assert_never(self.driver)
+        return await self.driver_conn.introspect(queries, _SNAPSHOT_SETUP)

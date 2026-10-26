@@ -1,5 +1,11 @@
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
 from enum import StrEnum
-from typing import Literal, assert_never
+from typing import TYPE_CHECKING, Any, Literal, Self, assert_never
+
+if TYPE_CHECKING:
+    from pgmig._db import DbConnInfo
 
 
 class DbDriver(StrEnum):
@@ -20,3 +26,30 @@ class DbDriver(StrEnum):
                 return DbDriver.PSYCOPG
             case _:
                 assert_never(self)
+
+
+class DriverConnection(ABC):
+    """
+    A connection through a single database driver.
+    Each driver implements this interface in its own module, and _db.py talks to the driver only through it.
+    """
+
+    @classmethod
+    @abstractmethod
+    def connect(cls, db_conn_info: "DbConnInfo") -> AbstractAsyncContextManager[Self]:
+        """
+        Connection context.
+        """
+
+    @abstractmethod
+    async def execute(self, statement: str) -> list[tuple[Any, ...]]:
+        """
+        Execute a statement and return the statement results, if any.
+        """
+
+    @abstractmethod
+    async def introspect(self, queries: Sequence[str], snapshot_setup: Sequence[str]) -> list[list[dict[str, Any]]]:
+        """
+        Run the given introspection queries, returning the rows of each one.
+        On the first call, first run the snapshot setup statements, which open the snapshot transaction.
+        """
