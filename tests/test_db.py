@@ -4,6 +4,7 @@ import sys
 import pytest
 from pytest_mock import MockerFixture
 
+import pgmig
 from pgmig._db import DbConnection, DbConnInfo
 from pgmig._drivers import DbDriver
 from pgmig._errors import PgmigApiError
@@ -19,8 +20,11 @@ def test_pgmig_imports_without_asyncpg(mocker: MockerFixture) -> None:
     importlib.import_module("pgmig._cli._cli")
 
 
-async def test_connect_without_asyncpg_installed(mocker: MockerFixture) -> None:
+async def test_connect_without_asyncpg_installed(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Block asyncpg and unload pgmig's asyncpg module, in case an earlier test loaded it.
     mocker.patch.dict(sys.modules, {"asyncpg": None})
+    sys.modules.pop("pgmig._asyncpg", None)
+    monkeypatch.delattr(pgmig, "_asyncpg", raising=False)
     db_conn_info = DbConnInfo(dsn="postgresql://localhost/db", label="source", driver=DbDriver.ASYNCPG)
 
     with pytest.raises(PgmigApiError, match=r"Install the pgmig\[asyncpg\] extra"):

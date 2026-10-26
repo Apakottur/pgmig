@@ -13,13 +13,11 @@ _KIND_NAMES = {
     ("pg_rewrite", "r"): "rule",
     ("pg_class", "inherits"): "legacy inheritance child table",
     ("pg_statistic_ext", "e"): "extended statistics",
-    ("pg_event_trigger", "e"): "event trigger",
 }
 
 
 class _UnsupportedRow(IntrospectionRow):
-    # schema_name is None for database-global objects (e.g. event triggers).
-    schema_name: str | None
+    schema_name: str
     obj_name: str
     catalog: str
     kind: str
@@ -30,7 +28,7 @@ class UnsupportedGuard(Guard[_UnsupportedRow]):
     Guard: report object kinds that are not modelled yet (see unsupported.sql for the full
     list: foreign tables, base types, aggregate/window
     functions, rules, legacy
-    inheritance children, extended statistics, event triggers). Without this, generate()
+    inheritance children, extended statistics). Without this, generate()
     diffs only the supported kinds and returns "" for a database whose not-yet-modelled
     objects differ on one side, falsely claiming convergence.
     """
@@ -43,6 +41,5 @@ class UnsupportedGuard(Guard[_UnsupportedRow]):
         findings = []
         for row in rows:
             name = _KIND_NAMES.get((row.catalog, row.kind), row.kind)
-            parts = [row.schema_name, row.obj_name] if row.schema_name is not None else [row.obj_name]
-            findings.append(f"{name} {qualified(*parts)} is not supported yet")
+            findings.append(f"{name} {qualified(row.schema_name, row.obj_name)} is not supported yet")
         return findings

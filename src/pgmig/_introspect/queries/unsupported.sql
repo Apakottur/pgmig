@@ -10,7 +10,6 @@
 --   pg_proc:              aggregate 'a', window 'w'   (dropped by functions.sql's prokind filter).
 --   pg_rewrite:           rule 'r'   (the view _RETURN rule is excluded).
 --   pg_statistic_ext:     extended statistics 'e'.
---   pg_event_trigger:     event trigger 'e' (database-global, no schema).
 -- Extension-owned objects are excluded (the extension recreates them). Drop a kind from
 -- a filter as its roadmap feature lands.
 SELECT
@@ -208,25 +207,6 @@ WHERE
             pg_depend d
         WHERE
             d.objid = c.oid
-            AND d.deptype = 'e')
-UNION ALL
--- Event triggers (pg_event_trigger, CREATE EVENT TRIGGER). Database-global: they have no
--- schema, so schema_name is NULL and only the self extension-ownership leg applies.
-SELECT
-    NULL::text AS schema_name,
-    e.evtname AS obj_name,
-    'pg_event_trigger' AS catalog,
-    'e' AS kind
-FROM
-    pg_event_trigger e
-WHERE
-    NOT EXISTS (
-        SELECT
-            1
-        FROM
-            pg_depend d
-        WHERE
-            d.objid = e.oid
             AND d.deptype = 'e')
 ORDER BY
     schema_name,

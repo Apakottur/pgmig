@@ -1,0 +1,32 @@
+# Configuration of the underlying coverage.py application.
+# TOML rather than INI, since coverage-conditional-plugin's per-file omits need it.
+# See: https://coverage.readthedocs.io/en/latest/config.html
+
+[tool.coverage.run]
+plugins = ["coverage_conditional_plugin"]
+
+[tool.coverage.report]
+# Regexes for lines to exclude from reports.
+exclude_lines = [
+  "if TYPE_CHECKING:",
+  "raise PgmigUnsupportedError",
+  '\.\.\.$',
+  "if __name__ == .__main__.:",
+]
+# Multi-line regexes to exclude from reports.
+# See: https://github.com/nedbat/coveragepy/issues/1797
+exclude_also = [
+  'case _:\n\s*assert_never\(',
+  'case _:\n\s*raise PgmigUnsupportedError',
+]
+
+# Each test run exercises one driver, so the other driver's module and dispatch arms are excluded from the report.
+# Keyed on PGMIG_DRIVER rather than --driver, since the rules are evaluated when coverage starts, before conftest runs.
+# See: https://github.com/wemake-services/coverage-conditional-plugin
+[tool.coverage.coverage_conditional_plugin.omit]
+"os_environ.get('PGMIG_DRIVER', 'auto') not in ('auto', 'psycopg')" = "*/pgmig/_psycopg.py"
+"os_environ.get('PGMIG_DRIVER', 'auto') != 'asyncpg'" = "*/pgmig/_asyncpg.py"
+
+[tool.coverage.coverage_conditional_plugin.rules]
+psycopg-only = "os_environ.get('PGMIG_DRIVER', 'auto') not in ('auto', 'psycopg')"
+asyncpg-only = "os_environ.get('PGMIG_DRIVER', 'auto') != 'asyncpg'"

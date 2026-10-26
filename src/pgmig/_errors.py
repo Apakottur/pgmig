@@ -1,6 +1,12 @@
 from pgmig._drivers import DbDriver
 
 
+class UniqueViolation(Exception):
+    """
+    The DB operation failed because of a unique constraint violation.
+    """
+
+
 class PgmigError(Exception):
     """
     A known, user-facing pgmig error (e.g. an invalid connection string).

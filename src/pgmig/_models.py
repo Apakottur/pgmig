@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from pgmig._errors import PgmigUnsupportedError
 from pgmig._keys import ColumnKey, CompositeTypeKey, DefaultAclKey, EnumKey, FunctionKey, RelationKey
-from pgmig._sql import ident
+from pgmig._sql import ident, literal, qualified
 
 
 @dataclass(frozen=True)
@@ -117,6 +117,43 @@ class Trigger:
     # O=origin/default, D=disabled, R=enable replica, A=enable always.
     enabled: str
     comment: str | None
+
+
+@dataclass(frozen=True)
+class EventTrigger:
+    """
+    A Postgres event trigger (CREATE EVENT TRIGGER). Database-global: it has no schema of its
+    own, only the schema of the function it executes.
+    """
+
+    name: str
+    event: str  # pg_event_trigger.evtevent, e.g. ddl_command_end
+    tags: tuple[str, ...]  # the WHEN TAG IN filter, sorted; empty when the trigger has none
+    function_schema: str
+    function_name: str
+    # pg_event_trigger.evtenabled: O=origin/default, D=disabled, R=enable replica, A=enable always.
+    enabled: str
+    owner: str
+    comment: str | None
+
+    @property
+    def canonical(self) -> str:
+        """
+        The CREATE EVENT TRIGGER clauses after the trigger's name: everything that defines it
+        except the name, so two triggers that differ only by name compare equal (rename detection).
+        """
+        clauses = [f"ON {self.event}"]
+        if self.tags:
+            clauses.append(f"WHEN TAG IN ({', '.join(literal(tag) for tag in self.tags)})")
+        clauses.append(f"EXECUTE FUNCTION {qualified(self.function_schema, self.function_name)}()")
+        return " ".join(clauses)
+
+    @property
+    def definition(self) -> str:
+        """
+        The full CREATE EVENT TRIGGER statement (Postgres has no pg_get_*def for event triggers).
+        """
+        return f"CREATE EVENT TRIGGER {ident(self.name)} {self.canonical}"
 
 
 # pg_policy.polcmd code -> the FOR keyword; ALL ('*') is the default and is omitted.
@@ -499,10 +536,11 @@ class DefaultAcl:
 
     A row exists only where defaults were altered; its absence means the built-in defaults
     apply. So `grants` (the effective ACL, aclexplode of defaclacl) is meaningful only against
-    `baseline` (the built-in default, aclexplode of acldefault(object-type code, role)): the delta
-    between them is what the user actually configured. Diffing raw rows would misfire when only
-    one side has a row -- the diff compares effective-vs-effective, treating an absent row as
-    the baseline.
+    `baseline` (what an absent row stands for): the delta between them is what the user actually
+    configured. A global rule replaces the built-in defaults, so its baseline is aclexplode of
+    acldefault(object-type code, role); a schema-scoped rule only adds to the global defaults,
+    so its baseline is empty. Diffing raw rows would misfire when only one side has a row -- the
+    diff compares effective-vs-effective, treating an absent row as the baseline.
 
     `object_type` is the plural GRANT keyword (TABLES / SEQUENCES / FUNCTIONS / TYPES /
     SCHEMAS). `schema` is None for a global (no IN SCHEMA) rule.
@@ -512,7 +550,7 @@ class DefaultAcl:
     schema: str | None  # defaclnamespace name; None when 0 (a global rule)
     object_type: str  # plural keyword: TABLES / SEQUENCES / FUNCTIONS / TYPES / SCHEMAS
     grants: frozenset[Grant]  # effective ACL (aclexplode of defaclacl)
-    baseline: frozenset[Grant]  # built-in default (aclexplode of acldefault(object-type code, role))
+    baseline: frozenset[Grant]  # acldefault(object-type code, role) for a global rule; empty if schema-scoped
 
 
 @dataclass(frozen=True)
@@ -561,3 +599,6 @@ class DbIntrospectionResult:
     # ALTER DEFAULT PRIVILEGES rules (pg_default_acl), keyed by (role, schema-or-None,
     # object_type) so the diff can pair a source rule with its target counterpart.
     default_acl_by_key: dict["DefaultAclKey", DefaultAcl] = field(default_factory=dict)
+
+    # Event triggers (pg_event_trigger), database-global and so keyed by name alone.
+    event_trigger_by_name: dict[str, EventTrigger] = field(default_factory=dict)
