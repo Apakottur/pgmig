@@ -1,7 +1,9 @@
 import hashlib
 import re
+from contextlib import AbstractContextManager
 from pathlib import Path
 
+import pytest
 import tenacity
 
 from pgmig._db import DbConnection, DbConnInfo
@@ -81,3 +83,11 @@ async def reset_database(conn: DbConnection) -> None:
     This is ~25% faster than recreating the database, keeping the connection open.
     """
     await conn.execute(_RESET_SQL)
+
+
+def raises_unique_violation() -> AbstractContextManager[pytest.ExceptionInfo[Exception]]:
+    """
+    Expect a unique constraint violation, as raised by whichever driver is under test.
+    The match is on Postgres's own message, which both drivers pass through.
+    """
+    return pytest.raises(Exception, match="could not create unique index")
