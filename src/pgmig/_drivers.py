@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal, assert_never
 
 
 class DbDriver(StrEnum):
@@ -13,9 +14,9 @@ class DbDriver(StrEnum):
     PSYCOPG = "psycopg"
 
     @property
-    def resolved(self) -> "DbDriver":
+    def resolved(self) -> "Literal[DbDriver.PSYCOPG]":
         match self:
-            case DbDriver.AUTO:
+            case DbDriver.AUTO | DbDriver.PSYCOPG:
                 return DbDriver.PSYCOPG
             case _:
-                return self
+                assert_never(self)

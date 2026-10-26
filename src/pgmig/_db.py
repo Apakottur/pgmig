@@ -1,20 +1,12 @@
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Any, Literal, Self, assert_never
 
 import psycopg
-from psycopg import pq
-from psycopg.rows import dict_row
 
+from pgmig import _psycopg
 from pgmig._drivers import DbDriver
-from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
-
-
-class UniqueViolation(Exception):
-    """
-    The DB operation failed because of a unique constraint violation.
-    """
 
 
 @dataclass(frozen=True)
@@ -37,6 +29,7 @@ class DbConnection:
     """
     DB connection API.
     All DB interaction is done through this class to avoid the DB driver leaking into other modules.
+    Each driver's implementation lives in its own module, and every method dispatches on the driver.
     """
 
     def __init__(self, *, db_conn_info: DbConnInfo, conn: psycopg.AsyncConnection[Any]) -> None:
@@ -47,39 +40,32 @@ class DbConnection:
     def dsn(self) -> str:
         return self.db_conn_info.dsn
 
+    @property
+    def driver(self) -> Literal[DbDriver.PSYCOPG]:
+        return self.db_conn_info.driver.resolved
+
     @classmethod
     @asynccontextmanager
     async def connect(cls, *, db_conn_info: DbConnInfo) -> AsyncGenerator[Self]:
         """
         Connection context.
         """
-        try:
-            conn = await psycopg.AsyncConnection.connect(db_conn_info.dsn, autocommit=True)
-        except psycopg.Error as error:
-            raise PgmigDbDriverError(
-                label=db_conn_info.label,
-                driver=db_conn_info.driver,
-                # Wrap with a generic exception in case of a DSN parsing error to avoid leaking the DSN.
-                driver_error=PgmigInvalidDbDsnError() if isinstance(error, psycopg.ProgrammingError) else error,
-            ) from error
-
-        async with conn:
-            yield cls(db_conn_info=db_conn_info, conn=conn)
+        match db_conn_info.driver.resolved:
+            case DbDriver.PSYCOPG:
+                async with _psycopg.connect(db_conn_info) as conn:
+                    yield cls(db_conn_info=db_conn_info, conn=conn)
+            case _:
+                assert_never(db_conn_info.driver.resolved)
 
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         """
         Execute a statement and return the statement results, if any.
         """
-        # Execute the statement.
-        try:
-            result = await self.driver_conn.execute(statement)  # ty: ignore[no-matching-overload]
-        except psycopg.errors.UniqueViolation as error:
-            raise UniqueViolation(str(error)) from error
-
-        # Fetch and return the results, if any.
-        if result.description:
-            return await result.fetchall()
-        return []
+        match self.driver:
+            case DbDriver.PSYCOPG:
+                return await _psycopg.execute(self.driver_conn, statement)
+            case _:
+                assert_never(self.driver)
 
 
 # Opens the transaction all the introspection queries run in, executed in order before the first query.
@@ -102,16 +88,10 @@ class DbReadOnlyConnection(DbConnection):
 
     async def introspect(self, queries: Sequence[str]) -> list[list[dict[str, Any]]]:
         """
-        Run the given introspection queries in a single round trip, returning the rows of each one.
+        Run the given introspection queries, returning the rows of each one.
         """
-        # On the first call, also open the snapshot transaction, in the same round trip as the queries.
-        statements = list(queries)
-        if self.driver_conn.info.transaction_status == pq.TransactionStatus.IDLE:
-            statements = [*_SNAPSHOT_SETUP, *statements]
-
-        async with self.driver_conn.cursor(row_factory=dict_row) as cur:
-            # Run all the statements as one multi-statement execute. Each statement produces its own result set.
-            await cur.execute("\n;\n".join(statements))  # ty: ignore[no-matching-overload]
-
-            # Fetch the rows of each query result set. The setup statements return no rows, so their sets are skipped.
-            return [await result.fetchall() async for result in cur.results() if result.description is not None]
+        match self.driver:
+            case DbDriver.PSYCOPG:
+                return await _psycopg.introspect(self.driver_conn, queries, _SNAPSHOT_SETUP)
+            case _:
+                assert_never(self.driver)

@@ -1,7 +1,7 @@
 import pytest
 
 from pgmig import PgmigUnsupportedError, agenerate
-from pgmig._db import UniqueViolation
+from pgmig._errors import UniqueViolation
 from tests._api.generate_setup import GenerateSetup
 from tests._api.schema.test_extension import _get_installable_extension
 
