@@ -10,7 +10,7 @@ import psycopg
 from psycopg import pq
 from psycopg.rows import dict_row
 
-from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError, UniqueViolation
+from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
 
 if TYPE_CHECKING:
     from pgmig._db import DbConnInfo
@@ -40,10 +40,7 @@ async def execute(conn: psycopg.AsyncConnection[Any], statement: str) -> list[tu
     Execute a statement and return the statement results, if any.
     """
     # Execute the statement.
-    try:
-        result = await conn.execute(statement)  # ty: ignore[no-matching-overload]
-    except psycopg.errors.UniqueViolation as error:
-        raise UniqueViolation(str(error)) from error
+    result = await conn.execute(statement)  # ty: ignore[no-matching-overload]
 
     # Fetch and return the results, if any.
     if result.description:

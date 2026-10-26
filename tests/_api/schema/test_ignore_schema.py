@@ -1,9 +1,9 @@
 import pytest
 
 from pgmig import PgmigUnsupportedError, agenerate
-from pgmig._errors import UniqueViolation
 from tests._api.generate_setup import GenerateSetup
 from tests._api.schema.test_extension import _get_installable_extension
+from tests.fixtures.db_utils import raises_unique_violation
 
 # Every object kind, all inside one schema, with rich within-schema wiring (a table with a
 # primary key, check, index, RLS policy and trigger; a sequence, enum, domain, composite type,
@@ -155,7 +155,7 @@ async def test_ignore_schema_still_guards_invalid_index(gen_setup: GenerateSetup
     await gen_setup.src.execute("CREATE SCHEMA ext")
     await gen_setup.src.execute("CREATE TABLE ext.t (a integer)")
     await gen_setup.src.execute("INSERT INTO ext.t VALUES (1), (1)")
-    with pytest.raises(UniqueViolation):
+    with raises_unique_violation():
         await gen_setup.src.execute("CREATE UNIQUE INDEX CONCURRENTLY u ON ext.t (a)")
 
     with pytest.raises(PgmigUnsupportedError, match=r"invalid index"):
