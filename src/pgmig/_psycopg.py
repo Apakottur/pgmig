@@ -35,7 +35,8 @@ class PsycopgConnection(DriverConnection):
                 driver_error=PgmigInvalidDbDsnError() if isinstance(error, psycopg.ProgrammingError) else error,
             ) from error
 
-        # The server can end an idle snapshot transaction at any statement, including the COMMIT on context exit.
+        # The server can end an idle snapshot transaction at any statement, including the one psycopg ends it with on
+        # context exit.
         try:
             async with conn:
                 yield cls(conn)

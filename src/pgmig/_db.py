@@ -67,8 +67,8 @@ _SNAPSHOT_SETUP = (
 )
 
 # Ends the snapshot transaction, executed after the last introspection query.
-# Read-only, so committing and rolling back are the same.
-_SNAPSHOT_TEARDOWN = ("COMMIT",)
+# The transaction is read-only, so there is nothing to commit.
+_SNAPSHOT_TEARDOWN = ("ROLLBACK",)
 
 
 class DbReadOnlyConnection(DbConnection):
