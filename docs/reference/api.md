@@ -18,4 +18,6 @@ Everything below is importable from the top-level `pgmig` package.
 
 ::: pgmig.PgmigDbConnectionError
 
+::: pgmig.PgmigDbIdleTimeoutError
+
 ::: pgmig.PgmigUnsupportedError

@@ -141,6 +141,7 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
                 raise PgmigUnsupportedError(message)
 
             # Run the introspections for the classes the database actually contains, as one batch.
-            await run_introspection_queries(_get_loaders(preflight))
+            # This is the last batch, so the snapshot transaction ends before its rows are processed.
+            await run_introspection_queries(_get_loaders(preflight), end_snapshot=True)
 
     return db_introspection_result

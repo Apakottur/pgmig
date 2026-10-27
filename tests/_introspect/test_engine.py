@@ -1,8 +1,17 @@
+import asyncio
+import time
+from typing import Any
+
+import pytest
+from pytest_mock import MockerFixture
+
+from pgmig import PgmigDbIdleTimeoutError
 from pgmig._db import DbReadOnlyConnection
-from pgmig._drivers import DbConnInfo
+from pgmig._drivers import DbConnInfo, DbDriver
+from pgmig._introspect import default_privileges
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
-from tests.fixtures.db_utils import get_dsn
+from tests.fixtures.db_utils import get_dsn, idle_in_transaction_timeout
 
 
 async def test_introspection_through_pgbouncer(gen_setup: GenerateSetup) -> None:
@@ -56,3 +65,48 @@ async def test_read_only_snapshot_settings_apply_to_first_query(gen_setup: Gener
 
     # The first query should already run with an empty search path, in a read-only REPEATABLE READ transaction.
     assert settings == {"search_path": '""', "read_only": "on", "isolation": "repeatable read"}
+
+
+async def test_introspection_ends_snapshot_before_processing_rows(
+    gen_setup: GenerateSetup, mocker: MockerFixture
+) -> None:
+    """
+    Ensure that the snapshot transaction ends before the last batch of rows is processed, so that slow processing
+    does not trip the server's idle_in_transaction_session_timeout.
+    """
+    process_rows = default_privileges.DefaultPrivilegesLoader.process_rows
+
+    # Process the rows of the last loader slower than the server's idle limit.
+    def slow_process_rows(rows: list[Any]) -> None:
+        time.sleep(0.5)
+        process_rows(rows)
+
+    mocker.patch.object(default_privileges.DefaultPrivilegesLoader, "process_rows", side_effect=slow_process_rows)
+
+    async with idle_in_transaction_timeout(gen_setup.src, gen_setup.src_db_name, timeout_ms=100):
+        info = await introspect_db(db_conn_info=gen_setup.src.db_conn_info)
+
+    assert "public" in info.schema_by_name
+
+
+async def test_idle_in_transaction_timeout_error(gen_setup: GenerateSetup) -> None:
+    """
+    Ensure that a server ending the snapshot transaction for sitting idle raises a pgmig error naming the setting.
+    """
+    # asyncpg drops the server's termination message when it arrives on an idle connection, and only reports that
+    # the connection is closed, so the cause cannot be told apart from any other lost connection.
+    if gen_setup.driver.resolved == DbDriver.ASYNCPG:
+        pytest.skip("asyncpg does not report why the server ended the connection")
+
+    async def introspect_after_idling() -> None:
+        async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
+            await read_only_conn.introspect(["SELECT 1"])
+
+            # Sit idle in the snapshot transaction past the server's limit.
+            await asyncio.sleep(0.5)
+
+            await read_only_conn.introspect(["SELECT 1"])
+
+    async with idle_in_transaction_timeout(gen_setup.src, gen_setup.src_db_name, timeout_ms=100):
+        with pytest.raises(PgmigDbIdleTimeoutError, match=r"source database.*idle_in_transaction_session_timeout"):
+            await introspect_after_idling()

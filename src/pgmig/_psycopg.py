@@ -11,7 +11,7 @@ from psycopg import pq
 from psycopg.rows import dict_row
 
 from pgmig._drivers import DbConnInfo, DriverConnection
-from pgmig._errors import PgmigDbDriverError, PgmigInvalidDbDsnError
+from pgmig._errors import PgmigDbDriverError, PgmigDbIdleTimeoutError, PgmigInvalidDbDsnError
 
 
 class PsycopgConnection(DriverConnection):
@@ -35,8 +35,12 @@ class PsycopgConnection(DriverConnection):
                 driver_error=PgmigInvalidDbDsnError() if isinstance(error, psycopg.ProgrammingError) else error,
             ) from error
 
-        async with conn:
-            yield cls(conn)
+        # The server can end an idle snapshot transaction at any statement, including the COMMIT on context exit.
+        try:
+            async with conn:
+                yield cls(conn)
+        except psycopg.errors.IdleInTransactionSessionTimeout as error:
+            raise PgmigDbIdleTimeoutError(label=db_conn_info.label) from error
 
     async def execute(self, statement: str) -> list[tuple[Any, ...]]:
         # Execute the statement.
@@ -47,9 +51,12 @@ class PsycopgConnection(DriverConnection):
             return await result.fetchall()
         return []
 
-    async def introspect(self, queries: Sequence[str], snapshot_setup: Sequence[str]) -> list[list[dict[str, Any]]]:
+    async def introspect(
+        self, queries: Sequence[str], snapshot_setup: Sequence[str], snapshot_teardown: Sequence[str]
+    ) -> list[list[dict[str, Any]]]:
         # On the first call, also open the snapshot transaction, in the same round trip as the queries.
-        statements = list(queries)
+        # The teardown also runs in that round trip, so the transaction ends as soon as the queries ran.
+        statements = [*queries, *snapshot_teardown]
         if self.conn.info.transaction_status == pq.TransactionStatus.IDLE:
             statements = [*snapshot_setup, *statements]
 
@@ -57,5 +64,6 @@ class PsycopgConnection(DriverConnection):
             # Run all the statements as one multi-statement execute. Each statement produces its own result set.
             await cur.execute("\n;\n".join(statements))  # ty: ignore[no-matching-overload]
 
-            # Fetch the rows of each query result set. The setup statements return no rows, so their sets are skipped.
+            # Fetch the rows of each query result set. The setup and teardown statements return no rows, so their sets
+            # are skipped.
             return [await result.fetchall() async for result in cur.results() if result.description is not None]
