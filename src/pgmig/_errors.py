@@ -56,3 +56,18 @@ class PgmigDbConnectionError(PgmigError):
         self.source_error = source_error
         self.target_error = target_error
         super().__init__("Failed to connect to one of the databases")
+
+
+class PgmigDbIdleTimeoutError(PgmigError):
+    """
+    The database ended pgmig's introspection transaction for sitting idle past idle_in_transaction_session_timeout.
+    """
+
+    # Raised by the psycopg driver only: asyncpg does not report why the server ended the connection.
+    def __init__(self, *, label: str) -> None:  # pragma: psycopg-only
+        self.label = label
+        super().__init__(
+            f"The {label} database ended pgmig's introspection transaction because it sat idle longer than the "
+            "server's idle_in_transaction_session_timeout. Raise the limit for pgmig's connection, e.g. by adding "
+            "options=-c%20idle_in_transaction_session_timeout%3D0 to the connection string."
+        )

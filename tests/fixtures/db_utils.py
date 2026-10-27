@@ -1,6 +1,7 @@
 import hashlib
 import re
-from contextlib import AbstractContextManager
+from collections.abc import AsyncGenerator
+from contextlib import AbstractContextManager, asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -92,3 +93,15 @@ def raises_unique_violation() -> AbstractContextManager[pytest.ExceptionInfo[Exc
     The match is on Postgres's own message, which both drivers pass through.
     """
     return pytest.raises(Exception, match="could not create unique index")
+
+
+@asynccontextmanager
+async def idle_in_transaction_timeout(conn: DbConnection, db_name: str, timeout_ms: int) -> AsyncGenerator[None]:
+    """
+    Set idle_in_transaction_session_timeout on a database for the connections opened within the context.
+    """
+    await conn.execute(f"ALTER DATABASE {db_name} SET idle_in_transaction_session_timeout = {timeout_ms}")
+    try:
+        yield
+    finally:
+        await conn.execute(f"ALTER DATABASE {db_name} RESET idle_in_transaction_session_timeout")

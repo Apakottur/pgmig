@@ -61,22 +61,27 @@ class Loader(IntrospectionQuery[_RowT, None]):
     filter_ignored_schemas = True
 
 
-async def run_introspection_queries(queries: Sequence[type[IntrospectionQuery[Any, _ResultT]]]) -> list[_ResultT]:
+async def run_introspection_queries(
+    queries: Sequence[type[IntrospectionQuery[Any, _ResultT]]], *, end_snapshot: bool
+) -> list[_ResultT]:
     """
     Run the given introspection queries in a single round trip, and process the rows of each one, in order.
+    With end_snapshot, the snapshot transaction ends before the rows are processed.
     """
     # Run all the queries.
-    rows_per_query = await context().conn.introspect([_read_query(query.file_name) for query in queries])
+    rows_per_query = await context().conn.introspect(
+        [_read_query(query.file_name) for query in queries], end_snapshot=end_snapshot
+    )
 
     # Process the rows of each query.
     return [_process_rows(query, rows) for query, rows in zip(queries, rows_per_query, strict=True)]
 
 
-async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]]) -> _ResultT:
+async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]], *, end_snapshot: bool) -> _ResultT:
     """
     Run the given introspection query, and process its rows.
     """
-    [result] = await run_introspection_queries([query])
+    [result] = await run_introspection_queries([query], end_snapshot=end_snapshot)
     return result
 
 
