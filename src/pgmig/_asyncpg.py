@@ -63,7 +63,7 @@ class AsyncpgConnection(DriverConnection):
         return []
 
     async def introspect(
-        self, queries: Sequence[str], snapshot_setup: Sequence[str], snapshot_teardown: Sequence[str]
+        self, queries: Sequence[str], snapshot_setup: Sequence[str], *, end_snapshot: bool
     ) -> list[list[dict[str, Any]]]:
         # On the first call, open the snapshot transaction. execute() uses the simple protocol, which allows
         # multiple statements in one round trip.
@@ -75,7 +75,7 @@ class AsyncpgConnection(DriverConnection):
         rows_per_query = [[dict(record) for record in await self.conn.fetch(query)] for query in queries]
 
         # End the snapshot transaction, if asked to.
-        if snapshot_teardown:
-            await self.conn.execute(";\n".join(snapshot_teardown))
+        if end_snapshot:
+            await self.conn.execute("ROLLBACK")
 
         return rows_per_query

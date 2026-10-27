@@ -37,13 +37,13 @@ async def test_read_only_snapshot_pins_one_view(gen_setup: GenerateSetup) -> Non
 
     async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
         # Run the probe before the table is created.
-        before = await read_only_conn.introspect([probe])
+        before = await read_only_conn.introspect([probe], end_snapshot=False)
 
         # Create the table on a separate (auto-committed) connection.
         await gen_setup.src.execute("CREATE TABLE snap_probe (x int)")
 
         # Run the probe after the table is created.
-        after = await read_only_conn.introspect([probe])
+        after = await read_only_conn.introspect([probe], end_snapshot=False)
 
     # The table should not be visible to the read-only connection, both before and after the table is created.
     assert before == [[{"count": 0}]]
@@ -60,7 +60,8 @@ async def test_read_only_snapshot_settings_apply_to_first_query(gen_setup: Gener
                 "SELECT current_setting('search_path') AS search_path, "
                 "current_setting('transaction_read_only') AS read_only, "
                 "current_setting('transaction_isolation') AS isolation"
-            ]
+            ],
+            end_snapshot=False,
         )
 
     # The first query should already run with an empty search path, in a read-only REPEATABLE READ transaction.
@@ -100,12 +101,12 @@ async def test_idle_in_transaction_timeout_error(gen_setup: GenerateSetup) -> No
 
     async def introspect_after_idling() -> None:
         async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
-            await read_only_conn.introspect(["SELECT 1"])
+            await read_only_conn.introspect(["SELECT 1"], end_snapshot=False)
 
             # Sit idle in the snapshot transaction past the server's limit.
             await asyncio.sleep(0.5)
 
-            await read_only_conn.introspect(["SELECT 1"])
+            await read_only_conn.introspect(["SELECT 1"], end_snapshot=False)
 
     async with idle_in_transaction_timeout(gen_setup.src, gen_setup.src_db_name, timeout_ms=100):
         with pytest.raises(PgmigDbIdleTimeoutError, match=r"source database.*idle_in_transaction_session_timeout"):

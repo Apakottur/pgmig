@@ -63,7 +63,7 @@ class Loader(IntrospectionQuery[_RowT, None]):
 
 
 async def run_introspection_queries(
-    queries: Sequence[type[IntrospectionQuery[Any, _ResultT]]], *, end_snapshot: bool = False
+    queries: Sequence[type[IntrospectionQuery[Any, _ResultT]]], *, end_snapshot: bool
 ) -> list[_ResultT]:
     """
     Run the given introspection queries in a single round trip, and process the rows of each one, in order.
@@ -85,11 +85,11 @@ async def run_introspection_queries(
     return results
 
 
-async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]]) -> _ResultT:
+async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]], *, end_snapshot: bool) -> _ResultT:
     """
     Run the given introspection query, and process its rows.
     """
-    [result] = await run_introspection_queries([query])
+    [result] = await run_introspection_queries([query], end_snapshot=end_snapshot)
     return result
 
 

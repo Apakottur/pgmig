@@ -66,10 +66,6 @@ _SNAPSHOT_SETUP = (
     "SET LOCAL search_path = ''",
 )
 
-# Ends the snapshot transaction, executed after the last introspection query.
-# The transaction is read-only, so there is nothing to commit.
-_SNAPSHOT_TEARDOWN = ("ROLLBACK",)
-
 
 class DbReadOnlyConnection(DbConnection):
     """
@@ -79,10 +75,10 @@ class DbReadOnlyConnection(DbConnection):
     by the introspect() call that passes end_snapshot, or when the connection context exits.
     """
 
-    async def introspect(self, queries: Sequence[str], *, end_snapshot: bool = False) -> list[list[dict[str, Any]]]:
+    async def introspect(self, queries: Sequence[str], *, end_snapshot: bool) -> list[list[dict[str, Any]]]:
         """
         Run the given introspection queries, returning the rows of each one.
         With end_snapshot, also end the snapshot transaction once the queries ran, so that it does not sit idle (and
         trip the server's idle_in_transaction_session_timeout) while their rows are processed.
         """
-        return await self.driver_conn.introspect(queries, _SNAPSHOT_SETUP, _SNAPSHOT_TEARDOWN if end_snapshot else ())
+        return await self.driver_conn.introspect(queries, _SNAPSHOT_SETUP, end_snapshot=end_snapshot)

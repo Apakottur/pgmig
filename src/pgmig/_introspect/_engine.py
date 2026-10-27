@@ -118,7 +118,9 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
         with context_scope(data):
             # Verify that the ignored schemas are isolated from the kept ones.
             if ignore_schemas:
-                connections = await run_introspection_query(schema_connections.SchemaConnectionsGuard)
+                connections = await run_introspection_query(
+                    schema_connections.SchemaConnectionsGuard, end_snapshot=False
+                )
                 if connections:
                     message = (
                         "pgmig cannot ignore a schema that is connected to a kept schema "
@@ -128,11 +130,11 @@ async def introspect_db(*, db_conn_info: DbConnInfo, ignore_schemas: Sequence[st
                     raise PgmigUnsupportedError(message)
 
             # Run the preflight query to find out which introspection steps to run.
-            preflight = await run_introspection_query(PreflightQuery)
+            preflight = await run_introspection_query(PreflightQuery, end_snapshot=False)
 
             # Look for any unsupported objects, running the guards as one batch.
             all_findings = []
-            for findings in await run_introspection_queries(_get_guards(preflight)):
+            for findings in await run_introspection_queries(_get_guards(preflight), end_snapshot=False):
                 all_findings += findings
             if all_findings:
                 message = "pgmig cannot process this database:\n" + "\n".join(

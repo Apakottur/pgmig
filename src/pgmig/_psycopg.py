@@ -53,18 +53,21 @@ class PsycopgConnection(DriverConnection):
         return []
 
     async def introspect(
-        self, queries: Sequence[str], snapshot_setup: Sequence[str], snapshot_teardown: Sequence[str]
+        self, queries: Sequence[str], snapshot_setup: Sequence[str], *, end_snapshot: bool
     ) -> list[list[dict[str, Any]]]:
         # On the first call, also open the snapshot transaction, in the same round trip as the queries.
-        # The teardown also runs in that round trip, so the transaction ends as soon as the queries ran.
-        statements = [*queries, *snapshot_teardown]
+        statements = list(queries)
         if self.conn.info.transaction_status == pq.TransactionStatus.IDLE:
             statements = [*snapshot_setup, *statements]
+
+        # End the snapshot transaction in the same round trip, so that it ends as soon as the queries ran.
+        if end_snapshot:
+            statements.append("ROLLBACK")
 
         async with self.conn.cursor(row_factory=dict_row) as cur:
             # Run all the statements as one multi-statement execute. Each statement produces its own result set.
             await cur.execute("\n;\n".join(statements))  # ty: ignore[no-matching-overload]
 
-            # Fetch the rows of each query result set. The setup and teardown statements return no rows, so their sets
+            # Fetch the rows of each query result set. The setup and ROLLBACK statements return no rows, so their sets
             # are skipped.
             return [await result.fetchall() async for result in cur.results() if result.description is not None]

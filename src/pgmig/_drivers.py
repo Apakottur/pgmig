@@ -68,10 +68,10 @@ class DriverConnection(ABC):
 
     @abstractmethod
     async def introspect(
-        self, queries: Sequence[str], snapshot_setup: Sequence[str], snapshot_teardown: Sequence[str]
+        self, queries: Sequence[str], snapshot_setup: Sequence[str], *, end_snapshot: bool
     ) -> list[list[dict[str, Any]]]:
         """
         Run the given introspection queries, returning the rows of each one.
         On the first call, first run the snapshot setup statements, which open the snapshot transaction.
-        Then run the snapshot teardown statements, if any, which end it.
+        With end_snapshot, end the snapshot transaction (a read-only transaction, so rolled back) after the queries.
         """
