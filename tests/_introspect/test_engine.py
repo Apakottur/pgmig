@@ -1,5 +1,4 @@
-import asyncio
-import time
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -8,7 +7,6 @@ from pytest_mock import MockerFixture
 from pgmig import PgmigDbIdleTimeoutError
 from pgmig._db import DbReadOnlyConnection
 from pgmig._drivers import DbConnInfo, DbDriver
-from pgmig._introspect import default_privileges
 from pgmig._introspect._engine import introspect_db
 from tests._api.generate_setup import GenerateSetup
 from tests.fixtures.db_utils import get_dsn, idle_in_transaction_timeout
@@ -72,22 +70,29 @@ async def test_introspection_ends_snapshot_before_processing_rows(
     gen_setup: GenerateSetup, mocker: MockerFixture
 ) -> None:
     """
-    Ensure that the snapshot transaction ends before the last batch of rows is processed, so that slow processing
-    does not trip the server's idle_in_transaction_session_timeout.
+    Ensure that the snapshot transaction ends before the last batch of rows is processed, so that it does not sit
+    idle (and trip the server's idle_in_transaction_session_timeout) while the rows are processed.
     """
-    process_rows = default_privileges.DefaultPrivilegesLoader.process_rows
+    introspect = DbReadOnlyConnection.introspect
+    open_snapshots_after_batch = []
 
-    # Process the rows of the last loader slower than the server's idle limit.
-    def slow_process_rows(rows: list[Any]) -> None:
-        time.sleep(0.5)
-        process_rows(rows)
+    # After each batch of queries, count the open snapshot transactions on the server, from another connection.
+    async def introspect_and_count(
+        self: DbReadOnlyConnection, queries: Sequence[str], *, end_snapshot: bool
+    ) -> list[list[dict[str, Any]]]:
+        rows_per_query = await introspect(self, queries, end_snapshot=end_snapshot)
+        [(open_snapshots,)] = await gen_setup.src.execute(
+            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle in transaction'"
+        )
+        open_snapshots_after_batch.append(open_snapshots)
+        return rows_per_query
 
-    mocker.patch.object(default_privileges.DefaultPrivilegesLoader, "process_rows", side_effect=slow_process_rows)
+    mocker.patch.object(DbReadOnlyConnection, "introspect", introspect_and_count)
 
-    async with idle_in_transaction_timeout(gen_setup.src, gen_setup.src_db_name, timeout_ms=100):
-        info = await introspect_db(db_conn_info=gen_setup.src.db_conn_info)
+    await introspect_db(db_conn_info=gen_setup.src.db_conn_info)
 
-    assert "public" in info.schema_by_name
+    # The snapshot should stay open between the batches, and end with the last one.
+    assert open_snapshots_after_batch == [1, 1, 0]
 
 
 async def test_idle_in_transaction_timeout_error(gen_setup: GenerateSetup) -> None:
@@ -101,13 +106,15 @@ async def test_idle_in_transaction_timeout_error(gen_setup: GenerateSetup) -> No
 
     async def introspect_after_idling() -> None:
         async with DbReadOnlyConnection.connect(db_conn_info=gen_setup.src.db_conn_info) as read_only_conn:
+            # Hold an advisory lock in the snapshot transaction.
+            await read_only_conn.introspect(["SELECT pg_advisory_xact_lock(1)"], end_snapshot=False)
+
+            # Wait for the lock from another connection. It is released only when the transaction ends, here when
+            # the server ends it for sitting idle.
+            await gen_setup.src.execute("SELECT pg_advisory_xact_lock(1)")
+
             await read_only_conn.introspect(["SELECT 1"], end_snapshot=False)
 
-            # Sit idle in the snapshot transaction past the server's limit.
-            await asyncio.sleep(0.5)
-
-            await read_only_conn.introspect(["SELECT 1"], end_snapshot=False)
-
-    async with idle_in_transaction_timeout(gen_setup.src, gen_setup.src_db_name, timeout_ms=100):
+    async with idle_in_transaction_timeout(gen_setup.src, gen_setup.src_db_name, timeout_ms=10):
         with pytest.raises(PgmigDbIdleTimeoutError, match=r"source database.*idle_in_transaction_session_timeout"):
             await introspect_after_idling()

@@ -1,4 +1,3 @@
-import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from functools import lru_cache
@@ -75,14 +74,7 @@ async def run_introspection_queries(
     )
 
     # Process the rows of each query.
-    results = []
-    for query, rows in zip(queries, rows_per_query, strict=True):
-        results.append(_process_rows(query, rows))
-
-        # Processing does not await, so yield to the event loop between queries. Otherwise, introspecting the other
-        # database concurrently stalls, and its snapshot transaction sits idle meanwhile.
-        await asyncio.sleep(0)
-    return results
+    return [_process_rows(query, rows) for query, rows in zip(queries, rows_per_query, strict=True)]
 
 
 async def run_introspection_query(query: type[IntrospectionQuery[_RowT, _ResultT]], *, end_snapshot: bool) -> _ResultT:
