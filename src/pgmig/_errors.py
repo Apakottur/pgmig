@@ -63,7 +63,8 @@ class PgmigDbIdleTimeoutError(PgmigError):
     The database ended pgmig's introspection transaction for sitting idle past idle_in_transaction_session_timeout.
     """
 
-    def __init__(self, *, label: str) -> None:
+    # Raised by the psycopg driver only: asyncpg does not report why the server ended the connection.
+    def __init__(self, *, label: str) -> None:  # pragma: psycopg-only
         self.label = label
         super().__init__(
             f"The {label} database ended pgmig's introspection transaction because it sat idle longer than the "
