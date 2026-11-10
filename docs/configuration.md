@@ -37,6 +37,10 @@ variables for anything containing secrets — for example, in CI:
 A DSN is any [libpq connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING),
 e.g. `postgresql://user:pass@host:5432/dbname`.
 
+pgmig reads only the system catalogs, which every role can read, so the connecting role needs
+nothing beyond `LOGIN` and `CONNECT` on the database: no grants on the schemas or tables being
+compared, and a role restricted to read-only transactions works.
+
 ## Exit codes
 
 `pgmig generate` exits with:
