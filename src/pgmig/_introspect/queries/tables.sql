@@ -63,7 +63,30 @@ SELECT
     END AS table_replica_identity_index,
     a.attidentity::text AS column_identity,
     a.attgenerated::text AS column_generated,
-    pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS column_serial_sequence,
+    -- The sequence the column owns, as pg_get_serial_sequence prints it: a serial column's
+    -- sequence depends on it with an AUTO ('a') edge, an identity column's with an INTERNAL
+    -- ('i') one. pg_get_serial_sequence itself is not used because it takes the table by name,
+    -- and resolving a name needs USAGE on its schema: a role without it (nothing but the system
+    -- catalogs is needed otherwise) would fail on the first table of such a schema, even an
+    -- ignored one. A column can own several sequences (ALTER SEQUENCE ... OWNED BY), so the
+    -- oldest is picked to keep the result stable.
+    (
+        SELECT
+            quote_ident(seq_ns.nspname) || '.' || quote_ident(seq.relname)
+        FROM
+            pg_depend seq_dep
+            JOIN pg_class seq ON seq.oid = seq_dep.objid
+                AND seq.relkind = 'S'
+            JOIN pg_namespace seq_ns ON seq_ns.oid = seq.relnamespace
+        WHERE
+            seq_dep.classid = 'pg_class'::regclass
+            AND seq_dep.refclassid = 'pg_class'::regclass
+            AND seq_dep.refobjid = a.attrelid
+            AND seq_dep.refobjsubid = a.attnum
+            AND seq_dep.deptype IN ('a', 'i')
+        ORDER BY
+            seq.oid
+        LIMIT 1) AS column_serial_sequence,
     -- Backing sequence options of an identity column (NULL for every non-identity column).
     -- The identity sequence is linked to its column by an INTERNAL ('i') pg_depend edge.
     idseq.seqstart AS identity_start,
