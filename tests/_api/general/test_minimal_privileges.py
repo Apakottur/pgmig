@@ -48,7 +48,7 @@ _LOCKED_SCHEMA_SQL = [
 @pytest.mark.parametrize("restricted_side", ["source", "target"])
 @pytest.mark.parametrize("ignored", [True, False], ids=["ignored", "not_ignored"])
 async def test_login_only_role_generates_like_the_owner(
-    gen_setup: GenerateSetup, restricted_side: str, ignored: bool
+    gen_setup: GenerateSetup, restricted_side: str, *, ignored: bool
 ) -> None:
     """
     A role with LOGIN only (no grants at all, read-only transactions) generates the same migration
