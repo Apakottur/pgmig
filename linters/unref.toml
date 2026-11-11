@@ -1,0 +1,7 @@
+# Pydantic looks this up by name.
+used-names = ["model_config"]
+
+[[overrides]]
+paths = ["../tests"]
+# Pytest collects tests and calls its hooks by name.
+used-names = ["test_*", "pytest_*"]
