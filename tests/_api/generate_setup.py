@@ -26,7 +26,7 @@ class GenerateSetup:
     ) -> None:
         # Database names.
         self.src_db_name = src_db_name
-        self.dst_db_name = dst_db_name
+        self.dst_db_name = dst_db_name  # unref: ignore
 
         # Database connections.
         self.src = src_conn

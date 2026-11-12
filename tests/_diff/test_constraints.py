@@ -17,20 +17,6 @@ def _fk(name: str, definition: str) -> Constraint:
     )
 
 
-def _check(name: str, definition: str) -> Constraint:
-    return Constraint(
-        name=name,
-        definition=definition,
-        contype="c",
-        columns=[],
-        dependency_columns=frozenset(),
-        index_dependency_columns=frozenset(),
-        comment=None,
-        deferrable=False,
-        deferred=False,
-    )
-
-
 def _diff(src: dict[str, Constraint], dst: dict[str, Constraint]) -> tuple[RenameDiff, list[str], list[str]]:
     return _diff_constraints(schema_name="public", table_name="t", src=src, dst=dst, foreign_keys=True)
 
