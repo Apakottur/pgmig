@@ -73,7 +73,7 @@ asyncpg = ["asyncpg>=0.31.0"]
 pgmig = "pgmig._cli._cli:app"
 
 [project.urls]
-homepage = "https://github.com/Apakottur/pgmig"
+homepage = "https://pgmig.readthedocs.io/"
 repository = "https://github.com/Apakottur/pgmig"
 documentation = "https://pgmig.readthedocs.io/"
 
