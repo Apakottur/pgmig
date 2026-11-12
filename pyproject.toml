@@ -37,7 +37,9 @@ requires-python = ">=3.11"
 keywords = ["postgres", "postgresql", "migrations", "database", "schema"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
   "Intended Audience :: Developers",
+  "Topic :: Database",
   "Topic :: Software Development :: Libraries",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Operating System :: OS Independent",
@@ -46,6 +48,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
 ]
 dependencies = [
   # The default driver is psycopg (pure Python), which talks to a system-provided libpq. Faster
@@ -70,7 +73,7 @@ asyncpg = ["asyncpg>=0.31.0"]
 pgmig = "pgmig._cli._cli:app"
 
 [project.urls]
-homepage = "https://github.com/Apakottur/pgmig"
+homepage = "https://pgmig.readthedocs.io/"
 repository = "https://github.com/Apakottur/pgmig"
 documentation = "https://pgmig.readthedocs.io/"
 
