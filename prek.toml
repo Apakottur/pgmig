@@ -114,7 +114,7 @@ args = ["--config", "./linters/ruff.toml"]
 
 [[repos]]
 repo = "https://github.com/Apakottur/unref"
-rev = "v0.0.2"
+rev = "v0.0.4"
 
 [[repos.hooks]]
 id = "unref"

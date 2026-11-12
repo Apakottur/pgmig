@@ -1,7 +1,17 @@
-# Pydantic looks this up by name.
+used-decorators = ["app.callback", "app.command", "pytest.fixture"]
+
+[[overrides]]
+base-classes = ["pydantic.BaseModel"]
 used-names = ["model_config"]
 
 [[overrides]]
+base-classes = ["typing.NamedTuple"]
+used-names = ["*"]
+
+[[overrides]]
+class-decorators = ["dataclasses.dataclass"]
+used-names = ["*"]
+
+[[overrides]]
 paths = ["../tests"]
-# Pytest collects tests and calls its hooks by name.
 used-names = ["test_*", "pytest_*"]
