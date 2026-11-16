@@ -4,11 +4,13 @@ version: 2
 build:
   os: ubuntu-24.04
   tools:
+    # Read the Docs has no 3.15 image yet. This interpreter only bootstraps uv, which builds
+    # the docs on a uv-managed 3.15.
     python: "3.14"
   jobs:
     install:
       - pip install uv
-      - uv sync --frozen --only-group docs
+      - uv sync --frozen --only-group docs --python 3.15
     build:
       html:
         - uv run --no-sync zensical build --strict
