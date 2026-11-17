@@ -1,17 +1,2 @@
-used-decorators = ["app.callback", "app.command", "pytest.fixture"]
-
-[[overrides]]
-base-classes = ["pydantic.BaseModel"]
-used-names = ["model_config"]
-
-[[overrides]]
-base-classes = ["typing.NamedTuple"]
-used-names = ["*"]
-
-[[overrides]]
-class-decorators = ["dataclasses.dataclass"]
-used-names = ["*"]
-
-[[overrides]]
-paths = ["../tests"]
-used-names = ["test_*", "pytest_*"]
+# unref's built-in framework rules cover pytest, pydantic, dataclasses and NamedTuple; Typer is not one of them.
+used-decorators = ["app.callback", "app.command"]
