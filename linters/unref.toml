@@ -1,2 +1,1 @@
-# unref's built-in framework rules cover pytest, pydantic, dataclasses and NamedTuple; Typer is not one of them.
 used-decorators = ["app.callback", "app.command"]
